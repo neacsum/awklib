@@ -32,7 +32,10 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include <time.h>
 #include <sys/types.h>
+#ifndef _MSC_VER
 #include <sys/wait.h>
+#endif
+
 #include "awk.h"
 #include "ytab.h"
 
@@ -1547,7 +1550,8 @@ Cell *bltin(Node **a, int n)	/* builtin functions. a[0] is type, a[1] is arg lis
 		fflush(stdout);		/* in case something is buffered already */
 		status = system(getsval(x));
 		u = status;
-		if (status != -1) {
+#ifndef _MSC_VER
+    if (status != -1) {
 			if (WIFEXITED(status)) {
 				u = WEXITSTATUS(status);
 			} else if (WIFSIGNALED(status)) {
@@ -1558,15 +1562,16 @@ Cell *bltin(Node **a, int n)	/* builtin functions. a[0] is type, a[1] is arg lis
 #endif
 			} else	/* something else?!? */
 				u = 0;
-		}
-		break;
+    }
+#endif
+    break;
 	case FRAND:
 		/* in principle, rand() returns something in 0..RAND_MAX */
 		u = (Awkfloat) (rand() % RAND_MAX) / RAND_MAX;
 		break;
 	case FSRAND:
 		if (isrec(x))	/* no argument provided */
-			u = time((time_t *)0);
+			u = (Awkfloat)time((time_t *)0);
 		else
 			u = getfval(x);
 		tmp = u;
@@ -1996,3 +2001,15 @@ void backsub(char **pb_ptr, char **sptr_ptr)	/* handle \\& variations */
 	*pb_ptr = pb;
 	*sptr_ptr = sptr;
 }
+
+#ifdef _MSC_VER
+/// Windows replacements for popen and pclose functions
+
+FILE *popen (const char *s, const char *m) {
+  return _popen (s, m);
+}
+
+int pclose (FILE *f) {
+  return _pclose (f);
+}
+#endif
