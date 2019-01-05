@@ -1,0 +1,42 @@
+#Record selection
+$1 == "5" || $1 == "4"
+
+## Input
+   43	ars
+   43	vgl
+   37	jfo
+   32	rab
+   31	pd
+   29	jns
+   25	spm
+   22	rob
+   15	egb
+   10	hm
+   10	mhb
+    6	aed
+    6	cpb
+    5	evp
+    4	ber
+    4	men
+    4	mitch
+    3	ast
+    3	jfr
+    3	lax
+    3	nel
+    2	blue
+    2	jfk
+    2	njas
+    1	122sec
+    1	ddwar
+    1	gopi
+    1	jk
+    1	learn
+    1	low
+    1	nac
+    1	sidor
+## Output
+    5	evp
+    4	ber
+    4	men
+    4	mitch
+## End

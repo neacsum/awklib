@@ -1,6 +1,10 @@
 .vs
-Debug/
-Release/
-.user
+*.user
 /ytab.c
 /ytab.h
+/proctab.c
+x86/
+x64/
+o/
+
+/old_testdir
