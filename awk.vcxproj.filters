@@ -54,7 +54,4 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="awkgram.y" />
-  </ItemGroup>
 </Project>

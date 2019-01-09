@@ -34,7 +34,6 @@ typedef	unsigned char uschar;
 
 #define	NN(p)	((p) ? (p) : "(null)")	/* guaranteed non-null for dprintf 
 */
-#define	DEBUG
 #ifdef	DEBUG
 			/* uses have to be doubly parenthesized */
 #	define	dprintf(x)	if (dbg) printf x

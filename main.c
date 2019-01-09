@@ -24,7 +24,6 @@ THIS SOFTWARE.
 
 const char	*version = "version 20180827";
 
-#define DEBUG
 #include <stdio.h>
 #include <ctype.h>
 #include <locale.h>
@@ -34,7 +33,6 @@ const char	*version = "version 20180827";
 #include "awk.h"
 #include "ytab.h"
 
-extern	char	**environ;
 extern	int	nfields;
 
 int	dbg	= 0;
@@ -78,7 +76,7 @@ int main(int argc, char *argv[])
 	/*signal(SIGSEGV, segvcatch); experiment */
 
 	srand_seed = 1;
-	srand(srand_seed);
+	srand((unsigned int)srand_seed);
 
 	yyin = NULL;
 	symtab = makesymtab(NSYMTAB/NSYMTAB);
