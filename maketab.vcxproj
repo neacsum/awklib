@@ -94,11 +94,11 @@
   <ItemGroup>
     <CustomBuild Include="awkgram.y">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yaccgram.bat</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc -d -o ytab.c awkgram.y</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling grammar</Message>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ytab.h;ytab.c;%(Outputs)</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yaccgram.bat</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yacc -d -o ytab.c awkgram.y</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">ytab.h;ytab.c;%(Outputs)</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
