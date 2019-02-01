@@ -95,6 +95,13 @@ static Cell	tempcell	={ OCELL, CTEMP, 0, "", 0.0, NUM|STR|DONTFREE, NULL };
 
 Node	*curnode = NULL;	/* the node being executed, for debugging */
 
+static Cell*  execute (Node *);
+static void   tfree (Cell *);
+static int    format (char **, int *, const char *, Node *);
+static double ipow (double, int);
+static void   closeall (void);
+
+
 /* buffer memory management */
 int adjbuf(char **pbuf, int *psiz, int minlen, int quantum, char **pbptr,
 	const char *whatrtn)
@@ -132,7 +139,7 @@ int adjbuf(char **pbuf, int *psiz, int minlen, int quantum, char **pbptr,
 
 void run(Node *a)	/* execution of parse tree starts here */
 {
-	extern void stdinit(void);
+	static void stdinit(void);
 
 	stdinit();
 	execute(a);
@@ -1076,6 +1083,8 @@ Cell *arith(Node **a, int n)	/* a[0] + a[1], etc.  also -a[0] */
 	setfval(z, i);
 	return(z);
 }
+
+//FIXME - Are you kidding? Reccursive function for integer power?
 
 double ipow(double x, int n)	/* x**n.  ought to be done by pow, but isn't always */
 {

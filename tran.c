@@ -549,6 +549,7 @@ char *qstring(const char *is, int delim)	/* collect string up to next delim */
 	return (char *) buf;
 }
 
+#if 0
 const char *flags2str(int flags)
 {
 	static const struct ftab {
@@ -582,3 +583,4 @@ const char *flags2str(int flags)
 
 	return buf;
 }
+#endif

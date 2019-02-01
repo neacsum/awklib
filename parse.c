@@ -28,6 +28,12 @@ THIS SOFTWARE.
 #include "awk.h"
 #include "ytab.h"
 
+static Node*  nodealloc (int);
+static Node*  node1 (int, Node *);
+static Node*  node2 (int, Node *, Node *);
+static Node*  node3 (int, Node *, Node *, Node *);
+static Node*  node4 (int, Node *, Node *, Node *, Node *);
+
 Node *nodealloc(int n)
 {
 	Node *x;

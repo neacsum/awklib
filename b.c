@@ -75,6 +75,28 @@ int	patlen;
 fa	*fatab[NFA];
 int	nfatab	= 0;	/* entries in fatab */
 
+static int    makeinit (fa *, int);
+static fa*    mkdfa (const char *, int);
+static void   penter (Node *);
+static void   freetr (Node *);
+static int    hexstr (uschar **);
+static int    quoted (uschar **);
+static char*  cclenter (const char *);
+static void   overflo (const char *);
+static void   cfoll (fa *, Node *);
+static int    first (Node *);
+static void   follow (Node *);
+static int    member (int, const char *);
+static Node*  regexp (void);
+static Node*  reparse (const char *);
+static Node*  primary (void);
+static Node*  concat (Node *);
+static Node*  alt (Node *);
+static Node*  unary (Node *);
+static int    relex (void);
+static int    cgoto (fa *, int, int);
+
+
 fa *makedfa(const char *s, int anchor)	/* returns dfa for reg expr s */
 {
 	int i, use, nuse;
