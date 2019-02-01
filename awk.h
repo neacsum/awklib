@@ -102,23 +102,23 @@ typedef struct Cell {
 #define JRET    25
 #define JNEXTFILE  26
 
-  char  *nval;    /* name, for variables only */
-  char  *sval;    /* string value */
-  Awkfloat fval;  /* value as number */
-  int   tval;     /* type info: STR|NUM|ARR|FCN|FLD|CON|DONTFREE|CONVC|CONVO */
-#define NUM       01  /* number value is valid */
-#define STR       02  /* string value is valid */
-#define DONTFREE  04  /* string space is not freeable */
-#define CON       010  /* this is a constant */
-#define ARR       020  /* this is an array */
-#define FCN       040  /* this is a function name */
+  char  *nval;        /* name, for variables only */
+  char  *sval;        /* string value */
+  Awkfloat fval;      /* value as number */
+  int   tval;         /* type info: STR|NUM|ARR|FCN|FLD|CON|DONTFREE|CONVC|CONVO */
+#define NUM       01    /* number value is valid */
+#define STR       02    /* string value is valid */
+#define DONTFREE  04    /* string space is not freeable */
+#define CON       010   /* this is a constant */
+#define ARR       020   /* this is an array */
+#define FCN       040   /* this is a function name */
 #define FLD       0100  /* this is a field $1, $2, ... */
 #define REC       0200  /* this is $0 */
 #define CONVC     0400  /* string was converted from number via CONVFMT */
-#define CONVO     01000  /* string was converted from number via OFMT */
+#define CONVO     01000 /* string was converted from number via OFMT */
 
-  char  *fmt;           /* CONVFMT/OFMT value used to convert from number */
-  struct Cell *cnext;   /* ptr to next if chained */
+  char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
+  struct Cell *cnext; /* ptr to next if chained */
 } Cell;
 
 typedef struct Array {    /* symbol table array */
