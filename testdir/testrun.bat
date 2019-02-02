@@ -4,6 +4,7 @@ rem Run one test.
 rem
 
 
+awk --version
 .\echo -n "Running test %~n1... "
 maketest %1
 awk -f %~n1.awk %~n1.in >%~n1.out

@@ -1,9 +1,9 @@
 @echo off
 rem
-rem Run all tests in current directory.
+rem Run all tests in tests directory.
 rem
 
-
+awk --version
 for %%i in (tests\*.tst) do (
   .\echo -n "Running test %%~ni... "
   maketest %%i
