@@ -66,6 +66,9 @@ Cell  *literal0;
 
 extern Cell **fldtab;
 
+static int  hash (const char *, int);
+static void	rehash (Array *);
+
 static void setfree(Cell *vp)
 {
   if (&vp->sval == FS || &vp->sval == RS
