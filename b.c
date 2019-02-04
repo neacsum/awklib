@@ -379,7 +379,7 @@ char* cclenter (const char *argp)
     i++;
   }
   *bp = 0;
-  dprintf (("cclenter: in = |%s|, out = |%s|\n", op, buf));
+  dprintf ("cclenter: in = |%s|, out = |%s|\n", op, buf);
   xfree (op);
   return (char *)tostring ((char *)buf);
 }
@@ -697,7 +697,7 @@ Node *reparse (const char *p)
 {
   Node *np;
 
-  dprintf (("reparse <%s>\n", p));
+  dprintf ("reparse <%s>\n", p);
   lastre = prestr = (uschar *)p;  /* prestr points to string to be parsed */
   rtok = relex ();
   /* GNU compatibility: an empty regexp matches anything */

@@ -129,8 +129,8 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
     firsttime = 0;
     initgetrec ();
   }
-  dprintf (("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
-    *RS, *FS, *ARGC, *FILENAME));
+  dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
+    *RS, *FS, *ARGC, *FILENAME);
   if (isrecord)
   {
     donefld = 0;
@@ -140,7 +140,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   buf[0] = 0;
   while (argno < *ARGC || infile == stdin)
   {
-    dprintf (("argno=%d, file=|%s|\n", argno, file));
+    dprintf ("argno=%d, file=|%s|\n", argno, file);
     if (infile == NULL)
     {
       /* have to open a new file */
@@ -159,7 +159,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
         continue;
       }
       *FILENAME = file;
-      dprintf (("opening file %s\n", file));
+      dprintf ("opening file %s\n", file);
       if (*file == '-' && *(file + 1) == '\0')
         infile = stdin;
       else if ((infile = fopen (file, "r")) == NULL)
@@ -248,7 +248,7 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
   if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr, "readrec 3"))
     FATAL ("input record `%.30s...' too long", buf);
   *rr = 0;
-  dprintf (("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1));
+  dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
   *pbuf = buf;
   *pbufsize = bufsize;
   return c == EOF && rr == buf ? 0 : 1;
@@ -266,7 +266,7 @@ char *getargv (int n)
     return NULL;
   x = setsymtab (temp, "", 0.0, STR, ARGVtab);
   s = getsval (x);
-  dprintf (("getargv(%d) returns |%s|\n", n, s));
+  dprintf ("getargv(%d) returns |%s|\n", n, s);
   return s;
 }
 
@@ -287,7 +287,7 @@ void setclvar (char *s)
     q->fval = atof (q->sval);
     q->tval |= NUM;
   }
-  dprintf (("command line set %s to |%s|\n", s, p));
+  dprintf ("command line set %s to |%s|\n", s, p);
 }
 
 /// Create fields from current record
@@ -406,6 +406,7 @@ void fldbld (void)
   }
   setfval (nfloc, (Awkfloat)lastfld);
   donerec = 1; /* restore */
+#ifndef NDEBUG
   if (dbg)
   {
     for (j = 0; j <= lastfld; j++)
@@ -414,6 +415,7 @@ void fldbld (void)
       printf ("field %d (%s): |%s|\n", j, p->nval, p->sval);
     }
   }
+#endif
 }
 
 /// Clean out fields n1 .. n2 inclusive
@@ -508,7 +510,7 @@ int refldbld (const char *rec, const char *fs)
   if (*rec == '\0')
     return 0;
   pfa = makedfa (fs, 1);
-  dprintf (("into refldbld, rec = <%s>, pat = <%s>\n", rec, fs));
+  dprintf ("into refldbld, rec = <%s>, pat = <%s>\n", rec, fs);
   tempstat = pfa->initstat;
   for (i = 1; ; i++)
   {
@@ -518,11 +520,11 @@ int refldbld (const char *rec, const char *fs)
       xfree (fldtab[i]->sval);
     fldtab[i]->tval = FLD | STR | DONTFREE;
     fldtab[i]->sval = fr;
-    dprintf (("refldbld: i=%d\n", i));
+    dprintf ("refldbld: i=%d\n", i);
     if (nematch (pfa, rec))
     {
       pfa->initstat = 2;  /* horrible coupling to b.c */
-      dprintf (("match %s (%d chars)\n", patbeg, patlen));
+      dprintf ("match %s (%d chars)\n", patbeg, patlen);
       strncpy (fr, rec, patbeg - rec);
       fr += patbeg - rec + 1;
       *(fr - 1) = '\0';
@@ -530,7 +532,7 @@ int refldbld (const char *rec, const char *fs)
     }
     else
     {
-      dprintf (("no match %s\n", rec));
+      dprintf ("no match %s\n", rec);
       strcpy (fr, rec);
       pfa->initstat = tempstat;
       break;
@@ -566,15 +568,15 @@ void recbld (void)
   if (!adjbuf (&record, &recsize, 2 + r - record, recsize, &r, "recbld 3"))
     FATAL ("built giant record `%.30s...'", record);
   *r = '\0';
-  dprintf (("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]));
+  dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
 
   if (freeable (fldtab[0]))
     xfree (fldtab[0]->sval);
   fldtab[0]->tval = REC | STR | DONTFREE;
   fldtab[0]->sval = record;
 
-  dprintf (("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]));
-  dprintf (("recbld = |%s|\n", record));
+  dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
+  dprintf ("recbld = |%s|\n", record);
   donerec = 1;
 }
 
@@ -651,8 +653,10 @@ void FATAL (const char *fmt, ...)
   vfprintf (stderr, fmt, varg);
   va_end (varg);
   error ();
+#ifndef NDEBUG
   if (dbg > 1)    /* core dump if serious debugging on */
     abort ();
+#endif
   exit (2);
 }
 

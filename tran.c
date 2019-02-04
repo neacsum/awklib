@@ -238,8 +238,8 @@ Cell *setsymtab (const char *n, const char *s, Awkfloat f, unsigned t, Array *tp
 
   if (n != NULL && (p = lookup (n, tp)) != NULL)
   {
-    dprintf (("setsymtab found %p: n=%s s=\"%s\" f=%g t=%o\n",
-      (void*)p, NN (p->nval), NN (p->sval), p->fval, p->tval));
+    dprintf ("setsymtab found %p: n=%s s=\"%s\" f=%g t=%o\n",
+      (void*)p, NN (p->nval), NN (p->sval), p->fval, p->tval);
     return p;
   }
   p = (Cell *)malloc (sizeof (Cell));
@@ -257,8 +257,8 @@ Cell *setsymtab (const char *n, const char *s, Awkfloat f, unsigned t, Array *tp
   h = hash (n, tp->size);
   p->cnext = tp->tab[h];
   tp->tab[h] = p;
-  dprintf (("setsymtab set %p: n=%s s=\"%s\" f=%g t=%o\n",
-    (void*)p, p->nval, p->sval, p->fval, p->tval));
+  dprintf ("setsymtab set %p: n=%s s=\"%s\" f=%g t=%o\n",
+    (void*)p, p->nval, p->sval, p->fval, p->tval);
   return p;
 }
 
@@ -324,13 +324,13 @@ Awkfloat setfval (Cell *vp, Awkfloat f)
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
-    dprintf (("setting field %d to %g\n", fldno, f));
+    dprintf ("setting field %d to %g\n", fldno, f);
   }
   else if (&vp->fval == NF)
   {
     donerec = 0;  /* mark $0 invalid */
     setlastfld ((int)f);
-    dprintf (("setting NF to %g\n", f));
+    dprintf ("setting NF to %g\n", f);
   }
   else if (isrec (vp))
   {
@@ -344,7 +344,7 @@ Awkfloat setfval (Cell *vp, Awkfloat f)
   vp->tval |= NUM;  /* mark number ok */
   if (f == -0)  /* who would have thought this possible? */
     f = 0;
-  dprintf (("setfval %p: %s = %g, t=%o\n", (void*)vp, NN (vp->nval), f, vp->tval));
+  dprintf ("setfval %p: %s = %g, t=%o\n", (void*)vp, NN (vp->nval), f, vp->tval);
   return vp->fval = f;
 }
 
@@ -365,8 +365,8 @@ char *setsval (Cell *vp, const char *s)
   int fldno;
   Awkfloat f;
 
-  dprintf (("starting setsval %p: %s = \"%s\", t=%o, r,f=%d,%d\n",
-    (void*)vp, NN (vp->nval), s, vp->tval, donerec, donefld));
+  dprintf ("starting setsval %p: %s = \"%s\", t=%o, r,f=%d,%d\n",
+    (void*)vp, NN (vp->nval), s, vp->tval, donerec, donefld);
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "assign to");
   if (isfld (vp))
@@ -375,7 +375,7 @@ char *setsval (Cell *vp, const char *s)
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
-    dprintf (("setting field %d to %s (%p)\n", fldno, s, (void *)s));
+    dprintf ("setting field %d to %s (%p)\n", fldno, s, (void *)s);
   }
   else if (isrec (vp))
   {
@@ -394,15 +394,15 @@ char *setsval (Cell *vp, const char *s)
   vp->tval |= STR;
   vp->fmt = NULL;
   setfree (vp);
-  dprintf (("setsval %p: %s = \"%s (%p) \", t=%o r,f=%d,%d\n",
-    (void*)vp, NN (vp->nval), t, (void *)t, vp->tval, donerec, donefld));
+  dprintf ("setsval %p: %s = \"%s (%p) \", t=%o r,f=%d,%d\n",
+    (void*)vp, NN (vp->nval), t, (void *)t, vp->tval, donerec, donefld);
   vp->sval = t;
   if (&vp->fval == NF)
   {
     donerec = 0;  /* mark $0 invalid */
     f = getfval (vp);
     setlastfld ((int)f);
-    dprintf (("setting NF to %g\n", f));
+    dprintf ("setting NF to %g\n", f);
   }
 
   return vp->sval;
@@ -423,8 +423,8 @@ Awkfloat getfval (Cell *vp)
     if (is_number (vp->sval) && !(vp->tval & CON))
       vp->tval |= NUM;  /* make NUM only sparingly */
   }
-  dprintf (("getfval %p: %s = %g, t=%o\n",
-    (void*)vp, NN (vp->nval), vp->fval, vp->tval));
+  dprintf ("getfval %p: %s = %g, t=%o\n",
+    (void*)vp, NN (vp->nval), vp->fval, vp->tval);
   return vp->fval;
 }
 
@@ -524,8 +524,8 @@ static char *get_str_val (Cell *vp, char **fmt)
     }
   }
 done:
-  dprintf (("getsval %p: %s = \"%s (%p)\", t=%o\n",
-    (void*)vp, NN (vp->nval), vp->sval, (void *)vp->sval, vp->tval));
+  dprintf ("getsval %p: %s = \"%s (%p)\", t=%o\n",
+    (void*)vp, NN (vp->nval), vp->sval, (void *)vp->sval, vp->tval);
 
   return vp->sval;
 }

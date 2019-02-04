@@ -96,7 +96,7 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr, const
     if (rminlen)
       minlen += quantum - rminlen;
     tbuf = (char *)realloc (*pbuf, minlen);
-    dprintf (("adjbuf %s: %d %d (pbuf=%p, tbuf=%p)\n", whatrtn, *psiz, minlen, (void *)*pbuf, (void *)tbuf));
+    dprintf ("adjbuf %s: %d %d (pbuf=%p, tbuf=%p)\n", whatrtn, *psiz, minlen, (void *)*pbuf, (void *)tbuf);
     if (tbuf == NULL)
     {
       if (whatrtn)
@@ -239,7 +239,7 @@ Cell *call (Node **a, int n)
   for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
     ncall++;
   ndef = (int)fcn->fval;      /* args in defn */
-  dprintf (("calling %s, %d args (%d in defn), fp=%d\n", s, ncall, ndef, (int)(fp - frame)));
+  dprintf ("calling %s, %d args (%d in defn), fp=%d\n", s, ncall, ndef, (int)(fp - frame));
   if (ncall > ndef)
     WARNING ("function %s called with %d args, uses only %d",
       s, ncall, ndef);
@@ -247,11 +247,11 @@ Cell *call (Node **a, int n)
     FATAL ("function %s has %d arguments, limit %d", s, ncall + ndef, NARGS);
   for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
   {  /* get call args */
-    dprintf (("evaluate args[%d], fp=%d:\n", i, (int)(fp - frame)));
+    dprintf ("evaluate args[%d], fp=%d:\n", i, (int)(fp - frame));
     y = execute (x);
     oargs[i] = y;
-    dprintf (("args[%d]: %s %f <%s>, t=%o\n",
-      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval));
+    dprintf ("args[%d]: %s %f <%s>, t=%o\n",
+      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval);
     if (isfcn (y))
       FATAL ("can't use function %s as argument in %s", y->nval, s);
     if (isarr (y))
@@ -280,9 +280,9 @@ Cell *call (Node **a, int n)
   fp->nargs = ndef;  /* number defined with (excess are locals) */
   fp->retval = gettemp ();
 
-  dprintf (("start exec of %s, fp=%d\n", s, (int)(fp - frame)));
+  dprintf ("start exec of %s, fp=%d\n", s, (int)(fp - frame));
   y = execute ((Node *)(fcn->sval));  /* execute body */
-  dprintf (("finished exec of %s, fp=%d\n", s, (int)(fp - frame)));
+  dprintf ("finished exec of %s, fp=%d\n", s, (int)(fp - frame));
 
   for (i = 0; i < ndef; i++)
   {
@@ -326,7 +326,7 @@ Cell *call (Node **a, int n)
     tempfree (y);  /* don't free twice! */
   }
   z = fp->retval;      /* return value */
-  dprintf (("%s returns %g |%s| %o\n", s, getfval (z), getsval (z), z->tval));
+  dprintf ("%s returns %g |%s| %o\n", s, getfval (z), getsval (z), z->tval);
   fp--;
   return z;
 }
@@ -357,7 +357,7 @@ Cell *copycell (Cell *x)
 Cell *arg (Node **a, int n)
 {
   n = ptoi (a[0]);  /* argument number, counting from 0 */
-  dprintf (("arg(%d), fp->nargs=%d\n", n, fp->nargs));
+  dprintf ("arg(%d), fp->nargs=%d\n", n, fp->nargs);
   if (n + 1 > fp->nargs)
     FATAL ("argument #%d of function %s was not supplied",
       n + 1, fp->fcncell->nval);
@@ -520,7 +520,7 @@ Cell *array (Node **a, int n)
   }
   if (!isarr (x))
   {
-    dprintf (("making %s into an array\n", NN (x->nval)));
+    dprintf ("making %s into an array\n", NN (x->nval));
     if (freeable (x))
       xfree (x->sval);
     x->tval &= ~(STR | NUM | DONTFREE);
@@ -593,7 +593,7 @@ Cell *intest (Node **a, int n)
   ap = execute (a[1]);  /* array name */
   if (!isarr (ap))
   {
-    dprintf (("making %s into an array\n", ap->nval));
+    dprintf ("making %s into an array\n", ap->nval);
     if (freeable (ap))
       xfree (ap->sval);
     ap->tval &= ~(STR | NUM | DONTFREE);
@@ -744,7 +744,7 @@ void tfree (Cell *a)
 {
   if (freeable (a))
   {
-    dprintf (("freeing %s %s %o\n", NN (a->nval), NN (a->sval), a->tval));
+    dprintf ("freeing %s %s %o\n", NN (a->nval), NN (a->sval), a->tval);
     xfree (a->sval);
   }
   if (a == tmps)
@@ -839,7 +839,7 @@ Cell *substr (Node **a, int nnn)
     n = 0;
   else if (n > k - m)
     n = k - m;
-  dprintf (("substr: m=%d, n=%d, s=%s\n", m, n, s));
+  dprintf ("substr: m=%d, n=%d, s=%s\n", m, n, s);
   y = gettemp ();
   temp = s[n + m - 1];  /* with thanks to John Linderman */
   s[n + m - 1] = '\0';
@@ -1368,7 +1368,7 @@ Cell *split (Node **a, int nnn)
   sep = *fs;
   ap = execute (a[1]);  /* array name */
   freesymtab (ap);
-  dprintf (("split: s=|%s|, a=%s, sep=|%s|\n", s, NN (ap->nval), fs));
+  dprintf ("split: s=|%s|, a=%s, sep=|%s|\n", s, NN (ap->nval), fs);
   ap->tval &= ~STR;
   ap->tval |= ARR;
   ap->sval = (char *)makesymtab (NSYMTAB);

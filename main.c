@@ -39,7 +39,9 @@ extern  int  nfields;
 extern  FILE* yyin;  /* lex input file */
 extern  int errorflag;  /* non-zero if any syntax errors; set by yyerror */
 
+#ifndef NDEBUG
 int       dbg  = 0;
+#endif
 Awkfloat  srand_seed = 1;
 char*     cmdname;            /* gets argv[0] for error messages */
 char*     lexprog;            /* points to program argument if it exists */
@@ -158,10 +160,11 @@ int main (int argc, char *argv[])
       break;
 
     case 'd':
-      dbg = atoi (&argv[1][2]);
-      if (dbg == 0)
-        dbg = 1;
-      printf ("awk %s\n", version);
+#ifdef NDEBUG
+      WARNING ("no debug support");
+#else
+      dbg = 1;
+#endif
       break;
 
     default:
@@ -176,12 +179,9 @@ int main (int argc, char *argv[])
   {
     /* no -f; first argument is program */
     if (argc <= 1)
-    {
-      if (dbg)
-        exit (0);
       FATAL ("no program given");
-    }
-    dprintf (("program = |%s|\n", argv[1]));
+
+    dprintf ("program = |%s|\n", argv[1]);
     lexprog = argv[1];
     argc--;
     argv++;
@@ -190,7 +190,7 @@ int main (int argc, char *argv[])
   syminit ();
   compile_time = 1;
   argv[0] = cmdname;  /* put prog name at front of arglist */
-  dprintf (("argc=%d, argv[0]=%s\n", argc, argv[0]));
+  dprintf ("argc=%d, argv[0]=%s\n", argc, argv[0]);
   arginit (argc, argv);
   if (!safe)
     envinit (environ);
@@ -198,7 +198,7 @@ int main (int argc, char *argv[])
   setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
   if (fs)
     *FS = qstring (fs, '\0');
-  dprintf (("errorflag=%d\n", errorflag));
+  dprintf ("errorflag=%d\n", errorflag);
   if (errorflag == 0)
   {
     compile_time = 0;
@@ -246,4 +246,19 @@ char *cursource (void)  /* current source file name */
     return pfile[curpfile];
   else
     return NULL;
+}
+
+#include <stdarg.h>
+int errprintf (const char *fmt, ...)
+{
+#ifndef NDEBUG
+  va_list args;
+  va_start (args, fmt);
+
+  int ret = vfprintf (stderr, fmt, args);
+  va_end (args);
+  return ret;
+#else
+  return 0;
+#endif
 }

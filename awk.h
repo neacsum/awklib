@@ -34,11 +34,15 @@ typedef  unsigned char uschar;
 
 #define  NN(p)  ((p) ? (p) : "(null)")  /* guaranteed non-null for dprintf 
 */
-#ifdef  DEBUG
-      /* uses have to be doubly parenthesized */
-#  define  dprintf(x)  if (dbg) printf x
+
+int errprintf (const char *fmt, ...);
+#ifndef  NDEBUG
+extern int  dbg;
+#define  dprintf  if (dbg) errprintf
+#define YYDBGOUT errprintf
 #else
-#  define  dprintf(x)
+/* errprintf should be optimized out of existence */
+# define  dprintf 1? 0 : errprintf 
 #endif
 
 extern int  compile_time;  /* 1 if compiling, 0 if running */
@@ -66,8 +70,6 @@ extern int  errorflag;  /* 1 if error has occurred */
 extern int  donefld;  /* 1 if record broken into fields */
 extern int  donerec;  /* 1 if record is valid (no fld has changed */
 extern char  inputFS[];  /* FS at time of input, for field splitting */
-
-extern int  dbg;
 
 extern  char  *patbeg;  /* beginning of pattern matched */
 extern  int  patlen;    /* length of pattern matched.  set in b.c */
