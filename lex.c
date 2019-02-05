@@ -89,10 +89,10 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
   { "while",      WHILE,      WHILE },
 };
 
-#ifndef NDEBUG
-#define  RET(x)  { if(dbg)printf("lex %s\n", tokname(x)); return x; }
-#else
+#ifdef NDEBUG
 #define  RET(x)  { return x; }
+#else
+#define  RET(x)  { if(dbg)errprintf("lex %s\n", tokname(x)); return x; }
 #endif
 
 int peek (void)
@@ -356,12 +356,7 @@ int yylex (void)
         RET ('*')
 
     case '/':
-      if (peek () == '=')
-      {
-        input (); yylval.i = DIVEQ; RET (ASGNOP)
-      }
-      else
-        RET ('/')
+      RET ('/')
 
     case '%':
       if (peek () == '=')

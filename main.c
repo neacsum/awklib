@@ -248,17 +248,18 @@ char *cursource (void)  /* current source file name */
     return NULL;
 }
 
+/// Output debug messages to stderr
 #include <stdarg.h>
 int errprintf (const char *fmt, ...)
 {
-#ifndef NDEBUG
+#ifdef NDEBUG
+  return 0;
+#else
   va_list args;
   va_start (args, fmt);
 
   int ret = vfprintf (stderr, fmt, args);
   va_end (args);
   return ret;
-#else
-  return 0;
 #endif
 }

@@ -36,13 +36,13 @@ typedef  unsigned char uschar;
 */
 
 int errprintf (const char *fmt, ...);
-#ifndef  NDEBUG
+#ifdef  NDEBUG
+/* errprintf should be optimized out of existence */
+# define  dprintf 1? 0 : errprintf 
+#else
 extern int  dbg;
 #define  dprintf  if (dbg) errprintf
 #define YYDBGOUT errprintf
-#else
-/* errprintf should be optimized out of existence */
-# define  dprintf 1? 0 : errprintf 
 #endif
 
 extern int  compile_time;  /* 1 if compiling, 0 if running */
