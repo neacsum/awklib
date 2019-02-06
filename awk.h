@@ -42,7 +42,7 @@ int errprintf (const char *fmt, ...);
 #else
 extern int  dbg;
 #define  dprintf  if (dbg) errprintf
-#define YYDBGOUT errprintf
+#define YYDBGOUT if (dbg>1) errprintf
 #endif
 
 extern int  compile_time;  /* 1 if compiling, 0 if running */

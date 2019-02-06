@@ -32,6 +32,9 @@ THIS SOFTWARE.
 extern YYSTYPE  yylval;
 extern int  infunc;
 
+static void unput (int);
+static void unputstr (const char *);
+
 int  lineno = 1;
 int  bracecnt = 0;
 int  brackcnt = 0;

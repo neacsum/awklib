@@ -41,6 +41,9 @@ extern  int errorflag;  /* non-zero if any syntax errors; set by yyerror */
 
 #ifndef NDEBUG
 int       dbg  = 0;
+#if YYDEBUG
+extern int yydebug;
+#endif
 #endif
 Awkfloat  srand_seed = 1;
 char*     cmdname;            /* gets argv[0] for error messages */
@@ -161,9 +164,18 @@ int main (int argc, char *argv[])
 
     case 'd':
 #ifdef NDEBUG
-      WARNING ("no debug support");
+      WARNING ("Program compiled without debug support");
 #else
+      //default debug values...
       dbg = 1;
+      yydebug = 0;
+
+      if (argv[1][2])   //... can be changed by argument to -d flag
+      {
+        dbg = atoi (&argv[1][2]);
+        if (dbg > 1)
+          yydebug = 1;
+      }
 #endif
       break;
 
@@ -204,8 +216,6 @@ int main (int argc, char *argv[])
     compile_time = 0;
     run (winner);
   }
-  else
-    bracecheck ();
   return(errorflag);
 }
 
@@ -250,6 +260,15 @@ char *cursource (void)  /* current source file name */
 
 /// Output debug messages to stderr
 #include <stdarg.h>
+
+#if !defined(NDEBUG) && defined(WIN32)
+// Avoid clashes with windows macrodefs
+#undef CHAR
+#undef DELETE
+#undef IN
+#include <Windows.h> //for OutDebugString
+#endif
+
 int errprintf (const char *fmt, ...)
 {
 #ifdef NDEBUG
@@ -257,9 +276,19 @@ int errprintf (const char *fmt, ...)
 #else
   va_list args;
   va_start (args, fmt);
-
+  int ret;
+#ifdef WIN32
+  char buffer[1024];
+  size_t sz;
+  sprintf (buffer, "[%x] ", GetCurrentThreadId ());
+  sz = sizeof (buffer) - strlen (buffer) - 3;
+  ret = vsnprintf (buffer + strlen (buffer), sz, fmt, args);
+  va_end (args);
+  OutputDebugStringA (buffer);
+#else
   int ret = vfprintf (stderr, fmt, args);
   va_end (args);
+#endif
   return ret;
 #endif
 }

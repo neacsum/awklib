@@ -23,24 +23,21 @@ THIS SOFTWARE.
 ****************************************************************/
 
 void  setfname (Cell *);
-int  constnode (Node *);
+int   constnode (Node *);
 char* strnode (Node *);
 Node* notnull (Node *);
-int  yyparse (void);
+int   yyparse (void);
 
-int  yylex (void);
+int   yylex (void);
 void  startreg (void);
-int  input (void);
-void  unput (int);
-void  unputstr (const char *);
 
-fa* makedfa (const char *, int);
-int  match (fa *, const char *);
-int  pmatch (fa *, const char *);
-int  nematch (fa *, const char *);
+fa*   makedfa (const char *, int);
+int   match (fa *, const char *);
+int   pmatch (fa *, const char *);
+int   nematch (fa *, const char *);
 void  freefa (fa *);
 
-int  pgetc (void);
+int   pgetc (void);
 char* cursource (void);
 
 Node* exptostat (Node *);
@@ -58,10 +55,10 @@ Node* makearr (Node *);
 Node* pa2stat (Node *, Node *, Node *);
 Node* linkum (Node *, Node *);
 void  defn (Cell *, Node *, Node *);
-int  isarg (const char *);
+int   isarg (const char *);
 char* tokname (int);
 Cell* (*proctab[])(Node **, int);
-int  ptoi (void *);
+int   ptoi (void *);
 Node* itonp (int);
 
 void  syminit (void);
@@ -72,10 +69,10 @@ void  freesymtab (Cell *);
 void  freeelem (Cell *, const char *);
 Cell* setsymtab (const char *, const char *, double, unsigned int, Array *);
 Cell* lookup (const char *, Array *);
-double  setfval (Cell *, double);
+double setfval (Cell *, double);
 void  funnyvar (Cell *, const char *);
 char* setsval (Cell *, const char *);
-double  getfval (Cell *);
+double getfval (Cell *);
 char* getsval (Cell *);
 char* getpssval (Cell *);     /* for print */
 char* tostring (const char *);
@@ -85,9 +82,9 @@ void  recinit (unsigned int);
 void  initgetrec (void);
 void  makefields (int, int);
 void  growfldtab (int n);
-int  getrec (char **, int *, int);
+int   getrec (char **, int *, int);
 void  nextfile (void);
-int  readrec (char **buf, int *bufsize, FILE *inf);
+int   readrec (char **buf, int *bufsize, FILE *inf);
 char* getargv (int);
 void  setclvar (char *);
 void  fldbld (void);
@@ -98,12 +95,11 @@ void  recbld (void);
 Cell* fieldadr (int);
 void  yyerror (const char *);
 void  fpecatch (int);
-void  bracecheck (void);
-void  bcheck2 (int, int, int);
+int   input (void);
 void  SYNTAX (const char *, ...);
 void  FATAL (const char *, ...);
 void  WARNING (const char *, ...);
-double  errcheck (double, const char *);
+double errcheck (double, const char *);
 int  isclvar (const char *);
 int  is_number (const char *);
 

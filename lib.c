@@ -55,7 +55,6 @@ static Cell dollar0 = { OCELL, CFLD, NULL, "", 0.0, REC | STR | DONTFREE };
 static Cell dollar1 = { OCELL, CFLD, NULL, "", 0.0, FLD | STR | DONTFREE };
 
 static int	refldbld (const char *, const char *);
-static void	bclass (int);
 static void	eprint (void);
 static void	error (void);
 
@@ -614,33 +613,6 @@ void fpecatch (int n)
   FATAL ("floating point exception %d", n);
 }
 
-extern int bracecnt, brackcnt, parencnt;
-
-void bracecheck (void)
-{
-  int c;
-  static int beenhere = 0;
-
-  if (beenhere++)
-    return;
-  while ((c = input ()) != EOF && c != '\0')
-    bclass (c);
-  bcheck2 (bracecnt, '{', '}');
-  bcheck2 (brackcnt, '[', ']');
-  bcheck2 (parencnt, '(', ')');
-}
-
-void bcheck2 (int n, int c1, int c2)
-{
-  if (n == 1)
-    fprintf (stderr, "\tmissing %c\n", c2);
-  else if (n > 1)
-    fprintf (stderr, "\t%d missing %c's\n", n, c2);
-  else if (n == -1)
-    fprintf (stderr, "\textra %c\n", c2);
-  else if (n < -1)
-    fprintf (stderr, "\t%d extra %c's\n", -n, c2);
-}
 
 void FATAL (const char *fmt, ...)
 {
@@ -729,24 +701,10 @@ void eprint (void)  /* try to print context around error */
     while ((c = input ()) != '\n' && c != '\0' && c != EOF)
     {
       putc (c, stderr);
-      bclass (c);
     }
   }
   putc ('\n', stderr);
   ep = ebuf;
-}
-
-void bclass (int c)
-{
-  switch (c)
-  {
-  case '{': bracecnt++; break;
-  case '}': bracecnt--; break;
-  case '[': brackcnt++; break;
-  case ']': brackcnt--; break;
-  case '(': parencnt++; break;
-  case ')': parencnt--; break;
-  }
 }
 
 double errcheck (double x, const char *s)
