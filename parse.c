@@ -44,6 +44,7 @@ Node *nodealloc (int n)
     FATAL ("out of space in nodealloc");
   x->nnext = NULL;
   x->lineno = lineno;
+  x->args = n;
   return x;
 }
 

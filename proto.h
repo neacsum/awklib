@@ -56,7 +56,6 @@ Node* pa2stat (Node *, Node *, Node *);
 Node* linkum (Node *, Node *);
 void  defn (Cell *, Node *, Node *);
 int   isarg (const char *);
-char* tokname (int);
 Cell* (*proctab[])(Node **, int);
 int   ptoi (void *);
 Node* itonp (int);

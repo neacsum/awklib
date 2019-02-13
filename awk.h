@@ -158,13 +158,14 @@ extern Cell  *rlengthloc; /* RLENGTH */
 /* Node:  parse tree is made of nodes, with Cell's at bottom */
 
 typedef struct Node {
-  int  ntype;   /* node type, see below */
-#define NVALUE  1
-#define NSTAT   2
+  int  ntype;   // node type, see below
+#define NVALUE  1         //value node -  has only one argument that is a Cell
+#define NSTAT   2         //statement node
 #define NEXPR   3
   struct  Node *nnext;
   int  lineno;
-  int  nobj;
+  int  nobj;              //token id
+  int  args;              // number of arguments
   struct  Node *narg[1];  /* variable: actual size set by calling malloc */
 } Node;
 

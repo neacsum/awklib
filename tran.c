@@ -608,7 +608,7 @@ char *qstring (const char *is, int delim)
   return (char *)buf;
 }
 
-#if 0
+#ifndef NDEBUG
 const char *flags2str (int flags)
 {
   static const struct ftab {

@@ -41,6 +41,8 @@ extern  int errorflag;  /* non-zero if any syntax errors; set by yyerror */
 
 #ifndef NDEBUG
 int       dbg  = 0;
+void print_tree (Node *n, int indent);
+char *tokname (int tok);
 #if YYDEBUG
 extern int yydebug;
 #endif
@@ -176,6 +178,7 @@ int main (int argc, char *argv[])
         if (dbg > 1)
           yydebug = 1;
       }
+      errprintf ("Debug level is %d", dbg);
 #endif
       break;
 
@@ -214,6 +217,10 @@ int main (int argc, char *argv[])
   if (errorflag == 0)
   {
     compile_time = 0;
+#ifndef NDEBUG
+    if (dbg > 2)
+      print_tree (winner, 1);
+#endif
     run (winner);
   }
   return(errorflag);
@@ -279,10 +286,7 @@ int errprintf (const char *fmt, ...)
   int ret;
 #ifdef WIN32
   char buffer[1024];
-  size_t sz;
-  sprintf (buffer, "[%x] ", GetCurrentThreadId ());
-  sz = sizeof (buffer) - strlen (buffer) - 3;
-  ret = vsnprintf (buffer + strlen (buffer), sz, fmt, args);
+  ret = vsnprintf (buffer, sizeof(buffer)-1, fmt, args);
   va_end (args);
   OutputDebugStringA (buffer);
 #else
@@ -292,3 +296,48 @@ int errprintf (const char *fmt, ...)
   return ret;
 #endif
 }
+
+#ifndef NDEBUG
+const char *flags2str (int flags);
+
+void print_cell (Cell *c, int indent)
+{
+  static const char *ctype_str[OJUMP + 1] = {
+    "0", "OCELL", "OBOOL", "OJUMP" };
+
+  static const char *csub_str[JNEXTFILE+1] = {
+    "CUNK", "CFLD", "CVAR", "CNAME", "CTEMP", "CCON", "CCOPY", "CFREE", "8", "9", "10",
+    "BTRUE", "BFALSE", "13", "14", "15", "16", "17", "18", "19", "20",
+    "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE" };
+
+  errprintf ("%*cCell 0x%p ", indent, ' ', c);
+  errprintf (" %s %s Flags: %s", ctype_str[c->ctype], csub_str[c->csub], flags2str(c->tval));
+  errprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
+  if (c->nval)
+    errprintf (" Name: %s", c->nval);
+  errprintf (" Next: %p\n", c->cnext);
+}
+
+void print_tree (Node *n, int indent)
+{
+  int i;
+
+  errprintf ("%*cNode 0x%p %s", indent, ' ', n, tokname (n->nobj));
+  while (n)
+  {
+    errprintf (" type %s", n->ntype == NVALUE ? "value" : n->ntype == NSTAT ? "statement" : "expression");
+    errprintf (" %d arguments\n", n->args);
+    for (i = 0; i < n->args; i++)
+    {
+      if (n->ntype == NVALUE)
+        print_cell ((Cell *)n->narg[i], indent + 1);
+      else if (n->narg[i])
+        print_tree (n->narg[i], indent + 1);
+      else
+        errprintf ("%*cNull arg\n", indent + 1, ' ');
+    }
+    if (n = n->nnext)
+      errprintf ("%*cNext node 0x%p %s", indent, ' ', n, tokname (n->nobj));
+  }
+}
+#endif

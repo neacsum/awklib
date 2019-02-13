@@ -95,7 +95,8 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
 #ifdef NDEBUG
 #define  RET(x)  { return x; }
 #else
-#define  RET(x)  { if(dbg)errprintf("lex %s\n", tokname(x)); return x; }
+char *tokname (int tok);
+#define  RET(x)  { if(dbg) errprintf("lex %s\n", tokname(x)); return x; }
 #endif
 
 int peek (void)
