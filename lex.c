@@ -128,7 +128,7 @@ int gettok (char **pbuf, int *psz)
     for (; (c = input ()) != 0; )
     {
       if (bp - buf >= sz)
-        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp, "gettok"))
+        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
           FATAL ("out of space for name %.10s...", buf);
       if (isalnum (c) || c == '_')
         *bp++ = c;
@@ -149,7 +149,7 @@ int gettok (char **pbuf, int *psz)
     for (; (c = input ()) != 0; )
     {
       if (bp - buf >= sz)
-        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp, "gettok"))
+        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
           FATAL ("out of space for number %.10s...", buf);
       if (isdigit (c) || c == 'e' || c == 'E'
         || c == '.' || c == '+' || c == '-')
@@ -456,7 +456,7 @@ int string (void)
     FATAL ("out of space for strings");
   for (bp = buf; (c = input ()) != '"'; )
   {
-    if (!adjbuf (&buf, &bufsz, bp - buf + 2, 500, &bp, "string"))
+    if (!adjbuf (&buf, &bufsz, bp - buf + 2, 500, &bp))
       FATAL ("out of space for string %.10s...", buf);
     switch (c)
     {
@@ -622,7 +622,7 @@ int regexpr (void)
   bp = buf;
   for (; (c = input ()) != '/' && c != 0; )
   {
-    if (!adjbuf (&buf, &bufsz, bp - buf + 3, 500, &bp, "regexpr"))
+    if (!adjbuf (&buf, &bufsz, bp - buf + 3, 500, &bp))
       FATAL ("out of space for reg expr %.10s...", buf);
     if (c == '\n')
     {

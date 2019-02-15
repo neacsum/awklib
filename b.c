@@ -365,7 +365,7 @@ char* cclenter (const char *argp)
         }
         while (c < c2)
         {
-          if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp, "cclenter1"))
+          if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
             FATAL ("out of space for character class [%.10s...] 2", p);
           *bp++ = ++c;
           i++;
@@ -373,7 +373,7 @@ char* cclenter (const char *argp)
         continue;
       }
     }
-    if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp, "cclenter2"))
+    if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
       FATAL ("out of space for character class [%.10s...] 3", p);
     *bp++ = c;
     i++;
@@ -917,7 +917,7 @@ int relex (void)
     else
       cflag = 0;
     n = 2 * strlen ((const char *)prestr) + 1;
-    if (!adjbuf ((char **)&buf, &bufsz, n, n, (char **)&bp, "relex1"))
+    if (!adjbuf ((char **)&buf, &bufsz, n, n, (char **)&bp))
       FATAL ("out of space for reg expr %.10s...", lastre);
     for (; ; )
     {
@@ -942,7 +942,7 @@ int relex (void)
           prestr += cc->cc_namelen + 3;
           for (i = 0; i < NCHARS; i++)
           {
-            if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 1, 100, (char **)&bp, "relex2"))
+            if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 1, 100, (char **)&bp))
               FATAL ("out of space for reg expr %.10s...", lastre);
             if (cc->cc_func (i))
             {

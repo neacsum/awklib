@@ -231,20 +231,22 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
     for (; (c = getc (inf)) != sep && c != EOF; )
     {
       if (rr - buf + 1 > bufsize)
-        if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr, "readrec 1"))
+        if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
           FATAL ("input record `%.30s...' too long", buf);
       *rr++ = c;
     }
     if (**RS == sep || c == EOF)
       break;
+
+    //sep is '\n' and c == '\n'
     if ((c = getc (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
-    if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr, "readrec 2"))
+    if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr))
       FATAL ("input record `%.30s...' too long", buf);
     *rr++ = '\n';
     *rr++ = c;
   }
-  if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr, "readrec 3"))
+  if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
     FATAL ("input record `%.30s...' too long", buf);
   *rr = 0;
   dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
@@ -269,7 +271,12 @@ char *getargv (int n)
   return s;
 }
 
-/// Set var=value from s
+/*!
+  Command line variable.
+  Set var=value from s
+
+  Assumes input string has correct format.
+*/
 void setclvar (char *s)
 {
   char *p;
@@ -552,19 +559,19 @@ void recbld (void)
   for (i = 1; i <= *NF; i++)
   {
     p = getsval (fldtab[i]);
-    if (!adjbuf (&record, &recsize, 1 + strlen (p) + r - record, recsize, &r, "recbld 1"))
+    if (!adjbuf (&record, &recsize, 1 + strlen (p) + r - record, recsize, &r))
       FATAL ("created $0 `%.30s...' too long", record);
     while ((*r = *p++) != 0)
       r++;
     if (i < *NF)
     {
-      if (!adjbuf (&record, &recsize, 2 + strlen (*OFS) + r - record, recsize, &r, "recbld 2"))
+      if (!adjbuf (&record, &recsize, 2 + strlen (*OFS) + r - record, recsize, &r))
         FATAL ("created $0 `%.30s...' too long", record);
       for (p = *OFS; (*r = *p++) != 0; )
         r++;
     }
   }
-  if (!adjbuf (&record, &recsize, 2 + r - record, recsize, &r, "recbld 3"))
+  if (!adjbuf (&record, &recsize, 2 + r - record, recsize, &r))
     FATAL ("built giant record `%.30s...'", record);
   *r = '\0';
   dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
@@ -724,7 +731,10 @@ double errcheck (double x, const char *s)
   return x;
 }
 
-/// Is s of form var=something ?
+/*!
+  Checks if s is a command line variable assignment 
+  of the form var=something
+*/
 int isclvar (const char *s)
 {
   const char *os = s;

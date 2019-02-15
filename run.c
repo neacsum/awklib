@@ -76,13 +76,12 @@ static void   closeall (void);
 
 
 /* buffer memory management */
-int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr, const char *whatrtn)
+int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
 /* pbuf:    address of pointer to buffer being managed
  * psiz:    address of buffer size variable
  * minlen:  minimum length of buffer needed
  * quantum: buffer size quantum
  * pbptr:   address of movable pointer into buffer, or 0 if none
- * whatrtn: name of the calling routine if failure should cause fatal error
  *
  * return   0 for realloc failure, !=0 for success
  */
@@ -96,13 +95,9 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr, const
     if (rminlen)
       minlen += quantum - rminlen;
     tbuf = (char *)realloc (*pbuf, minlen);
-    dprintf ("adjbuf %s: %d %d (pbuf=%p, tbuf=%p)\n", whatrtn, *psiz, minlen, (void *)*pbuf, (void *)tbuf);
+    dprintf ("adjbuf: %d %d (pbuf=%p, tbuf=%p)\n", *psiz, minlen, (void *)*pbuf, (void *)tbuf);
     if (tbuf == NULL)
-    {
-      if (whatrtn)
-        FATAL ("out of memory in %s", whatrtn);
       return 0;
-    }
     *pbuf = tbuf;
     *psiz = minlen;
     if (pbptr)
@@ -511,7 +506,7 @@ Cell *array (Node **a, int n)
   {
     y = execute (np);  /* subscript */
     s = getsval (y);
-    if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0, "array"))
+    if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
       FATAL ("out of memory for %s[%s...]", x->nval, buf);
     strcat (buf, s);
     if (np->nnext)
@@ -565,7 +560,7 @@ Cell *awkdelete (Node **a, int n)
     {
       y = execute (np);  /* subscript */
       s = getsval (y);
-      if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0, "awkdelete"))
+      if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
         FATAL ("out of memory deleting %s[%s...]", x->nval, buf);
       strcat (buf, s);
       if (np->nnext)
@@ -609,7 +604,7 @@ Cell *intest (Node **a, int n)
   {
     x = execute (p);  /* expr */
     s = getsval (x);
-    if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0, "intest"))
+    if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
       FATAL ("out of memory deleting %s[%s...]", x->nval, buf);
     strcat (buf, s);
     tempfree (x);
@@ -911,7 +906,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     FATAL ("out of memory in format()");
   while (*s)
   {
-    adjbuf (&buf, &bufsize, MAXNUMSIZE + 1 + p - buf, recsize, &p, "format1");
+    adjbuf (&buf, &bufsize, MAXNUMSIZE + 1 + p - buf, recsize, &p);
     if (*s != '%')
     {
       *p++ = *s++;
@@ -927,10 +922,10 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     fmtwd = atoi (s + 1);
     if (fmtwd < 0)
       fmtwd = -fmtwd;
-    adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p, "format2");
+    adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p);
     for (t = fmt; (*t++ = *s) != '\0'; s++)
     {
-      if (!adjbuf (&fmt, &fmtsz, MAXNUMSIZE + 1 + t - fmt, recsize, &t, "format3"))
+      if (!adjbuf (&fmt, &fmtsz, MAXNUMSIZE + 1 + t - fmt, recsize, &t))
         FATAL ("format item %.30s... ran format() out of memory", os);
       if (isalpha ((uschar)*s) && *s != 'l' && *s != 'h' && *s != 'L')
         break;  /* the ansi panoply */
@@ -943,7 +938,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
         sprintf (t - 1, "%d", fmtwd = (int)getfval (x));
         if (fmtwd < 0)
           fmtwd = -fmtwd;
-        adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p, "format");
+        adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p);
         t = fmt + strlen (fmt);
         tempfree (x);
       }
@@ -951,7 +946,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     *t = '\0';
     if (fmtwd < 0)
       fmtwd = -fmtwd;
-    adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p, "format4");
+    adjbuf (&buf, &bufsize, fmtwd + 1 + p - buf, recsize, &p);
     switch (*s)
     {
     case 'a': case 'A':
@@ -991,7 +986,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     n = MAXNUMSIZE;
     if (fmtwd > n)
       n = fmtwd;
-    adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p, "format5");
+    adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p);
     switch (flag)
     {
     case '?':  sprintf (p, "%s", fmt);  /* unknown, so dump it too */
@@ -999,7 +994,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
       n = strlen (t);
       if (fmtwd > n)
         n = fmtwd;
-      adjbuf (&buf, &bufsize, 1 + strlen (p) + n + p - buf, recsize, &p, "format6");
+      adjbuf (&buf, &bufsize, 1 + strlen (p) + n + p - buf, recsize, &p);
       p += strlen (p);
       sprintf (p, "%s", t);
       break;
@@ -1013,7 +1008,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
       n = strlen (t);
       if (fmtwd > n)
         n = fmtwd;
-      if (!adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p, "format7"))
+      if (!adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p))
         FATAL ("huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, t);
       sprintf (p, fmt, t);
       break;
@@ -2022,14 +2017,14 @@ Cell *sub (Node **a, int nnn)
   if (pmatch (pfa, t))
   {
     sptr = t;
-    adjbuf (&buf, &bufsz, 1 + patbeg - sptr, recsize, 0, "sub");
+    adjbuf (&buf, &bufsz, 1 + patbeg - sptr, recsize, 0);
     pb = buf;
     while (sptr < patbeg)
       *pb++ = *sptr++;
     sptr = getsval (y);
     while (*sptr != 0)
     {
-      adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb, "sub");
+      adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb);
       if (*sptr == '\\')
       {
         backsub (&pb, &sptr);
@@ -2037,7 +2032,7 @@ Cell *sub (Node **a, int nnn)
       else if (*sptr == '&')
       {
         sptr++;
-        adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb, "sub");
+        adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb);
         for (q = patbeg; q < patbeg + patlen; )
           *pb++ = *q++;
       }
@@ -2050,7 +2045,7 @@ Cell *sub (Node **a, int nnn)
     sptr = patbeg + patlen;
     if ((patlen == 0 && *patbeg) || (patlen && *(sptr - 1)))
     {
-      adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb, "sub");
+      adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb);
       while ((*pb++ = *sptr++) != 0)
         ;
     }
@@ -2106,7 +2101,7 @@ Cell *gsub (Node **a, int nnn)
           sptr = rptr;
           while (*sptr != 0)
           {
-            adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb, "gsub");
+            adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb);
             if (*sptr == '\\')
             {
               backsub (&pb, &sptr);
@@ -2114,7 +2109,7 @@ Cell *gsub (Node **a, int nnn)
             else if (*sptr == '&')
             {
               sptr++;
-              adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb, "gsub");
+              adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb);
               for (q = patbeg; q < patbeg + patlen; )
                 *pb++ = *q++;
             }
@@ -2124,7 +2119,7 @@ Cell *gsub (Node **a, int nnn)
         }
         if (*t == 0)  /* at end */
           goto done;
-        adjbuf (&buf, &bufsz, 2 + pb - buf, recsize, &pb, "gsub");
+        adjbuf (&buf, &bufsz, 2 + pb - buf, recsize, &pb);
         *pb++ = *t++;
         if (pb > buf + bufsz)  /* BUG: not sure of this test */
           FATAL ("gsub result0 %.30s too big; can't happen", buf);
@@ -2134,13 +2129,13 @@ Cell *gsub (Node **a, int nnn)
       {  /* matched nonempty string */
         num++;
         sptr = t;
-        adjbuf (&buf, &bufsz, 1 + (patbeg - sptr) + pb - buf, recsize, &pb, "gsub");
+        adjbuf (&buf, &bufsz, 1 + (patbeg - sptr) + pb - buf, recsize, &pb);
         while (sptr < patbeg)
           *pb++ = *sptr++;
         sptr = rptr;
         while (*sptr != 0)
         {
-          adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb, "gsub");
+          adjbuf (&buf, &bufsz, 5 + pb - buf, recsize, &pb);
           if (*sptr == '\\')
           {
             backsub (&pb, &sptr);
@@ -2148,7 +2143,7 @@ Cell *gsub (Node **a, int nnn)
           else if (*sptr == '&')
           {
             sptr++;
-            adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb, "gsub");
+            adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, recsize, &pb);
             for (q = patbeg; q < patbeg + patlen; )
               *pb++ = *q++;
           }
@@ -2164,7 +2159,7 @@ Cell *gsub (Node **a, int nnn)
       }
     } while (pmatch (pfa, t));
     sptr = t;
-    adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb, "gsub");
+    adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb);
     while ((*pb++ = *sptr++) != 0)
       ;
   done:  if (pb < buf + bufsz)

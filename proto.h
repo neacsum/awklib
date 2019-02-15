@@ -102,7 +102,7 @@ double errcheck (double, const char *);
 int  isclvar (const char *);
 int  is_number (const char *);
 
-int  adjbuf (char **pb, int *sz, int min, int q, char **pbp, const char *what);
+int  adjbuf (char **pb, int *sz, int min, int q, char **pbp);
 void  run (Node *);
 
 Cell* program (Node **, int);
