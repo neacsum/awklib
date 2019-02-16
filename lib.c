@@ -238,7 +238,11 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
     if (**RS == sep || c == EOF)
       break;
 
-    //sep is '\n' and c == '\n'
+    /*
+      **RS != sep and sep is '\n' and c == '\n'
+      This is the case where RS = 0 and records are separated by two
+      consecutive \n
+    */
     if ((c = getc (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
     if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr))
@@ -246,8 +250,11 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
     *rr++ = '\n';
     *rr++ = c;
   }
+#if 0
+  //Not needed; buffer has been adjusted inside the loop
   if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
     FATAL ("input record `%.30s...' too long", buf);
+#endif
   *rr = 0;
   dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
   *pbuf = buf;

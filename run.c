@@ -38,9 +38,6 @@ THIS SOFTWARE.
 #include "awk.h"
 #include "ytab.h"
 
-#define tempfree(x)  if (istemp(x)) tfree(x); else
-
-
 jmp_buf env;
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
@@ -73,6 +70,23 @@ static void   tfree (Cell *);
 static int    format (char **, int *, const char *, Node *);
 static double ipow (double, int);
 static void   closeall (void);
+
+// One-liners
+inline int isnext (const Cell* c) { return c->csub == JNEXT || c->csub == JNEXTFILE; }
+inline int isret (const Cell* c) { return c->csub == JRET; }
+inline int isbreak (const Cell* c) { return c->csub == JBREAK; }
+inline int iscont (const Cell* c) { return c->csub == JCONT; }
+inline int isexpr (const Node* n) { return n->ntype == NEXPR; }
+inline int isjump (const Cell* c) { return c->ctype == OJUMP; }
+inline int isexit (const Cell* c) { return c->csub == JEXIT; }
+inline int istrue (const Cell *c) { return c->csub == BTRUE; }
+
+inline void tempfree (Cell *x)
+{
+  if (x->csub == CTEMP)
+    tfree (x);
+}
+
 
 
 /* buffer memory management */
@@ -114,6 +128,13 @@ void run (Node *a)
   stdinit ();
   execute (a);
   closeall ();
+}
+
+inline int notlegal (int n)
+{
+  return n <= FIRSTTOKEN
+      || n >= LASTTOKEN
+      || proctab[n - FIRSTTOKEN] == nullproc;
 }
 
 /// Execute a node of the parse tree

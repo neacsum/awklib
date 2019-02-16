@@ -177,26 +177,14 @@ extern Node  *nullnode;
 
 extern  int  pairstack[], paircnt;
 
-#define notlegal(n)  (n <= FIRSTTOKEN || n >= LASTTOKEN || proctab[n-FIRSTTOKEN] == nullproc)
-#define isvalue(n)  ((n)->ntype == NVALUE)
-#define isexpr(n)  ((n)->ntype == NEXPR)
-#define isjump(n)  ((n)->ctype == OJUMP)
-#define isexit(n)  ((n)->csub == JEXIT)
-#define  isbreak(n)  ((n)->csub == JBREAK)
-#define  iscont(n)  ((n)->csub == JCONT)
-#define  isnext(n)  ((n)->csub == JNEXT || (n)->csub == JNEXTFILE)
-#define  isret(n)  ((n)->csub == JRET)
-#define isrec(n)  ((n)->tval & REC)
-#define isfld(n)  ((n)->tval & FLD)
-#define isstr(n)  ((n)->tval & STR)
-#define isnum(n)  ((n)->tval & NUM)
-#define isarr(n)  ((n)->tval & ARR)
-#define isfcn(n)  ((n)->tval & FCN)
-#define istrue(n)  ((n)->csub == BTRUE)
-#define istemp(n)  ((n)->csub == CTEMP)
-#define  isargument(n)  ((n)->nobj == ARG)
-/* #define freeable(p)  (!((p)->tval & DONTFREE)) */
-#define freeable(p)  ( ((p)->tval & (STR|DONTFREE)) == STR )
+inline int isvalue (const Node* n) { return n->ntype == NVALUE; }
+inline int isrec (const Cell* c) { return (c->tval & REC) != 0; }
+inline int isfld (const Cell *c) {return (c->tval & FLD) != 0;}
+inline int isstr (const Cell *c) { return (c->tval & STR) != 0; }
+inline int isnum (const Cell* c) { return (c->tval & NUM) != 0; }
+inline int isarr (const Cell *c) { return (c->tval & ARR) != 0; }
+inline int isfcn (const Cell *c) { return (c->tval & FCN) != 0; }
+inline int freeable (const Cell *p) { return (p->tval & (STR | DONTFREE)) == STR; }
 
 /* structures used by regular expression matching machinery, mostly b.c: */
 
