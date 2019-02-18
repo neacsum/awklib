@@ -31,6 +31,7 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 #include "ytab.h"
+#include "awkerr.h"
 
 #define  HAT  (NCHARS+2)  /* matches ^ in regular expr */
                           /* NCHARS is 2**n */
@@ -236,7 +237,7 @@ void penter (Node *p)
     break;
 
   default:  /* can't happen */
-    FATAL ("can't happen: unknown type %d in penter", type (p));
+    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in penter", type (p));
     break;
   }
 }
@@ -263,7 +264,7 @@ void freetr (Node *p)  /* free parse tree */
     break;
 
   default:  /* can't happen */
-    FATAL ("can't happen: unknown type %d in freetr", type (p));
+    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in freetr", type (p));
     break;
   }
 }
@@ -343,7 +344,7 @@ char* cclenter (const char *argp)
 
   op = p;
   if (buf == 0 && (buf = (uschar *)malloc (bufsz)) == NULL)
-    FATAL ("out of space for character class [%.10s...] 1", p);
+    FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 1", p);
   bp = buf;
   for (i = 0; (c = *p++) != 0; )
   {
@@ -366,7 +367,7 @@ char* cclenter (const char *argp)
         while (c < c2)
         {
           if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
-            FATAL ("out of space for character class [%.10s...] 2", p);
+            FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 2", p);
           *bp++ = ++c;
           i++;
         }
@@ -374,7 +375,7 @@ char* cclenter (const char *argp)
       }
     }
     if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
-      FATAL ("out of space for character class [%.10s...] 3", p);
+      FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 3", p);
     *bp++ = c;
     i++;
   }
@@ -386,7 +387,7 @@ char* cclenter (const char *argp)
 
 void overflo (const char *s)
 {
-  FATAL ("regular expression too big: %.30s...", s);
+  FATAL (AWK_ERR_NOMEM, "regular expression too big: %.30s...", s);
 }
 
 /// Enter follow set of each leaf of vertex v into lfollow[leaf]
@@ -433,7 +434,7 @@ void cfoll (fa *f, Node *v)
     break;
 
   default:  /* can't happen */
-    FATAL ("can't happen: unknown type %d in cfoll", type (v));
+    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in cfoll", type (v));
   }
 }
 
@@ -490,7 +491,7 @@ int first (Node *p)
     if (first (left (p)) == 0 || b == 0) return(0);
     return 1;
   }
-  FATAL ("can't happen: unknown type %d in first", type (p));  /* can't happen */
+  FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in first", type (p));  /* can't happen */
   return -1;
 }
 
@@ -708,7 +709,7 @@ Node *reparse (const char *p)
   }
   np = regexp ();
   if (rtok != '\0')
-    FATAL ("syntax error in regular expression %s at %s", lastre, prestr);
+    FATAL (AWK_ERR_SYNTAX, "syntax error in regular expression %s at %s", lastre, prestr);
   return np;
 }
 
@@ -773,9 +774,9 @@ Node *primary (void)
       return unary (np);
     }
     else
-      FATAL ("syntax error in regular expression %s at %s", lastre, prestr);
+      FATAL (AWK_ERR_SYNTAX, "syntax error in regular expression %s at %s", lastre, prestr);
   default:
-    FATAL ("illegal primary in regular expression %s at %s", lastre, prestr);
+    FATAL (AWK_ERR_SYNTAX, "illegal primary in regular expression %s at %s", lastre, prestr);
   }
   return 0;  /*NOTREACHED*/
 }
@@ -907,7 +908,7 @@ int relex (void)
     return CHAR;
   case '[':
     if (buf == 0 && (buf = (uschar *)malloc (bufsz)) == NULL)
-      FATAL ("out of space in reg expr %.10s..", lastre);
+      FATAL (AWK_ERR_NOMEM, "out of space in reg expr %.10s..", lastre);
     bp = buf;
     if (*prestr == '^')
     {
@@ -918,14 +919,14 @@ int relex (void)
       cflag = 0;
     n = 2 * strlen ((const char *)prestr) + 1;
     if (!adjbuf ((char **)&buf, &bufsz, n, n, (char **)&bp))
-      FATAL ("out of space for reg expr %.10s...", lastre);
+      FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", lastre);
     for (; ; )
     {
       if ((c = *prestr++) == '\\')
       {
         *bp++ = '\\';
         if ((c = *prestr++) == '\0')
-          FATAL ("nonterminated character class %.20s...", lastre);
+          FATAL (AWK_ERR_SYNTAX, "nonterminated character class %.20s...", lastre);
         *bp++ = c;
         /* } else if (c == '\n') { */
         /*   FATAL("newline in character class %.20s...", lastre); */
@@ -943,7 +944,7 @@ int relex (void)
           for (i = 0; i < NCHARS; i++)
           {
             if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 1, 100, (char **)&bp))
-              FATAL ("out of space for reg expr %.10s...", lastre);
+              FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", lastre);
             if (cc->cc_func (i))
             {
               *bp++ = i;
@@ -955,7 +956,7 @@ int relex (void)
           *bp++ = c;
       }
       else if (c == '\0')
-        FATAL ("nonterminated character class %.20s", lastre);
+        FATAL (AWK_ERR_SYNTAX, "nonterminated character class %.20s", lastre);
       else if (bp == buf)
       {  /* 1st char is special */
         *bp++ = c;

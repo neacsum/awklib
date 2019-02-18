@@ -26,7 +26,10 @@ THIS SOFTWARE.
 #include <string.h>
 #include <stdlib.h>
 #include "awk.h"
+#include "awkerr.h"
 #include "ytab.h"
+
+Node* alloc_list = 0;
 
 static Node*  nodealloc (int);
 static Node*  node1 (int, Node *);
@@ -41,11 +44,27 @@ Node *nodealloc (int n)
 
   x = (Node *)malloc (sizeof (Node) + (n - 1) * sizeof (Node *));
   if (x == NULL)
-    FATAL ("out of space in nodealloc");
+    FATAL (AWK_ERR_NOMEM, "out of space in nodealloc");
   x->nnext = NULL;
   x->lineno = lineno;
   x->args = n;
+  x->lalloc = alloc_list;
+  alloc_list = x;
   return x;
+}
+
+/// Free all memory allocated for nodes and cells
+void freenodes (void)
+{
+  Node *temp = alloc_list;
+  while (temp)
+  {
+    alloc_list = temp->lalloc;
+    if (temp->ntype == NVALUE)
+      freecell ((Cell*)temp->narg[0]);
+    free (temp);
+    temp = alloc_list;
+  }
 }
 
 /// Convert node to a statement node (presumably from an expression node)
@@ -214,7 +233,7 @@ Node *makearr (Node *p)
     else if (!isarr (cp))
     {
       xfree (cp->sval);
-      cp->sval = (char *)makesymtab (NSYMTAB);
+      cp->sval = (char *)makearray (NSYMTAB);
       cp->tval = ARR;
     }
   }

@@ -30,6 +30,7 @@ THIS SOFTWARE.
 #include <stdarg.h>
 #include "awk.h"
 #include "ytab.h"
+#include "awkerr.h"
 
 FILE*   infile = NULL;
 char*   file = "";
@@ -64,7 +65,7 @@ void recinit (unsigned int n)
    || (fields = (char *)malloc (n + 1)) == NULL
    || (fldtab = (Cell **)malloc ((nfields + 1) * sizeof (Cell *))) == NULL
    || (fldtab[0] = (Cell *)malloc (sizeof (Cell))) == NULL)
-    FATAL ("out of space for $0 and fields");
+    FATAL (AWK_ERR_NOMEM, "out of space for $0 and fields");
   *fldtab[0] = dollar0;
   fldtab[0]->sval = record;
   fldtab[0]->nval = tostring ("0");
@@ -81,7 +82,7 @@ void makefields (int n1, int n2)
   {
     fldtab[i] = (Cell *)malloc (sizeof (struct Cell));
     if (fldtab[i] == NULL)
-      FATAL ("out of space in makefields %d", i);
+      FATAL (AWK_ERR_NOMEM, "out of space in makefields %d", i);
     *fldtab[i] = dollar1;
     sprintf (temp, "%d", i);
     fldtab[i]->nval = tostring (temp);
@@ -162,7 +163,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
       if (*file == '-' && *(file + 1) == '\0')
         infile = stdin;
       else if ((infile = fopen (file, "r")) == NULL)
-        FATAL ("can't open file %s", file);
+        FATAL (AWK_ERR_INFILE, "can't open file %s", file);
       setfval (fnrloc, 0.0);
     }
     c = readrec (&buf, &bufsize, infile);
@@ -215,7 +216,7 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
   int bufsize = *pbufsize;
 
   if (strlen (*FS) >= sizeof (inputFS))
-    FATAL ("field separator %.10s... is too long", *FS);
+    FATAL (AWK_ERR_LIMIT, "field separator %.10s... is too long", *FS);
   /*fflush(stdout); avoids some buffering problem but makes it 25% slower*/
   strcpy (inputFS, *FS);  /* for subsequent field splitting */
   if ((sep = **RS) == 0)
@@ -232,7 +233,7 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
     {
       if (rr - buf + 1 > bufsize)
         if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
-          FATAL ("input record `%.30s...' too long", buf);
+          FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
       *rr++ = c;
     }
     if (**RS == sep || c == EOF)
@@ -246,7 +247,7 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
     if ((c = getc (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
     if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr))
-      FATAL ("input record `%.30s...' too long", buf);
+      FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
     *rr++ = '\n';
     *rr++ = c;
   }
@@ -284,15 +285,15 @@ char *getargv (int n)
 
   Assumes input string has correct format.
 */
-void setclvar (char *s)
+void setclvar (const char *s)
 {
-  char *p;
+  const char *p;
   Cell *q;
 
   for (p = s; *p != '='; p++)
     ;
-  *p++ = 0;
-  p = qstring (p, '\0');
+  p = qstring (p+1, '\0');
+  s = qstring (s, '=');
   q = setsymtab (s, p, 0.0, STR, symtab);
   setsval (q, p);
   if (is_number (q->sval))
@@ -323,7 +324,7 @@ void fldbld (void)
   {
     xfree (fields);
     if ((fields = (char *)malloc (n + 2)) == NULL) /* possibly 2 final \0s */
-      FATAL ("out of space for fields in fldbld %d", n);
+      FATAL (AWK_ERR_NOMEM, "out of space for fields in fldbld %d", n);
     fieldssize = n;
   }
   fr = fields;
@@ -404,7 +405,7 @@ void fldbld (void)
     *fr = 0;
   }
   if (i > nfields)
-    FATAL ("record `%.30s...' has too many fields; can't happen", r);
+    FATAL (AWK_ERR_LIMIT, "record `%.30s...' has too many fields; can't happen", r);
   cleanfld (i + 1, lastfld);  /* clean out junk from previous record */
   lastfld = i;
   donefld = 1;
@@ -476,7 +477,7 @@ void setlastfld (int n)
 Cell *fieldadr (int n)
 {
   if (n < 0)
-    FATAL ("trying to access out of range field %d", n);
+    FATAL (AWK_ERR_ARG, "trying to access out of range field %d", n);
   if (n > nfields)  /* fields after NF are empty */
     growfldtab (n);  /* but does not increase NF */
   return(fldtab[n]);
@@ -496,7 +497,7 @@ void growfldtab (int n)
   else          /* overflow sizeof int */
     xfree (fldtab);  /* make it null */
   if (fldtab == NULL)
-    FATAL ("out of space creating %d fields", nf);
+    FATAL (AWK_ERR_NOMEM, "out of space creating %d fields", nf);
   makefields (nfields + 1, nf);
   nfields = nf;
 }
@@ -515,7 +516,7 @@ int refldbld (const char *rec, const char *fs)
   {
     xfree (fields);
     if ((fields = (char *)malloc (n + 1)) == NULL)
-      FATAL ("out of space for fields in refldbld %d", n);
+      FATAL (AWK_ERR_NOMEM, "out of space for fields in refldbld %d", n);
     fieldssize = n;
   }
   fr = fields;
@@ -567,19 +568,19 @@ void recbld (void)
   {
     p = getsval (fldtab[i]);
     if (!adjbuf (&record, &recsize, 1 + strlen (p) + r - record, recsize, &r))
-      FATAL ("created $0 `%.30s...' too long", record);
+      FATAL (AWK_ERR_NOMEM, "created $0 `%.30s...' too long", record);
     while ((*r = *p++) != 0)
       r++;
     if (i < *NF)
     {
       if (!adjbuf (&record, &recsize, 2 + strlen (*OFS) + r - record, recsize, &r))
-        FATAL ("created $0 `%.30s...' too long", record);
+        FATAL (AWK_ERR_NOMEM, "created $0 `%.30s...' too long", record);
       for (p = *OFS; (*r = *p++) != 0; )
         r++;
     }
   }
   if (!adjbuf (&record, &recsize, 2 + r - record, recsize, &r))
-    FATAL ("built giant record `%.30s...'", record);
+    FATAL (AWK_ERR_NOMEM, "built giant record `%.30s...'", record);
   *r = '\0';
   dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
 
@@ -600,50 +601,9 @@ void yyerror (const char *s)
   SYNTAX ("%s", s);
 }
 
-void SYNTAX (const char *fmt, ...)
-{
-  extern char *cmdname, *curfname;
-  static int been_here = 0;
-  va_list varg;
-
-  if (been_here++ > 2)
-    return;
-  fprintf (stderr, "%s: ", cmdname);
-  va_start (varg, fmt);
-  vfprintf (stderr, fmt, varg);
-  va_end (varg);
-  fprintf (stderr, " at source line %d", lineno);
-  if (curfname != NULL)
-    fprintf (stderr, " in function %s", curfname);
-  if (compile_time == 1 && cursource () != NULL)
-    fprintf (stderr, " source file %s", cursource ());
-  fprintf (stderr, "\n");
-  errorflag = 2;
-  eprint ();
-}
-
 void fpecatch (int n)
 {
-  FATAL ("floating point exception %d", n);
-}
-
-
-void FATAL (const char *fmt, ...)
-{
-  extern char *cmdname;
-  va_list varg;
-
-  fflush (stdout);
-  fprintf (stderr, "%s: ", cmdname);
-  va_start (varg, fmt);
-  vfprintf (stderr, fmt, varg);
-  va_end (varg);
-  error ();
-#ifndef NDEBUG
-  if (dbg > 1)    /* core dump if serious debugging on */
-    abort ();
-#endif
-  exit (2);
+  FATAL (AWK_ERR_FPE, "floating point exception %d", n);
 }
 
 void WARNING (const char *fmt, ...)

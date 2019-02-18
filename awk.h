@@ -164,9 +164,10 @@ typedef struct Node {
 #define NEXPR   3
   struct  Node *nnext;
   int  lineno;
-  int  nobj;              //token id
-  int  args;              // number of arguments
-  struct  Node *narg[1];  /* variable: actual size set by calling malloc */
+  int  nobj;              ///<token id
+  int  args;              ///< number of arguments
+  struct Node *lalloc;    ///< Linked list of allocated nodes
+  struct  Node *narg[1];  ///< variable: actual size set by calling malloc
 } Node;
 
 #define  NIL  ((Node *) 0)
@@ -216,5 +217,25 @@ typedef struct fa {
   struct  rrow re[1];  /* variable: actual size set by calling malloc */
 } fa;
 
+typedef struct awkstat {
+  int status;           ///< Interpreter status. See below
+#define AWKS_INIT       1   ///< status block initialized
+#define AWKS_COMPILING  2   ///< compilation started
+#define AWKS_COMPILED   3   ///< AWK program compiled
+#define AWKS_FATAL      -1  ///< fatal error occurred
+  int err;              ///< Last error or warning
+  Array *symtab;
+  Node *prog_root;
+  int argc;
+  char **argv;
+  Array *envir;
+  Awkfloat srand_seed;
+  char *lexprog;
+  int nprog;
+  int curprog;
+  char **progs;
+}awkstat;
+
+extern awkstat *interp;
 
 #include "proto.h"

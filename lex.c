@@ -28,6 +28,7 @@ THIS SOFTWARE.
 #include <ctype.h>
 #include "awk.h"
 #include "ytab.h"
+#include "awkerr.h"
 
 extern YYSTYPE  yylval;
 extern int  infunc;
@@ -129,7 +130,7 @@ int gettok (char **pbuf, int *psz)
     {
       if (bp - buf >= sz)
         if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
-          FATAL ("out of space for name %.10s...", buf);
+          FATAL (AWK_ERR_NOMEM, "out of space for name %.10s...", buf);
       if (isalnum (c) || c == '_')
         *bp++ = c;
       else
@@ -150,7 +151,7 @@ int gettok (char **pbuf, int *psz)
     {
       if (bp - buf >= sz)
         if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
-          FATAL ("out of space for number %.10s...", buf);
+          FATAL (AWK_ERR_NOMEM, "out of space for number %.10s...", buf);
       if (isdigit (c) || c == 'e' || c == 'E'
         || c == '.' || c == '+' || c == '-')
         *bp++ = c;
@@ -194,7 +195,7 @@ int yylex (void)
   static int bufsize = 5; /* BUG: setting this small causes core dump! */
 
   if (buf == 0 && (buf = (char *)malloc (bufsize)) == NULL)
-    FATAL ("out of space in yylex");
+    FATAL (AWK_ERR_NOMEM, "out of space in yylex");
   if (sc)
   {
     sc = 0;
@@ -453,20 +454,17 @@ int string (void)
   static int bufsz = 500;
 
   if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of space for strings");
+    FATAL (AWK_ERR_NOMEM, "out of space for strings");
   for (bp = buf; (c = input ()) != '"'; )
   {
     if (!adjbuf (&buf, &bufsz, bp - buf + 2, 500, &bp))
-      FATAL ("out of space for string %.10s...", buf);
+      FATAL (AWK_ERR_NOMEM, "out of space for string %.10s...", buf);
     switch (c)
     {
     case '\n':
     case '\r':
     case 0:
       SYNTAX ("non-terminated string %.10s...", buf);
-      lineno++;
-      if (c == 0)  /* hopeless */
-        FATAL ("giving up");
       break;
 
     case '\\':
@@ -618,16 +616,15 @@ int regexpr (void)
   char *bp;
 
   if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of space for rex expr");
+    FATAL (AWK_ERR_NOMEM, "out of space for reg expr");
   bp = buf;
   for (; (c = input ()) != '/' && c != 0; )
   {
     if (!adjbuf (&buf, &bufsz, bp - buf + 3, 500, &bp))
-      FATAL ("out of space for reg expr %.10s...", buf);
+      FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", buf);
     if (c == '\n')
     {
       SYNTAX ("newline in regular expression %.10s...", buf);
-      unput ('\n');
       break;
     }
     else if (c == '\\')
@@ -684,7 +681,7 @@ void unput (int c)
   if (c == '\n')
     lineno--;
   if (yysptr >= yysbuf + sizeof (yysbuf))
-    FATAL ("pushed back too much: %.20s...", yysbuf);
+    FATAL (AWK_ERR_LIMIT, "pushed back too much: %.20s...", yysbuf);
   *yysptr++ = c;
   if (--ep < ebuf)
     ep = ebuf + sizeof (ebuf) - 1;

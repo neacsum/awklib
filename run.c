@@ -37,6 +37,7 @@ THIS SOFTWARE.
 
 #include "awk.h"
 #include "ytab.h"
+#include "awkerr.h"
 
 jmp_buf env;
 extern  int  pairstack[];
@@ -161,7 +162,7 @@ Cell *execute (Node *u)
       return x;
     }
     if (notlegal (a->nobj))  /* probably a Cell* but too risky to print */
-      FATAL ("illegal statement");
+      FATAL (AWK_ERR_SYNTAX, "illegal statement");
     proc = proctab[a->nobj - FIRSTTOKEN];
     x = (*proc)(a->narg, a->nobj);
     if (isfld (x) && !donefld)
@@ -191,7 +192,7 @@ Cell *program (Node **a, int n)
     if (isexit (x))
       return(True);
     if (isjump (x))
-      FATAL ("illegal break, continue, next or nextfile from BEGIN");
+      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
     tempfree (x);
   }
   if (a[1] || a[2])
@@ -211,7 +212,7 @@ ex:
   {    /* END */
     x = execute (a[2]);
     if (isbreak (x) || isnext (x) || iscont (x))
-      FATAL ("illegal break, continue, next or nextfile from END");
+      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
     tempfree (x);
   }
 ex1:
@@ -245,12 +246,12 @@ Cell *call (Node **a, int n)
   fcn = execute (a[0]);  /* the function itself */
   s = fcn->nval;
   if (!isfcn (fcn))
-    FATAL ("calling undefined function %s", s);
+    FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", s);
   if (frame == NULL)
   {
     fp = frame = (struct Frame *) calloc (nframe += 100, sizeof (struct Frame));
     if (frame == NULL)
-      FATAL ("out of space for stack frames calling %s", s);
+      FATAL (AWK_ERR_NOMEM, "out of space for stack frames calling %s", s);
   }
   for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
     ncall++;
@@ -260,7 +261,7 @@ Cell *call (Node **a, int n)
     WARNING ("function %s called with %d args, uses only %d",
       s, ncall, ndef);
   if (ncall + ndef > NARGS)
-    FATAL ("function %s has %d arguments, limit %d", s, ncall + ndef, NARGS);
+    FATAL (AWK_ERR_LIMIT, "function %s has %d arguments, limit %d", s, ncall + ndef, NARGS);
   for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
   {  /* get call args */
     dprintf ("evaluate args[%d], fp=%d:\n", i, (int)(fp - frame));
@@ -269,7 +270,7 @@ Cell *call (Node **a, int n)
     dprintf ("args[%d]: %s %f <%s>, t=%o\n",
       i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval);
     if (isfcn (y))
-      FATAL ("can't use function %s as argument in %s", y->nval, s);
+      FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, s);
     if (isarr (y))
       args[i] = y;  /* arrays by ref */
     else
@@ -288,7 +289,7 @@ Cell *call (Node **a, int n)
     frame = (struct Frame *)
       realloc ((char *)frame, (nframe += 100) * sizeof (struct Frame));
     if (frame == NULL)
-      FATAL ("out of space for stack frames in %s", s);
+      FATAL (AWK_ERR_NOMEM, "out of space for stack frames in %s", s);
     fp = frame + dfp;
   }
   fp->fcncell = fcn;
@@ -309,7 +310,7 @@ Cell *call (Node **a, int n)
       {
         if (i >= ncall)
         {
-          freesymtab (t);
+          freecell (t);
           t->csub = CTEMP;
           tempfree (t);
         }
@@ -375,7 +376,7 @@ Cell *arg (Node **a, int n)
   n = ptoi (a[0]);  /* argument number, counting from 0 */
   dprintf ("arg(%d), fp->nargs=%d\n", n, fp->nargs);
   if (n + 1 > fp->nargs)
-    FATAL ("argument #%d of function %s was not supplied",
+    FATAL (AWK_ERR_RUNTIME, "argument #%d of function %s was not supplied",
       n + 1, fp->fcncell->nval);
   return fp->args[n];
 }
@@ -411,7 +412,7 @@ Cell *jump (Node **a, int n)
       else if (y->tval & NUM)
         setfval (fp->retval, getfval (y));
       else    /* can't happen */
-        FATAL ("bad type variable %d", y->tval);
+        FATAL (AWK_ERR_RUNTIME, "bad type variable %d", y->tval);
       tempfree (y);
     }
     return jret;
@@ -430,7 +431,7 @@ Cell *jump (Node **a, int n)
     return jcont;
 
   default:  /* can't happen */
-    FATAL ("illegal jump type %d", n);
+    FATAL (AWK_ERR_OTHER, "illegal jump type %d", n);
   }
   return 0;  /* not reached */
 }
@@ -447,7 +448,7 @@ Cell *awkgetline (Node **a, int n)
   int mode;
 
   if ((buf = (char *)malloc (bufsize)) == NULL)
-    FATAL ("out of memory in getline");
+    FATAL (AWK_ERR_NOMEM, "out of memory in getline");
 
   fflush (stdout);  /* in case someone is waiting for a prompt */
   r = gettemp ();
@@ -519,7 +520,7 @@ Cell *array (Node **a, int n)
   int nsub = strlen (*SUBSEP);
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of memory in array");
+    FATAL (AWK_ERR_NOMEM, "out of memory in array");
 
   x = execute (a[0]);  /* Cell* for symbol table */
   buf[0] = 0;
@@ -528,7 +529,7 @@ Cell *array (Node **a, int n)
     y = execute (np);  /* subscript */
     s = getsval (y);
     if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
-      FATAL ("out of memory for %s[%s...]", x->nval, buf);
+      FATAL (AWK_ERR_NOMEM, "out of memory for %s[%s...]", x->nval, buf);
     strcat (buf, s);
     if (np->nnext)
       strcat (buf, *SUBSEP);
@@ -541,7 +542,7 @@ Cell *array (Node **a, int n)
       xfree (x->sval);
     x->tval &= ~(STR | NUM | DONTFREE);
     x->tval |= ARR;
-    x->sval = (char *)makesymtab (NSYMTAB);
+    x->sval = (char *)makearray (NSYMTAB);
   }
   z = setsymtab (buf, "", 0.0, STR | NUM, (Array *)x->sval);
   z->ctype = OCELL;
@@ -565,24 +566,24 @@ Cell *awkdelete (Node **a, int n)
     return True;
   if (a[1] == 0)
   {  /* delete the elements, not the table */
-    freesymtab (x);
+    freearray ((Array*)x->sval);
     x->tval &= ~STR;
     x->tval |= ARR;
-    x->sval = (char *)makesymtab (NSYMTAB);
+    x->sval = (char *)makearray (NSYMTAB);
   }
   else
   {
     int bufsz = recsize;
     char *buf;
     if ((buf = (char *)malloc (bufsz)) == NULL)
-      FATAL ("out of memory in adelete");
+      FATAL (AWK_ERR_NOMEM, "out of memory in awkdelete");
     buf[0] = 0;
     for (np = a[1]; np; np = np->nnext)
     {
       y = execute (np);  /* subscript */
       s = getsval (y);
       if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
-        FATAL ("out of memory deleting %s[%s...]", x->nval, buf);
+        FATAL (AWK_ERR_NOMEM, "out of memory deleting %s[%s...]", x->nval, buf);
       strcat (buf, s);
       if (np->nnext)
         strcat (buf, *SUBSEP);
@@ -614,11 +615,11 @@ Cell *intest (Node **a, int n)
       xfree (ap->sval);
     ap->tval &= ~(STR | NUM | DONTFREE);
     ap->tval |= ARR;
-    ap->sval = (char *)makesymtab (NSYMTAB);
+    ap->sval = (char *)makearray (NSYMTAB);
   }
   if ((buf = (char *)malloc (bufsz)) == NULL)
   {
-    FATAL ("out of memory in intest");
+    FATAL (AWK_ERR_NOMEM, "out of memory in intest");
   }
   buf[0] = 0;
   for (p = a[0]; p; p = p->nnext)
@@ -626,7 +627,7 @@ Cell *intest (Node **a, int n)
     x = execute (p);  /* expr */
     s = getsval (x);
     if (!adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, recsize, 0))
-      FATAL ("out of memory deleting %s[%s...]", x->nval, buf);
+      FATAL (AWK_ERR_NOMEM, "out of memory deleting %s[%s...]", x->nval, buf);
     strcat (buf, s);
     tempfree (x);
     if (p->nnext)
@@ -715,7 +716,7 @@ Cell *boolop (Node **a, int n)
     return i? False : True;
 
   default:  /* can't happen */
-    FATAL ("unknown boolean operator %d", n);
+    FATAL (AWK_ERR_OTHER, "unknown boolean operator %d", n);
   }
   return 0;  /*NOTREACHED*/
 }
@@ -750,7 +751,7 @@ Cell *relop (Node **a, int n)
   case GT:  return (i > 0)? True : False;
 
   default:  /* can't happen */
-    FATAL ("unknown relational operator %d", n);
+    FATAL (AWK_ERR_OTHER, "unknown relational operator %d", n);
   }
   return 0;  /*NOTREACHED*/
 }
@@ -764,7 +765,7 @@ void tfree (Cell *a)
     xfree (a->sval);
   }
   if (a == tmps)
-    FATAL ("tempcell list is curdled");
+    FATAL (AWK_ERR_OTHER, "tempcell list is curdled");
   a->cnext = tmps;
   tmps = a;
 }
@@ -779,7 +780,7 @@ Cell *gettemp (void)
   {
     tmps = (Cell *)calloc (100, sizeof (Cell));
     if (!tmps)
-      FATAL ("out of space for temporaries");
+      FATAL (AWK_ERR_NOMEM, "out of space for temporaries");
     for (i = 1; i < 100; i++)
       tmps[i - 1].cnext = &tmps[i];
     tmps[i - 1].cnext = 0;
@@ -802,10 +803,10 @@ Cell *indirect (Node **a, int n)
   x = execute (a[0]);
   val = getfval (x);  /* freebsd: defend against super large field numbers */
   if ((Awkfloat)INT_MAX < val)
-    FATAL ("trying to access out of range field %s", x->nval);
+    FATAL (AWK_ERR_LIMIT, "trying to access out of range field %s", x->nval);
   m = (int)val;
   if (m == 0 && !is_number (s = getsval (x)))  /* suspicion! */
-    FATAL ("illegal field $(%s), name \"%s\"", s, x->nval);
+    FATAL (AWK_ERR_ARG, "illegal field $(%s), name \"%s\"", s, x->nval);
   /* BUG: can x->nval ever be null??? */
   tempfree (x);
   x = fieldadr (m);
@@ -924,7 +925,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
   os = s;
   p = buf;
   if ((fmt = (char *)malloc (fmtsz)) == NULL)
-    FATAL ("out of memory in format()");
+    FATAL (AWK_ERR_NOMEM, "out of memory in format()");
   while (*s)
   {
     adjbuf (&buf, &bufsize, MAXNUMSIZE + 1 + p - buf, recsize, &p);
@@ -947,11 +948,11 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     for (t = fmt; (*t++ = *s) != '\0'; s++)
     {
       if (!adjbuf (&fmt, &fmtsz, MAXNUMSIZE + 1 + t - fmt, recsize, &t))
-        FATAL ("format item %.30s... ran format() out of memory", os);
+        FATAL (AWK_ERR_NOMEM, "format item %.30s... ran format() out of memory", os);
       if (isalpha ((uschar)*s) && *s != 'l' && *s != 'h' && *s != 'L')
         break;  /* the ansi panoply */
       if (*s == '$')
-        FATAL ("'$' not permitted in awk formats");
+        FATAL (AWK_ERR_ARG, "'$' not permitted in awk formats");
       if (*s == '*')
       {
         x = execute (a);
@@ -1001,7 +1002,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
       break;
     }
     if (a == NULL)
-      FATAL ("not enough args in printf(%s)", os);
+      FATAL (AWK_ERR_ARG, "not enough args in printf(%s)", os);
     x = execute (a);
     a = a->nnext;
     n = MAXNUMSIZE;
@@ -1030,7 +1031,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
       if (fmtwd > n)
         n = fmtwd;
       if (!adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p))
-        FATAL ("huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, t);
+        FATAL (AWK_ERR_NOMEM, "huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, t);
       sprintf (p, fmt, t);
       break;
     case 'c':
@@ -1048,7 +1049,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
         sprintf (p, fmt, getsval (x)[0]);
       break;
     default:
-      FATAL ("can't happen: bad conversion %c in format()", flag);
+      FATAL (AWK_ERR_OTHER, "can't happen: bad conversion %c in format()", flag);
     }
     tempfree (x);
     p += strlen (p);
@@ -1072,11 +1073,11 @@ Cell *awksprintf (Node **a, int n)
   int bufsz = 3 * recsize;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of memory in awksprintf");
+    FATAL (AWK_ERR_NOMEM, "out of memory in awksprintf");
   y = a[0]->nnext;
   x = execute (a[0]);
   if (format (&buf, &bufsz, getsval (x), y) == -1)
-    FATAL ("sprintf string %.30s... too long.  can't happen.", buf);
+    FATAL (AWK_ERR_NOMEM, "sprintf string %.30s... too long.  can't happen.", buf);
   tempfree (x);
   x = gettemp ();
   x->sval = buf;
@@ -1097,18 +1098,18 @@ Cell *awkprintf (Node **a, int n)
   int bufsz = 3 * recsize;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of memory in awkprintf");
+    FATAL (AWK_ERR_NOMEM, "out of memory in awkprintf");
   y = a[0]->nnext;
   x = execute (a[0]);
   if ((len = format (&buf, &bufsz, getsval (x), y)) == -1)
-    FATAL ("printf string %.30s... too long.  can't happen.", buf);
+    FATAL (AWK_ERR_NOMEM, "printf string %.30s... too long.  can't happen.", buf);
   tempfree (x);
   if (a[1] == NULL)
   {
     /* fputs(buf, stdout); */
     fwrite (buf, len, 1, stdout);
     if (ferror (stdout))
-      FATAL ("write error on stdout");
+      FATAL (AWK_ERR_OUTFILE, "write error on stdout");
   }
   else
   {
@@ -1117,7 +1118,7 @@ Cell *awkprintf (Node **a, int n)
     fwrite (buf, len, 1, fp);
     fflush (fp);
     if (ferror (fp))
-      FATAL ("write error on %s", filename (fp));
+      FATAL (AWK_ERR_OUTFILE, "write error on %s", filename (fp));
   }
   free (buf);
   return True;
@@ -1153,12 +1154,12 @@ Cell *arith (Node **a, int n)
     break;
   case DIVIDE:
     if (j == 0)
-      FATAL ("division by zero");
+      FATAL (AWK_ERR_RUNTIME, "division by zero");
     i /= j;
     break;
   case MOD:
     if (j == 0)
-      FATAL ("division by zero in mod");
+      FATAL (AWK_ERR_RUNTIME, "division by zero in mod");
     modf (i / j, &v);
     i = i - j * v;
     break;
@@ -1174,7 +1175,7 @@ Cell *arith (Node **a, int n)
       i = errcheck (pow (i, j), "pow");
     break;
   default:  /* can't happen */
-    FATAL ("illegal arithmetic operator %d", n);
+    FATAL (AWK_ERR_OTHER, "illegal arithmetic operator %d", n);
   }
   setfval (z, i);
   return z;
@@ -1262,12 +1263,12 @@ Cell *assign (Node **a, int n)
     break;
   case DIVEQ:
     if (yf == 0)
-      FATAL ("division by zero in /=");
+      FATAL (AWK_ERR_RUNTIME, "division by zero in /=");
     xf /= yf;
     break;
   case MODEQ:
     if (yf == 0)
-      FATAL ("division by zero in %%=");
+      FATAL (AWK_ERR_RUNTIME, "division by zero in %%=");
     modf (xf / yf, &v);
     xf = xf - yf * v;
     break;
@@ -1278,7 +1279,7 @@ Cell *assign (Node **a, int n)
       xf = errcheck (pow (xf, yf), "pow");
     break;
   default:
-    FATAL ("illegal assignment operator %d", n);
+    FATAL (AWK_ERR_OTHER, "illegal assignment operator %d", n);
     break;
   }
   tempfree (y);
@@ -1301,7 +1302,7 @@ Cell *cat (Node **a, int q)
   n2 = strlen (y->sval);
   s = (char *)malloc (n1 + n2 + 1);
   if (s == NULL)
-    FATAL ("out of space concatenating %.15s... and %.15s...",
+    FATAL (AWK_ERR_NOMEM, "out of space concatenating %.15s... and %.15s...",
       x->sval, y->sval);
   strcpy (s, x->sval);
   strcpy (s + n1, y->sval);
@@ -1380,14 +1381,14 @@ Cell *split (Node **a, int nnn)
   else if (arg3type == REGEXPR)
     fs = "(regexpr)";  /* split(str,arr,/regexpr/) */
   else
-    FATAL ("illegal type of split");
+    FATAL (AWK_ERR_ARG, "illegal type of split");
   sep = *fs;
   ap = execute (a[1]);  /* array name */
-  freesymtab (ap);
+  freearray ((Array*)ap->sval);
   dprintf ("split: s=|%s|, a=%s, sep=|%s|\n", s, NN (ap->nval), fs);
   ap->tval &= ~STR;
   ap->tval |= ARR;
-  ap->sval = (char *)makesymtab (NSYMTAB);
+  ap->sval = (char *)makearray (NSYMTAB);
 
   n = 0;
   if (arg3type == REGEXPR && strlen ((char*)((fa*)a[2])->restr) == 0)
@@ -1780,7 +1781,7 @@ Cell *bltin (Node **a, int n)
       u = fflush (fp);
     break;
   default:  /* can't happen */
-    FATAL ("illegal function type %d", t);
+    FATAL (AWK_ERR_OTHER, "illegal function type %d", t);
     break;
   }
   tempfree (x);
@@ -1819,7 +1820,7 @@ Cell *printstat (Node **a, int n)
   if (a[1] != 0)
     fflush (fp);
   if (ferror (fp))
-    FATAL ("write error on %s", filename (fp));
+    FATAL (AWK_ERR_OUTFILE, "write error on %s", filename (fp));
 
   return True;
 }
@@ -1839,8 +1840,6 @@ FILE *redirect (int a, Node *b)
   x = execute (b);
   fname = getsval (x);
   fp = openfile (a, fname);
-  if (fp == NULL)
-    FATAL ("can't open file %s", fname);
   tempfree (x);
   return fp;
 }
@@ -1858,7 +1857,7 @@ void stdinit (void)  /* in case stdin, etc., are not constants */
   nfiles = FOPEN_MAX;
   files = calloc (nfiles, sizeof (*files));
   if (files == NULL)
-    FATAL ("can't allocate file memory for %u files", nfiles);
+    FATAL (AWK_ERR_NOMEM, "can't allocate file memory for %u files", nfiles);
   files[0].fp = stdin;
   files[0].fname = "/dev/stdin";
   files[0].mode = LT;
@@ -1877,7 +1876,7 @@ FILE *openfile (int a, const char *us)
   FILE *fp = 0;
 
   if (*s == '\0')
-    FATAL ("null file name in print or getline");
+    FATAL (AWK_ERR_ARG, "null file name in print or getline");
   for (i = 0; i < nfiles; i++)
   {
     if (files[i].fname && strcmp (s, files[i].fname) == 0)
@@ -1900,7 +1899,7 @@ FILE *openfile (int a, const char *us)
     int nnf = nfiles + FOPEN_MAX;
     nf = realloc (files, nnf * sizeof (*nf));
     if (nf == NULL)
-      FATAL ("cannot grow files for %s and %d files", s, nnf);
+      FATAL (AWK_ERR_NOMEM, "cannot grow files for %s and %d files", s, nnf);
     memset (&nf[nfiles], 0, FOPEN_MAX * sizeof (*nf));
     nfiles = nnf;
     files = nf;
@@ -1908,32 +1907,42 @@ FILE *openfile (int a, const char *us)
   fflush (stdout);  /* force a semblance of order */
   m = a;
   if (a == GT)
+  {
     fp = fopen (s, "w");
+    if (!fp)
+      FATAL (AWK_ERR_OUTFILE, "can't open file %s", s);
+  }
   else if (a == APPEND) 
   {
     fp = fopen (s, "a");
+    if (!fp)
+      FATAL (AWK_ERR_OUTFILE, "can't open file %s", s);
     m = GT;  /* so can mix > and >> */
   }
   else if (a == '|')
   {  /* output pipe */
     fp = popen (s, "w");
+    if (!fp)
+      FATAL (AWK_ERR_PIPE, "can't output pipe %s", s);
   }
   else if (a == LE)
   {  /* input pipe */
     fp = popen (s, "r");
+    if (!fp)
+      FATAL (AWK_ERR_PIPE, "can't open input pipe %s", s);
   }
   else if (a == LT)
   {  /* getline <file */
     fp = strcmp (s, "-") == 0 ? stdin : fopen (s, "r");  /* "-" is stdin */
+    if (!fp)
+      FATAL (AWK_ERR_INFILE, "can't open file %s", s);
   }
   else  /* can't happen */
-    FATAL ("illegal redirection %d", a);
-  if (fp != NULL)
-  {
-    files[i].fname = tostring (s);
-    files[i].fp = fp;
-    files[i].mode = m;
-  }
+    FATAL (AWK_ERR_OTHER, "illegal redirection %d", a);
+
+  files[i].fname = tostring (s);
+  files[i].fp = fp;
+  files[i].mode = m;
   return fp;
 }
 
@@ -2022,7 +2031,7 @@ Cell *sub (Node **a, int nnn)
   int bufsz = recsize;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of memory in sub");
+    FATAL (AWK_ERR_NOMEM, "out of memory in sub");
   x = execute (a[3]);  /* target string */
   t = getsval (x);
   if (a[0] == 0)    /* 0 => a[1] is already-compiled regexpr */
@@ -2062,7 +2071,7 @@ Cell *sub (Node **a, int nnn)
     }
     *pb = '\0';
     if (pb > buf + bufsz)
-      FATAL ("sub result1 %.30s too big; can't happen", buf);
+      FATAL (AWK_ERR_OTHER, "sub result1 %.30s too big; can't happen", buf);
     sptr = patbeg + patlen;
     if ((patlen == 0 && *patbeg) || (patlen && *(sptr - 1)))
     {
@@ -2071,7 +2080,7 @@ Cell *sub (Node **a, int nnn)
         ;
     }
     if (pb > buf + bufsz)
-      FATAL ("sub result2 %.30s too big; can't happen", buf);
+      FATAL (AWK_ERR_OTHER, "sub result2 %.30s too big; can't happen", buf);
     setsval (x, buf);  /* BUG: should be able to avoid copy */
     result = True;;
   }
@@ -2092,7 +2101,7 @@ Cell *gsub (Node **a, int nnn)
   int bufsz = recsize;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
-    FATAL ("out of memory in gsub");
+    FATAL (AWK_ERR_NOMEM, "out of memory in gsub");
   mflag = 0;  /* if mflag == 0, can replace empty string */
   num = 0;
   x = execute (a[3]);  /* target string */
@@ -2143,7 +2152,7 @@ Cell *gsub (Node **a, int nnn)
         adjbuf (&buf, &bufsz, 2 + pb - buf, recsize, &pb);
         *pb++ = *t++;
         if (pb > buf + bufsz)  /* BUG: not sure of this test */
-          FATAL ("gsub result0 %.30s too big; can't happen", buf);
+          FATAL (AWK_ERR_OTHER, "gsub result0 %.30s too big; can't happen", buf);
         mflag = 0;
       }
       else
@@ -2175,7 +2184,7 @@ Cell *gsub (Node **a, int nnn)
         if (patlen == 0 || *t == 0 || *(t - 1) == 0)
           goto done;
         if (pb > buf + bufsz)
-          FATAL ("gsub result1 %.30s too big; can't happen", buf);
+          FATAL (AWK_ERR_OTHER, "gsub result1 %.30s too big; can't happen", buf);
         mflag = 1;
       }
     } while (pmatch (pfa, t));
@@ -2186,7 +2195,7 @@ Cell *gsub (Node **a, int nnn)
   done:  if (pb < buf + bufsz)
     *pb = '\0';
          else if (*(pb - 1) != '\0')
-    FATAL ("gsub result2 %.30s truncated; can't happen", buf);
+    FATAL (AWK_ERR_OTHER, "gsub result2 %.30s truncated; can't happen", buf);
          setsval (x, buf);  /* BUG: should be able to avoid copy + free */
          pfa->initstat = tempstat;
   }

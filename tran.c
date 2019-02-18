@@ -29,6 +29,7 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 #include "ytab.h"
+#include "awkerr.h"
 
 #define  FULLTAB  2 /* rehash when table gets this x full */
 #define  GROWTAB  4 /* grow table by this factor */
@@ -55,7 +56,6 @@ Cell  *nrloc;       /* NR */
 Cell  *nfloc;       /* NF */
 Cell  *fnrloc;      /* FNR */
 Array  *ARGVtab;    /* symbol table containing ARGV[...] */
-Array  *ENVtab;     /* symbol table containing ENVIRON[...] */
 Cell  *rstartloc;   /* RSTART */
 Cell  *rlengthloc;  /* RLENGTH */
 Cell  *symtabloc;   /* SYMTAB */
@@ -120,7 +120,7 @@ void arginit (int ac, char **av)
 
   ARGC = &setsymtab ("ARGC", "", (Awkfloat)ac, NUM, symtab)->fval;
   cp = setsymtab ("ARGV", "", 0.0, ARR, symtab);
-  ARGVtab = makesymtab (NSYMTAB);  /* could be (int) ARGC as well */
+  ARGVtab = makearray (NSYMTAB);  /* could be (int) ARGC as well */
   cp->sval = (char *)ARGVtab;
   for (i = 0; i < ac; i++)
   {
@@ -138,9 +138,10 @@ void envinit (char **envp)
 {
   Cell *cp;
   char *p;
+  Array  *ENVtab;     /* symbol table containing ENVIRON[...] */
 
   cp = setsymtab ("ENVIRON", "", 0.0, ARR, symtab);
-  ENVtab = makesymtab (NSYMTAB);
+  ENVtab = makearray (NSYMTAB);
   cp->sval = (char *)ENVtab;
   for (; *envp; envp++)
   {
@@ -158,7 +159,7 @@ void envinit (char **envp)
 }
 
 /// Make a new symbol table
-Array *makesymtab (int n)
+Array *makearray (int n)
 {
   Array *ap;
   Cell **tp;
@@ -166,45 +167,55 @@ Array *makesymtab (int n)
   ap = (Array *)malloc (sizeof (Array));
   tp = (Cell **)calloc (n, sizeof (Cell *));
   if (ap == NULL || tp == NULL)
-    FATAL ("out of space in makesymtab");
+    FATAL (AWK_ERR_NOMEM, "out of space in makearray");
   ap->nelem = 0;
   ap->size = n;
   ap->tab = tp;
   return ap;
 }
 
-/// Free a symbol table
-void freesymtab (Cell *ap)
+/// Free a symbol table entry
+void freecell (Cell* cp)
+{
+  if (isarr (cp))
+  {
+    freearray ((Array *)cp->sval);
+    cp->sval = 0;
+  }
+  else if (isstr (cp))
+  {
+    xfree (cp->sval);
+  }
+}
+
+/// Free a hash table
+void freearray (Array *ap)
 {
   Cell *cp, *temp;
-  Array *tp;
   int i;
 
-  if (!isarr (ap))
+  if (ap == NULL)
     return;
-  tp = (Array *)ap->sval;
-  if (tp == NULL)
-    return;
-  for (i = 0; i < tp->size; i++)
+  for (i = 0; i < ap->size; i++)
   {
-    for (cp = tp->tab[i]; cp != NULL; cp = temp)
+    for (cp = ap->tab[i]; cp != NULL; cp = temp)
     {
       xfree (cp->nval);
       if (freeable (cp))
         xfree (cp->sval);
       temp = cp->cnext;  /* avoids freeing then using */
       free (cp);
-      tp->nelem--;
+      ap->nelem--;
     }
-    tp->tab[i] = 0;
+    ap->tab[i] = 0;
   }
-  if (tp->nelem != 0)
-    WARNING ("can't happen: inconsistent element count freeing %s", ap->nval);
-  free (tp->tab);
-  free (tp);
+  if (ap->nelem != 0)
+    FATAL (AWK_ERR_OTHER, "inconsistent element count freeing array");
+  free (ap->tab);
+  free (ap);
 }
 
-/// Free elem s from ap (i.e., ap["s"]
+/// Free elem s from ap (i.e., ap["s"])
 void freeelem (Cell *ap, const char *s)
 {
   Array *tp;
@@ -244,7 +255,7 @@ Cell *setsymtab (const char *n, const char *s, Awkfloat f, unsigned t, Array *tp
   }
   p = (Cell *)malloc (sizeof (Cell));
   if (p == NULL)
-    FATAL ("out of space for symbol table at %s", n);
+    FATAL (AWK_ERR_NOMEM, "out of space for symbol table at %s", n);
   p->nval = tostring (n);
   p->sval = s ? tostring (s) : tostring ("");
   p->fval = f;
@@ -351,9 +362,9 @@ Awkfloat setfval (Cell *vp, Awkfloat f)
 void funnyvar (Cell *vp, const char *rw)
 {
   if (isarr (vp))
-    FATAL ("can't %s %s; it's an array name.", rw, vp->nval);
+    FATAL (AWK_ERR_ARG, "can't %s %s; it's an array name.", rw, vp->nval);
   if (vp->tval & FCN)
-    FATAL ("can't %s %s; it's a function.", rw, vp->nval);
+    FATAL (AWK_ERR_ARG, "can't %s %s; it's a function.", rw, vp->nval);
   WARNING ("funny variable %p: n=%s s=\"%s\" f=%g t=%o",
     vp, vp->nval, vp->sval, vp->fval, vp->tval);
 }
@@ -549,7 +560,7 @@ char *tostring (const char *s)
 
   p = (char *)malloc (strlen (s) + 1);
   if (p == NULL)
-    FATAL ("out of space in tostring on %s", s);
+    FATAL (AWK_ERR_NOMEM, "out of space in tostring on %s", s);
   strcpy (p, s);
   return p;
 }
@@ -558,12 +569,18 @@ char *tostring (const char *s)
 char *qstring (const char *is, int delim)
 {
   const char *os = is;
+  const char *pd;
   int c, n;
+
   uschar *s = (uschar *)is;
   uschar *buf, *bp;
 
-  if ((buf = (uschar *)malloc (strlen (is) + 3)) == NULL)
-    FATAL ("out of space in qstring(%s)", s);
+  if (!(pd = strchr (is, delim)))
+    FATAL (AWK_ERR_ARG, "invalid delimiter for qstring");
+
+  n = pd - is;
+  if ((buf = (uschar *)malloc (n + 3)) == NULL)
+    FATAL (AWK_ERR_NOMEM, "out of space in qstring(%s)", s);
   for (bp = buf; (c = *s) != delim; s++)
   {
     if (c == '\n')
