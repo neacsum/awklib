@@ -26,8 +26,8 @@ THIS SOFTWARE.
 #include <string.h>
 #include <stdlib.h>
 #include "awk.h"
-#include "awkerr.h"
 #include "ytab.h"
+#include <awkerr.h>
 
 Node* alloc_list = 0;
 

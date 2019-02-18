@@ -37,7 +37,7 @@ THIS SOFTWARE.
 
 #include "awk.h"
 #include "ytab.h"
-#include "awkerr.h"
+#include <awkerr.h>
 
 jmp_buf env;
 extern  int  pairstack[];
@@ -121,11 +121,11 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
   return 1;
 }
 
+static void stdinit (void);
+
 /// Execution of parse tree starts here
 void run (Node *a)
 {
-  static void stdinit (void);
-
   stdinit ();
   execute (a);
   closeall ();
@@ -1365,7 +1365,8 @@ Cell *split (Node **a, int nnn)
   Cell *x = 0, *y, *ap;
   char *s, *origs;
   int sep;
-  char *t, temp, num[50], *fs = 0;
+  char *t, temp, num[50];
+  const char *fs = 0;
   int n, tempstat, arg3type;
 
   y = execute (a[0]);  /* source string */
@@ -1844,7 +1845,7 @@ FILE *redirect (int a, Node *b)
   return fp;
 }
 
-struct files {
+struct FILE_STRUC {
   FILE  *fp;
   const char  *fname;
   int  mode;  /* '|', 'a', 'w' => LE/LT, GT */
@@ -1855,7 +1856,7 @@ int nfiles;
 void stdinit (void)  /* in case stdin, etc., are not constants */
 {
   nfiles = FOPEN_MAX;
-  files = calloc (nfiles, sizeof (*files));
+  files = (FILE_STRUC*)calloc (nfiles, sizeof (FILE_STRUC));
   if (files == NULL)
     FATAL (AWK_ERR_NOMEM, "can't allocate file memory for %u files", nfiles);
   files[0].fp = stdin;
@@ -1895,9 +1896,9 @@ FILE *openfile (int a, const char *us)
       break;
   if (i >= nfiles)
   {
-    struct files *nf;
+    struct FILE_STRUC *nf;
     int nnf = nfiles + FOPEN_MAX;
-    nf = realloc (files, nnf * sizeof (*nf));
+    nf = (FILE_STRUC*)realloc (files, nnf * sizeof (FILE_STRUC));
     if (nf == NULL)
       FATAL (AWK_ERR_NOMEM, "cannot grow files for %s and %d files", s, nnf);
     memset (&nf[nfiles], 0, FOPEN_MAX * sizeof (*nf));

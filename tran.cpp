@@ -29,7 +29,7 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 #include "ytab.h"
-#include "awkerr.h"
+#include <awkerr.h>
 
 #define  FULLTAB  2 /* rehash when table gets this x full */
 #define  GROWTAB  4 /* grow table by this factor */

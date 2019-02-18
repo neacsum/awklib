@@ -30,7 +30,7 @@ THIS SOFTWARE.
 #include <stdarg.h>
 #include "awk.h"
 #include "ytab.h"
-#include "awkerr.h"
+#include <awkerr.h>
 
 FILE*   infile = NULL;
 char*   file = "";

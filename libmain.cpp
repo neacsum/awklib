@@ -32,8 +32,8 @@ const char  *version = "version " __DATE__;
 #include <signal.h>
 #include "awk.h"
 #include "ytab.h"
-#include "awklib.h"
-#include "awkerr.h"
+#include <awklib.h>
+#include <awkerr.h>
 
 #define  MAX_PFILE  20  /* max number of -f's */
 

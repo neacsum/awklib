@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdio.h>
-
+#pragma comment (lib, "awk")
 #ifdef __cplusplus
 extern "C" {
 #endif

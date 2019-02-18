@@ -15,31 +15,31 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="lib.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="proctab.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="run.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tran.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="b.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="parse.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ytab.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="lex.c">
+    <ClCompile Include="libmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libmain.cpp">
+    <ClCompile Include="lex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="b.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="run.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tran.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,10 +53,10 @@
     <ClInclude Include="proto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="awklib.h">
+    <ClInclude Include="include\awkerr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="awkerr.h">
+    <ClInclude Include="include\awklib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
