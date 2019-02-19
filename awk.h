@@ -214,6 +214,10 @@ typedef struct fa {
   struct  rrow re[1];  /* variable: actual size set by calling malloc */
 } fa;
 
+struct FILE_STRUC;
+typedef int (*inproc)();
+typedef int (*outproc)(const char *buf, size_t len);
+
 typedef struct AWKINTERP {
   int status;           ///< Interpreter status. See below
 #define AWKS_INIT       1   ///< status block initialized
@@ -234,6 +238,9 @@ typedef struct AWKINTERP {
   int nprog;            ///< number of programs
   int curprog;          ///< current program being compiled
   char **progs;         ///< array of program filenames
+  struct FILE_STRUC *files;    ///< opened files
+  inproc inredir;       ///< input redirection function
+  outproc outredir;     ///< output redirection function
 }AWKINTERP;
 
 extern AWKINTERP *interp;

@@ -71,6 +71,8 @@ static void   tfree (Cell *);
 static int    format (char **, int *, const char *, Node *);
 static double ipow (double, int);
 static void   closeall (void);
+static void   stdinit (void);
+
 
 // One-liners
 inline int isnext (const Cell* c) { return c->csub == JNEXT || c->csub == JNEXTFILE; }
@@ -121,14 +123,13 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
   return 1;
 }
 
-static void stdinit (void);
-
 /// Execution of parse tree starts here
 void run (Node *a)
 {
   stdinit ();
   execute (a);
   closeall ();
+  freefields ();
 }
 
 inline int notlegal (int n)
@@ -1106,15 +1107,18 @@ Cell *awkprintf (Node **a, int n)
   tempfree (x);
   if (a[1] == NULL)
   {
-    /* fputs(buf, stdout); */
-    fwrite (buf, len, 1, stdout);
-    if (ferror (stdout))
-      FATAL (AWK_ERR_OUTFILE, "write error on stdout");
+    if (interp->outredir)
+      interp->outredir (buf, len);
+    else
+    {
+      fwrite (buf, len, 1, stdout);
+      if (ferror (stdout))
+        FATAL (AWK_ERR_OUTFILE, "write error on stdout");
+    }
   }
   else
   {
     fp = redirect (ptoi (a[1]), a[2]);
-    /* fputs(buf, fp); */
     fwrite (buf, len, 1, fp);
     fflush (fp);
     if (ferror (fp))
@@ -1124,7 +1128,7 @@ Cell *awkprintf (Node **a, int n)
   return True;
 }
 
-/// Aithmetic oparations   a[0] + a[1], etc.  also -a[0]
+/// Arithmetic operations   a[0] + a[1], etc.  also -a[0]
 Cell *arith (Node **a, int n)
 {
   Awkfloat i, j = 0;
@@ -1811,12 +1815,12 @@ Cell *printstat (Node **a, int n)
   for (x = a[0]; x != NULL; x = x->nnext)
   {
     y = execute (x);
-    fputs (getpssval (y), fp);
+    awkputs (getpssval (y), fp);
     tempfree (y);
     if (x->nnext == NULL)
-      fputs (*ORS, fp);
+      awkputs (*ORS, fp);
     else
-      fputs (*OFS, fp);
+      awkputs (*OFS, fp);
   }
   if (a[1] != 0)
     fflush (fp);
@@ -1849,25 +1853,25 @@ struct FILE_STRUC {
   FILE  *fp;
   const char  *fname;
   int  mode;  /* '|', 'a', 'w' => LE/LT, GT */
-} *files;
+};
 
 int nfiles;
 
 void stdinit (void)  /* in case stdin, etc., are not constants */
 {
   nfiles = FOPEN_MAX;
-  files = (FILE_STRUC*)calloc (nfiles, sizeof (FILE_STRUC));
-  if (files == NULL)
+  interp->files = (FILE_STRUC*)calloc (nfiles, sizeof (FILE_STRUC));
+  if (interp->files == NULL)
     FATAL (AWK_ERR_NOMEM, "can't allocate file memory for %u files", nfiles);
-  files[0].fp = stdin;
-  files[0].fname = "/dev/stdin";
-  files[0].mode = LT;
-  files[1].fp = stdout;
-  files[1].fname = "/dev/stdout";
-  files[1].mode = GT;
-  files[2].fp = stderr;
-  files[2].fname = "/dev/stderr";
-  files[2].mode = GT;
+  interp->files[0].fp = stdin;
+  interp->files[0].fname = strdup ("/dev/stdin");;
+  interp->files[0].mode = LT;
+  interp->files[1].fp = stdout;
+  interp->files[1].fname = strdup("/dev/stdout");
+  interp->files[1].mode = GT;
+  interp->files[2].fp = stderr;
+  interp->files[2].fname = strdup("/dev/stderr");
+  interp->files[2].mode = GT;
 }
 
 FILE *openfile (int a, const char *us)
@@ -1880,30 +1884,30 @@ FILE *openfile (int a, const char *us)
     FATAL (AWK_ERR_ARG, "null file name in print or getline");
   for (i = 0; i < nfiles; i++)
   {
-    if (files[i].fname && strcmp (s, files[i].fname) == 0)
+    if (interp->files[i].fname && strcmp (s, interp->files[i].fname) == 0)
     {
-      if (a == files[i].mode || (a == APPEND && files[i].mode == GT))
-        return files[i].fp;
+      if (a == interp->files[i].mode || (a == APPEND && interp->files[i].mode == GT))
+        return interp->files[i].fp;
       if (a == FFLUSH)
-        return files[i].fp;
+        return interp->files[i].fp;
     }
   }
   if (a == FFLUSH)  /* didn't find it, so don't create it! */
     return NULL;
 
   for (i = 0; i < nfiles; i++)
-    if (files[i].fp == 0)
+    if (interp->files[i].fp == 0)
       break;
   if (i >= nfiles)
   {
     struct FILE_STRUC *nf;
     int nnf = nfiles + FOPEN_MAX;
-    nf = (FILE_STRUC*)realloc (files, nnf * sizeof (FILE_STRUC));
+    nf = (FILE_STRUC*)realloc (interp->files, nnf * sizeof (FILE_STRUC));
     if (nf == NULL)
       FATAL (AWK_ERR_NOMEM, "cannot grow files for %s and %d files", s, nnf);
     memset (&nf[nfiles], 0, FOPEN_MAX * sizeof (*nf));
     nfiles = nnf;
-    files = nf;
+    interp->files = nf;
   }
   fflush (stdout);  /* force a semblance of order */
   m = a;
@@ -1941,9 +1945,9 @@ FILE *openfile (int a, const char *us)
   else  /* can't happen */
     FATAL (AWK_ERR_OTHER, "illegal redirection %d", a);
 
-  files[i].fname = tostring (s);
-  files[i].fp = fp;
-  files[i].mode = m;
+  interp->files[i].fname = tostring (s);
+  interp->files[i].fp = fp;
+  interp->files[i].mode = m;
   return fp;
 }
 
@@ -1953,8 +1957,8 @@ const char *filename (FILE *fp)
 
   for (i = 0; i < nfiles; i++)
   {
-    if (fp == files[i].fp)
-      return files[i].fname;
+    if (fp == interp->files[i].fp)
+      return interp->files[i].fname;
   }
   return "???";
 }
@@ -1969,20 +1973,20 @@ Cell *closefile (Node **a, int n)
   stat = -1;
   for (i = 0; i < nfiles; i++)
   {
-    if (files[i].fname && strcmp (x->sval, files[i].fname) == 0)
+    if (interp->files[i].fname && strcmp (x->sval, interp->files[i].fname) == 0)
     {
-      if (ferror (files[i].fp))
-        WARNING ("i/o error occurred on %s", files[i].fname);
-      if (files[i].mode == '|' || files[i].mode == LE)
-        stat = pclose (files[i].fp);
+      if (ferror (interp->files[i].fp))
+        WARNING ("i/o error occurred on %s", interp->files[i].fname);
+      if (interp->files[i].mode == '|' || interp->files[i].mode == LE)
+        stat = pclose (interp->files[i].fp);
       else
-        stat = fclose (files[i].fp);
+        stat = fclose (interp->files[i].fp);
       if (stat == EOF)
-        WARNING ("i/o error occurred closing %s", files[i].fname);
+        WARNING ("i/o error occurred closing %s", interp->files[i].fname);
       if (i > 2)  /* don't do /dev/std... */
-        xfree (files[i].fname);
-      files[i].fname = NULL;  /* watch out for ref thru this */
-      files[i].fp = NULL;
+        xfree (interp->files[i].fname);
+      interp->files[i].fname = NULL;  /* watch out for ref thru this */
+      interp->files[i].fp = NULL;
     }
   }
   tempfree (x);
@@ -1995,18 +1999,23 @@ void closeall (void)
 {
   int i, stat;
 
-  for (i = 0; i < FOPEN_MAX; i++)
+  //skip stdin, stdout and stderr
+  for (i = 3; i < FOPEN_MAX; i++)
   {
-    if (files[i].fp)
+    if (interp->files[i].fp)
     {
-      if (ferror (files[i].fp))
-        WARNING ("i/o error occurred on %s", files[i].fname);
-      if (files[i].mode == '|' || files[i].mode == LE)
-        stat = pclose (files[i].fp);
+      if (ferror (interp->files[i].fp))
+        WARNING ("i/o error occurred on %s", interp->files[i].fname);
+      if (interp->files[i].mode == '|' || interp->files[i].mode == LE)
+        stat = pclose (interp->files[i].fp);
       else
-        stat = fclose (files[i].fp);
+        stat = fclose (interp->files[i].fp);
       if (stat == EOF)
-        WARNING ("i/o error occurred while closing %s", files[i].fname);
+        WARNING ("i/o error occurred while closing %s", interp->files[i].fname);
+
+      xfree (interp->files[i].fname);
+      interp->files[i].fname = NULL;
+      interp->files[i].fp = NULL;
     }
   }
 }
@@ -2016,8 +2025,8 @@ void flush_all (void)
   int i;
 
   for (i = 0; i < nfiles; i++)
-    if (files[i].fp)
-      fflush (files[i].fp);
+    if (interp->files[i].fp)
+      fflush (interp->files[i].fp);
 }
 
 void backsub(char **pb_ptr, char **sptr_ptr);

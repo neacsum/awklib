@@ -81,8 +81,11 @@ char* qstring (const char *str, int delim);
 void  recinit (unsigned int);
 void  initgetrec (void);
 void  makefields (int, int);
+void  freefields (void);
 void  growfldtab (int n);
 int   getrec (char **, int *, int);
+int   awkputs (const char *str, FILE *fp);
+
 void  nextfile (void);
 int   readrec (char **buf, int *bufsize, FILE *inf);
 char* getargv (int);

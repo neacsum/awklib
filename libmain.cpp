@@ -222,6 +222,7 @@ void awk_end (AWKINTERP *pinter)
     free (interp->progs[i]);
   xfree (interp->progs);
   xfree (interp->lexprog);
+  xfree (interp->files);
   free (interp);
 }
 
@@ -236,12 +237,25 @@ int awk_err (const char **msg)
 /// Sets debug level
 void awk_setdebug (int level)
 {
+#ifndef NDEBUG
   dbg = level;
   if (dbg > 1)
     yydebug = 1;
   errprintf ("Debug level is %d\n", dbg);
+#endif
 }
 
+/// Redirect input to a user function
+void awk_inredir (AWKINTERP* pinter, inproc user_input)
+{
+  pinter->inredir = user_input;
+}
+
+/// Redirect output to a user function
+void awk_outredir (AWKINTERP* pinter, outproc user_output)
+{
+  pinter->outredir = user_output;
+}
 
 /*!
   Get 1 character from awk program

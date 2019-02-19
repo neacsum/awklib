@@ -86,6 +86,17 @@ void makefields (int n1, int n2)
   }
 }
 
+/// Release all allocated fields
+void freefields (void)
+{
+  int i;
+  // will also free the record (is $0)
+  for (i = 0; i < nfields; i++)
+    freecell (fldtab[i]);
+  xfree (fldtab);
+  xfree (fields);
+}
+
 /// Find first filename argument and open the file
 void initgetrec (void)
 {
@@ -111,6 +122,44 @@ void initgetrec (void)
   infile = stdin;    /* no filenames, so use stdin */
 }
 
+#ifndef NDEBUG
+/// Quick and dirty character quoting can quote a few short character strings
+char *quote (char* in)
+{
+  static char buf[256];
+  static char *beg = buf;
+  char *out, *ret;
+  if (beg > buf + sizeof (buf)-50)
+    beg = buf;
+  out = beg;
+  while (*in)
+  {
+    switch (*in)
+    {
+    case '\n':
+      *out++ = '\\';
+      *out++ = 'n';
+      break;
+    case '\r':
+      *out++ = '\\';
+      *out++ = 'r';
+      break;
+    case '\t':
+      *out++ = '\\';
+      *out++ = 't';
+      break;
+    default:
+      *out++ = *in;
+    }
+    in++;
+  }
+  *out++ = 0;
+  ret = beg;
+  beg = out;
+  return ret;
+}
+#endif
+
 /// Get next input record
 int getrec (char **pbuf, int *pbufsize, int isrecord)
 {
@@ -122,7 +171,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
-    *RS, *FS, *ARGC, *FILENAME);
+    quote(*RS), quote(*FS), *ARGC, *FILENAME);
   if (isrecord)
   {
     donefld = 0;
@@ -201,6 +250,22 @@ void nextfile (void)
   argno++;
 }
 
+/// Get input char from input file or input redirection function
+int awkgetc (FILE *inf)
+{
+  int c = (inf == stdin && interp->inredir) ? interp->inredir() : getc (inf);
+  return c;
+}
+
+// write string to output file or output redirection function
+int awkputs (const char *str, FILE *fp)
+{
+  if (fp == stdout && interp->outredir)
+    return interp->outredir (str, strlen (str));
+  else
+    return fputs (str, fp);
+}
+
 /// Read one record into buf
 int readrec (char **pbuf, int *pbufsize, FILE *inf)
 {
@@ -215,14 +280,14 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
   if ((sep = **RS) == 0)
   {
     sep = '\n';
-    while ((c = getc (inf)) == '\n' && c != EOF)  /* skip leading \n's */
+    while ((c = awkgetc (inf)) == '\n' && c != EOF)  /* skip leading \n's */
       ;
     if (c != EOF)
       ungetc (c, inf);
   }
   for (rr = buf; ; )
   {
-    for (; (c = getc (inf)) != sep && c != EOF; )
+    for (; (c = awkgetc (inf)) != sep && c != EOF; )
     {
       if (rr - buf + 1 > bufsize)
         if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
@@ -237,7 +302,7 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
       This is the case where RS = 0 and records are separated by two
       consecutive \n
     */
-    if ((c = getc (inf)) == '\n' || c == EOF) /* 2 in a row */
+    if ((c = awkgetc (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
     if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr))
       FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
