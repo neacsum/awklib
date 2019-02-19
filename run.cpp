@@ -62,7 +62,7 @@ static Cell  exitcell  ={ OJUMP, JEXIT, 0, 0, 0.0, NUM, NULL };
 Cell  *jexit  = &exitcell;
 static Cell  retcell    ={ OJUMP, JRET, 0, 0, 0.0, NUM, NULL };
 Cell  *jret  = &retcell;
-static Cell  tempcell  ={ OCELL, CTEMP, 0, "", 0.0, NUM|STR|DONTFREE, NULL };
+static Cell  tempcell  ={ OCELL, CTEMP, 0, NULL, 0.0, NUM|STR|DONTFREE, NULL };
 
 Node  *curnode = NULL;  /* the node being executed, for debugging */
 
@@ -235,7 +235,7 @@ struct Frame *fp = NULL;      /* frame pointer. bottom level unused */
 /// Function call.  very kludgy and fragile
 Cell *call (Node **a, int n)
 {
-  static Cell newcopycell = { OCELL, CCOPY, 0, "", 0.0, NUM | STR | DONTFREE, NULL };
+  static Cell newcopycell = { OCELL, CCOPY, 0, NULL, 0.0, NUM | STR | DONTFREE, NULL };
   int i, ncall, ndef;
   int freed = 0; /* handles potential double freeing when fcn & param share a tempcell */
   Node *x;
@@ -1747,8 +1747,8 @@ Cell *bltin (Node **a, int n)
       u = getfval (x);
     tmp = u;
     srand ((unsigned int)u);
-    u = srand_seed;
-    srand_seed = tmp;
+    u = interp->srand_seed;
+    interp->srand_seed = tmp;
     break;
   case FTOUPPER:
   case FTOLOWER:

@@ -564,8 +564,6 @@ int word (char *w)
     switch (kp->type)
     {  /* special handling */
     case BLTIN:
-      if (kp->sub == FSYSTEM && safe)
-        SYNTAX ("system is unsafe");
       RET (kp->type)
 
     case FUNC:
@@ -655,14 +653,13 @@ FILE  *yyin = 0;
 int input (void)
 {
   int c;
-  extern char *lexprog;
 
   if (yysptr > yysbuf)
     c = (uschar)*--yysptr;
-  else if (lexprog != NULL)
+  else if (interp->lexptr != NULL)
   {  /* awk '...' */
-    if ((c = (uschar)*lexprog) != 0)
-      lexprog++;
+    if ((c = (uschar)*interp->lexptr) != 0)
+      interp->lexptr++;
   }
   else        /* awk -f ... */
     c = pgetc ();

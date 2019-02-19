@@ -33,7 +33,6 @@ THIS SOFTWARE.
 #include <awkerr.h>
 
 FILE*   infile = NULL;
-char*   file = "";
 char*   record;
 int     recsize = RECSIZE;
 char*   fields;
@@ -52,12 +51,10 @@ int     lastfld = 0;  /* last used field */
 int     argno = 1;  /* current input argument number */
 extern  Awkfloat *ARGC;
 
-static Cell dollar0 = { OCELL, CFLD, NULL, "", 0.0, REC | STR | DONTFREE };
-static Cell dollar1 = { OCELL, CFLD, NULL, "", 0.0, FLD | STR | DONTFREE };
+static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | STR | DONTFREE };
+static Cell dollar1 = { OCELL, CFLD, NULL, NULL, 0.0, FLD | STR | DONTFREE };
 
 static int	refldbld (const char *, const char *);
-static void	eprint (void);
-static void	error (void);
 
 void recinit (unsigned int n)
 {
@@ -89,6 +86,7 @@ void makefields (int n1, int n2)
   }
 }
 
+/// Find first filename argument and open the file
 void initgetrec (void)
 {
   int i;
@@ -113,8 +111,6 @@ void initgetrec (void)
   infile = stdin;    /* no filenames, so use stdin */
 }
 
-static int firsttime = 1;
-
 /// Get next input record
 int getrec (char **pbuf, int *pbufsize, int isrecord)
 {
@@ -123,12 +119,8 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   char *buf = *pbuf;
   uschar saveb0;
   int bufsize = *pbufsize, savebufsize = bufsize;
+  char* file = 0;
 
-  if (firsttime)
-  {
-    firsttime = 0;
-    initgetrec ();
-  }
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
     *RS, *FS, *ARGC, *FILENAME);
   if (isrecord)
@@ -140,7 +132,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   buf[0] = 0;
   while (argno < *ARGC || infile == stdin)
   {
-    dprintf ("argno=%d, file=|%s|\n", argno, file);
+    dprintf ("argno=%d, file=|%s|\n", argno, NN(file));
     if (infile == NULL)
     {
       /* have to open a new file */
@@ -192,6 +184,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
     if (infile != stdin)
       fclose (infile);
     infile = NULL;
+    *FILENAME = 0;
     argno++;
   }
   buf[0] = saveb0;
@@ -444,7 +437,7 @@ void cleanfld (int n1, int n2)
     p = fldtab[i];
     if (freeable (p))
       xfree (p->sval);
-    p->sval = "";
+    p->sval = 0;
     p->tval = FLD | STR | DONTFREE;
   }
 }
@@ -596,90 +589,6 @@ void recbld (void)
 
 int  errorflag = 0;
 
-void yyerror (const char *s)
-{
-  SYNTAX ("%s", s);
-}
-
-void fpecatch (int n)
-{
-  FATAL (AWK_ERR_FPE, "floating point exception %d", n);
-}
-
-void WARNING (const char *fmt, ...)
-{
-  extern char *cmdname;
-  va_list varg;
-
-  fflush (stdout);
-  fprintf (stderr, "%s: ", cmdname);
-  va_start (varg, fmt);
-  vfprintf (stderr, fmt, varg);
-  va_end (varg);
-  error ();
-}
-
-void error ()
-{
-  extern Node *curnode;
-
-  fprintf (stderr, "\n");
-  if (compile_time != 2 && NR && *NR > 0)
-  {
-    fprintf (stderr, " input record number %d", (int)(*FNR));
-    if (strcmp (*FILENAME, "-") != 0)
-      fprintf (stderr, ", file %s", *FILENAME);
-    fprintf (stderr, "\n");
-  }
-  if (compile_time != 2 && curnode)
-    fprintf (stderr, " source line number %d", curnode->lineno);
-  else if (compile_time != 2 && lineno)
-    fprintf (stderr, " source line number %d", lineno);
-  if (compile_time == 1 && cursource () != NULL)
-    fprintf (stderr, " source file %s", cursource ());
-  fprintf (stderr, "\n");
-  eprint ();
-}
-
-void eprint (void)  /* try to print context around error */
-{
-  char *p, *q;
-  int c;
-  static int been_here = 0;
-  extern char ebuf[], *ep;
-
-  if (compile_time == 2 || compile_time == 0 || been_here++ > 0)
-    return;
-  if (ebuf == ep)
-    return;
-  p = ep - 1;
-  if (p > ebuf && *p == '\n')
-    p--;
-  for (; p > ebuf && *p != '\n' && *p != '\0'; p--)
-    ;
-  while (*p == '\n')
-    p++;
-  fprintf (stderr, " context is\n\t");
-  for (q = ep - 1; q >= p && *q != ' ' && *q != '\t' && *q != '\n'; q--)
-    ;
-  for (; p < q; p++)
-    if (*p)
-      putc (*p, stderr);
-  fprintf (stderr, " >>> ");
-  for (; p < ep; p++)
-    if (*p)
-      putc (*p, stderr);
-  fprintf (stderr, " <<< ");
-  if (*ep)
-  {
-    while ((c = input ()) != '\n' && c != '\0' && c != EOF)
-    {
-      putc (c, stderr);
-    }
-  }
-  putc ('\n', stderr);
-  ep = ebuf;
-}
 
 double errcheck (double x, const char *s)
 {

@@ -53,6 +53,7 @@ Node *nodealloc (int n)
   return x;
 }
 
+char *tokname (int tok);
 /// Free all memory allocated for nodes and cells
 void freenodes (void)
 {
@@ -60,8 +61,8 @@ void freenodes (void)
   while (temp)
   {
     alloc_list = temp->lalloc;
-    if (temp->ntype == NVALUE)
-      freecell ((Cell*)temp->narg[0]);
+    errprintf ("%Deleting node 0x%p %s", temp, tokname (temp->nobj));
+    errprintf (" type %s\n", temp->ntype == NVALUE ? "value" : temp->ntype == NSTAT ? "statement" : "expression");
     free (temp);
     temp = alloc_list;
   }

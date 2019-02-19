@@ -114,7 +114,7 @@ fa* makedfa (const char *s, int anchor)
       overflo ("out of space initializing makedfa");
   }
 
-  if (compile_time)  /* a constant for sure */
+  if (interp->status == AWKS_COMPILING)  /* a constant for sure */
     return mkdfa (s, anchor);
   for (i = 0; i < nfatab; i++)  /* is it there already? */
   {

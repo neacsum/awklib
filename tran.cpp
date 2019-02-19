@@ -58,9 +58,7 @@ Cell  *fnrloc;      /* FNR */
 Array  *ARGVtab;    /* symbol table containing ARGV[...] */
 Cell  *rstartloc;   /* RSTART */
 Cell  *rlengthloc;  /* RLENGTH */
-Cell  *symtabloc;   /* SYMTAB */
 
-Cell  *nullloc;     /* a guaranteed empty cell */
 Node  *nullnode;    /* zero&null, converted into a node for comparisons */
 Cell  *literal0;
 
@@ -85,8 +83,8 @@ void syminit (void)
 {
   literal0 = setsymtab ("0", "0", 0.0, NUM | STR | CON | DONTFREE, symtab);
   /* this is used for if(x)... tests: */
-  nullloc = setsymtab ("$zero&null", "", 0.0, NUM | STR | CON | DONTFREE, symtab);
-  nullnode = celltonode (nullloc, CCON);
+  nullnode = celltonode (setsymtab ("$zero&null", "", 0.0, NUM | STR | CON | DONTFREE, symtab)
+    , CCON);
 
   fsloc = setsymtab ("FS", " ", 0.0, STR | DONTFREE, symtab);
   FS = &fsloc->sval;
@@ -107,8 +105,8 @@ void syminit (void)
   RSTART = &rstartloc->fval;
   rlengthloc = setsymtab ("RLENGTH", "", 0.0, NUM, symtab);
   RLENGTH = &rlengthloc->fval;
-  symtabloc = setsymtab ("SYMTAB", "", 0.0, ARR, symtab);
-  symtabloc->sval = (char *)symtab;
+  
+  setsymtab ("SYMTAB", "", 0.0, ARR, symtab)->sval = (char*)symtab;
 }
 
 /// Set up ARGV and ARGC
@@ -174,18 +172,27 @@ Array *makearray (int n)
   return ap;
 }
 
+void print_cell (Cell *c, int indent);
+
 /// Free a symbol table entry
 void freecell (Cell* cp)
 {
+#ifndef NDEBUG
+  dprintf ("Deleting...");
+  print_cell (cp, 1);
+#endif
   if (isarr (cp))
   {
+    dprintf ("Deleting array\n");
     freearray ((Array *)cp->sval);
     cp->sval = 0;
   }
   else if (isstr (cp))
   {
+    dprintf ("freed %s\n", cp->sval);
     xfree (cp->sval);
   }
+  xfree (cp->nval);
 }
 
 /// Free a hash table
@@ -200,9 +207,26 @@ void freearray (Array *ap)
   {
     for (cp = ap->tab[i]; cp != NULL; cp = temp)
     {
+      dprintf ("freeing %s...", cp->nval);
       xfree (cp->nval);
-      if (freeable (cp))
-        xfree (cp->sval);
+      if (freeable (cp) || interp->status == AWKS_END) //at end we free everything
+      {
+        if (isarr (cp))
+        {
+          if ((Array*)cp->sval != ap) //prevent recursion (SYMTAB is a symbol in symtab)
+          {
+            dprintf ("...cell is an array\n");
+            freearray ((Array*)cp->sval);
+          }
+          else
+            dprintf (" self\n");
+        }
+        else
+        {
+          dprintf (" (value=%s)\n", cp->sval);
+          xfree (cp->sval);
+        }
+      }
       temp = cp->cnext;  /* avoids freeing then using */
       free (cp);
       ap->nelem--;

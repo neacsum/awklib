@@ -65,7 +65,7 @@
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>$(OutDir)$(TargetName)$(TargetExt) &gt;proctab.c</Command>
+      <Command>$(OutDir)$(TargetName)$(TargetExt) &gt;proctab.cpp</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -85,7 +85,7 @@
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>$(OutDir)$(TargetName)$(TargetExt) &gt;proctab.c</Command>
+      <Command>$(OutDir)$(TargetName)$(TargetExt) &gt;proctab.cpp</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -94,13 +94,13 @@
   <ItemGroup>
     <CustomBuild Include="awkgram.y">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc -v -d -o ytab.c awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc -v -d -o ytab.cpp awkgram.y</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling grammar</Message>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ytab.h;ytab.c;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ytab.h;ytab.cpp;%(Outputs)</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yacc -d -o ytab.c awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yacc -d -o ytab.cpp awkgram.y</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">ytab.h;ytab.c;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">ytab.h;ytab.cpp;%(Outputs)</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
     </CustomBuild>
   </ItemGroup>

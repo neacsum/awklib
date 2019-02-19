@@ -41,7 +41,7 @@ extern  int  nfields;
 extern  FILE* yyin;  /* lex input file */
 extern char *curfname;  ///<current function name
 
-awkstat *interp;      ///< current interpreter status block
+AWKINTERP *interp;      ///< current interpreter status block
 
 char errmsg[1024];    ///< last error message
 extern  int errorflag; ///< non-zero if any syntax errors; set by yyerror
@@ -55,11 +55,6 @@ extern int yydebug;
 #endif
 #endif
 
-int       compile_time = 2;   /* for error printing: */
-                              /* 2 = cmdline, 1 = compile, 0 = running */
-
-int  safe  = 0;  /* 1 => "safe" mode */
-
 /*!
   Initialize interpreter and optionally sets user defined variables
   vars - array of strings "var=value"
@@ -67,12 +62,11 @@ int  safe  = 0;  /* 1 => "safe" mode */
   \return  - an interpreter status block if successful or NULL otherwise
 */
 extern "C" 
-awkstat* awk_init (const char **vars)
+AWKINTERP* awk_init (const char **vars)
 {
   signal (SIGFPE, fpecatch);
-
   try {
-    interp = (awkstat *)calloc (1, sizeof awkstat);
+    interp = (AWKINTERP *)calloc (1, sizeof AWKINTERP);
     if (!interp)
       FATAL (AWK_ERR_NOMEM, "Out of memory");
     interp->srand_seed = 1;
@@ -88,6 +82,9 @@ awkstat* awk_init (const char **vars)
       else
         FATAL (AWK_ERR_INVVAR, "invalid variable argument: %s", vars);
     }
+
+    //add a fake argv[0]
+    awk_addarg (interp, "AWKLIB");
   }
   catch (int)
   {
@@ -102,9 +99,9 @@ awkstat* awk_init (const char **vars)
 /*!
   Set a string as the AWK program text.
 */
-int awk_setprog (awkstat *stat, const char *prog)
+int awk_setprog (AWKINTERP *pinter, const char *prog)
 {
-  interp = stat;
+  interp = pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -112,7 +109,7 @@ int awk_setprog (awkstat *stat, const char *prog)
       FATAL (AWK_ERR_PROGFILE, "Program file already set");
 
     xfree (interp->lexprog);
-    interp->lexprog = strdup (prog);
+    interp->lexptr = interp->lexprog = strdup (prog);
     return 1;
   }
   catch (int) {
@@ -121,9 +118,9 @@ int awk_setprog (awkstat *stat, const char *prog)
   return 1;
 }
 
-int awk_addprogfile (awkstat *stat, const char *progfile)
+int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 {
-  interp = stat;
+  interp = pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -144,9 +141,9 @@ int awk_addprogfile (awkstat *stat, const char *progfile)
 /*!
   Add another argument (input file or assignment)
 */
-int awk_addarg (awkstat *stat, const char *arg)
+int awk_addarg (AWKINTERP *pinter, const char *arg)
 {
-  interp = stat;
+  interp = pinter;
   if (interp->status == AWKS_FATAL)
     return 0;
   if (interp->argc)
@@ -157,9 +154,9 @@ int awk_addarg (awkstat *stat, const char *arg)
   return 1;
 }
 
-int awk_compile (awkstat *stat)
+int awk_compile (AWKINTERP *pinter)
 {
-  interp = stat;
+  interp = pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -190,18 +187,18 @@ int awk_compile (awkstat *stat)
   return 1;
 }
 
-int awk_exec (awkstat *stat)
+int awk_exec (AWKINTERP *pinter)
 {
   if (interp->status != AWKS_COMPILED)
     return 0;
 
-  interp = stat;
+  interp = pinter;
+  symtab = interp->symtab;
   try {
     arginit (interp->argc, interp->argv);
-    symtab = interp->symtab;
     recinit (recsize);
-    syminit ();
     envinit (environ);
+    initgetrec ();
     run (interp->prog_root);
   }
   catch (int) {
@@ -211,18 +208,21 @@ int awk_exec (awkstat *stat)
   return 1;
 }
 
-void awk_end (awkstat *stat)
+void awk_end (AWKINTERP *pinter)
 {
-  for (int i = 0; i < stat->argc; i++)
-    free (stat->argv[i]);
-  xfree (stat->argv);
+  interp = pinter;
+  interp->status = AWKS_END;
+  for (int i = 0; i < interp->argc; i++)
+    free (interp->argv[i]);
+  xfree (interp->argv);
   freenodes ();
-  freearray (stat->symtab);
-  for (int i = 0; i < stat->nprog; i++)
-    free (stat->progs[i]);
-  xfree (stat->progs);
-  xfree (stat->lexprog);
-  free (stat);
+  dprintf ("freeing symbol table\n");
+  freearray (interp->symtab);
+  for (int i = 0; i < interp->nprog; i++)
+    free (interp->progs[i]);
+  xfree (interp->progs);
+  xfree (interp->lexprog);
+  free (interp);
 }
 
 /// Return last error code and optionally the last error message
@@ -239,7 +239,7 @@ void awk_setdebug (int level)
   dbg = level;
   if (dbg > 1)
     yydebug = 1;
-  errprintf ("Debug level is %d", dbg);
+  errprintf ("Debug level is %d\n", dbg);
 }
 
 
@@ -285,7 +285,7 @@ char *cursource (void)  /* current source file name */
 /// Output debug messages to stderr
 #include <stdarg.h>
 
-#if !defined(NDEBUG) && defined(WIN32)
+#if defined(WIN32)
 // Avoid clashes with windows macrodefs
 #undef CHAR
 #undef DELETE
@@ -295,23 +295,18 @@ char *cursource (void)  /* current source file name */
 
 int errprintf (const char *fmt, ...)
 {
-#ifdef NDEBUG
-  return 0;
-#else
   va_list args;
   va_start (args, fmt);
   int ret;
 #ifdef WIN32
-  char buffer[1024];
+  static char buffer[1024];
   ret = vsnprintf (buffer, sizeof(buffer)-1, fmt, args);
-  va_end (args);
   OutputDebugStringA (buffer);
 #else
   int ret = vfprintf (stderr, fmt, args);
+#endif
   va_end (args);
-#endif
   return ret;
-#endif
 }
 
 #ifndef NDEBUG
@@ -359,6 +354,8 @@ void print_tree (Node *n, int indent)
 }
 #endif
 
+/*======================= Error handling function ===========================*/
+
 /// Generate error message and throws an exception
 void FATAL (int err, const char *fmt, ...)
 {
@@ -387,5 +384,104 @@ void SYNTAX (const char *fmt, ...)
     pb += sprintf (pb, " source file %s", cursource ());
   errorflag = AWK_ERR_SYNTAX;
   throw AWK_ERR_SYNTAX;
+}
+
+/// Called by yyparse when for syntax errors
+void yyerror (const char *s)
+{
+  SYNTAX ("%s", s);
+}
+
+void eprint (void)  /* try to print context around error */
+{
+  char *p, *q;
+  int c;
+  static int been_here = 0;
+  extern char ebuf[], *ep;
+
+  if (interp->status != AWKS_COMPILING || been_here++ > 0)
+    return;
+  if (ebuf == ep)
+    return;
+  p = ep - 1;
+  if (p > ebuf && *p == '\n')
+    p--;
+  for (; p > ebuf && *p != '\n' && *p != '\0'; p--)
+    ;
+  while (*p == '\n')
+    p++;
+  fprintf (stderr, " context is\n\t");
+  for (q = ep - 1; q >= p && *q != ' ' && *q != '\t' && *q != '\n'; q--)
+    ;
+  for (; p < q; p++)
+    if (*p)
+      putc (*p, stderr);
+  fprintf (stderr, " >>> ");
+  for (; p < ep; p++)
+    if (*p)
+      putc (*p, stderr);
+  fprintf (stderr, " <<< ");
+  if (*ep)
+  {
+    while ((c = input ()) != '\n' && c != '\0' && c != EOF)
+    {
+      putc (c, stderr);
+    }
+  }
+  putc ('\n', stderr);
+  ep = ebuf;
+}
+
+/// Print error location
+void error ()
+{
+  extern Node *curnode;
+
+  errprintf ("\n");
+  if (interp->status == AWKS_RUN && NR && *NR > 0)
+  {
+    errprintf (" input record number %d", (int)(*FNR));
+    if (strcmp (*FILENAME, "-") != 0)
+      errprintf (", file %s", *FILENAME);
+    errprintf ("\n");
+  }
+  if (interp->status == AWKS_COMPILING)
+  {
+    if (curnode)
+      errprintf (" source line number %d", curnode->lineno);
+    else if (lineno)
+      errprintf (" source line number %d", lineno);
+    if (cursource ())
+      errprintf (" source file %s", cursource ());
+    errprintf ("\n");
+  }
+  eprint ();
+}
+
+/// Floating point error handler
+void fpecatch (int n)
+{
+  FATAL (AWK_ERR_FPE, "floating point exception %d", n);
+}
+
+/// Warning sent to dprintf
+void WARNING (const char *fmt, ...)
+{
+  char *fmt1 = (char*)malloc (strlen (fmt) + 10);
+  va_list args;
+  va_start (args, fmt);
+
+  strcpy (fmt1, "AWK: ");
+  strcat (fmt1, fmt);
+#ifdef WIN32
+  char buffer[1024];
+  vsnprintf (buffer, sizeof (buffer) - 1, fmt1, args);
+  OutputDebugStringA (buffer);
+#else
+  vfprintf (stderr, fmt1, args);
+#endif
+  va_end (args);
+  free (fmt1);
+  error ();
 }
 

@@ -15,12 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="proctab.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ytab.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="libmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -40,6 +34,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tran.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ytab.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="proctab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

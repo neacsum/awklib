@@ -1,10 +1,11 @@
 .vs
 *.user
-/ytab.c
+/ytab.cpp
 /ytab.h
-/proctab.c
+/proctab.cpp
 x86/
 x64/
 o/
+lib/
 
 /old_testdir

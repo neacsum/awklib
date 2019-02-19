@@ -238,12 +238,8 @@ pattern:
 			$$ = op3($2, (Node *)1, $1, $3); }
 	| pattern IN varname		{ $$ = op2(INTEST, $1, makearr($3)); }
 	| '(' plist ')' IN varname	{ $$ = op2(INTEST, $2, makearr($5)); }
-	| pattern '|' GETLINE var	{ 
-			if (safe) SYNTAX("cmd | getline is unsafe");
-			else $$ = op3(GETLINE, $4, itonp($2), $1); }
-	| pattern '|' GETLINE		{ 
-			if (safe) SYNTAX("cmd | getline is unsafe");
-			else $$ = op3(GETLINE, (Node*)0, itonp($2), $1); }
+	| pattern '|' GETLINE var	{ $$ = op3(GETLINE, $4, itonp($2), $1); }
+	| pattern '|' GETLINE		{ $$ = op3(GETLINE, (Node*)0, itonp($2), $1); }
 	| pattern term %prec CAT	{ $$ = op2(CAT, $1, $2); }
 	| re
 	| term
@@ -292,15 +288,9 @@ rparen:
 	;
 
 simple_stmt:
-	  print prarg '|' term		{ 
-			if (safe) SYNTAX("print | is unsafe");
-			else $$ = stat3($1, $2, itonp($3), $4); }
-	| print prarg APPEND term	{
-			if (safe) SYNTAX("print >> is unsafe");
-			else $$ = stat3($1, $2, itonp($3), $4); }
-	| print prarg GT term		{
-			if (safe) SYNTAX("print > is unsafe");
-			else $$ = stat3($1, $2, itonp($3), $4); }
+	  print prarg '|' term		{ $$ = stat3($1, $2, itonp($3), $4); }
+	| print prarg APPEND term	{ $$ = stat3($1, $2, itonp($3), $4); }
+	| print prarg GT term		{ $$ = stat3($1, $2, itonp($3), $4); }
 	| print prarg			{ $$ = stat3($1, $2, NIL, NIL); }
 	| DELETE varname '[' patlist ']' { $$ = stat2(DELETE, makearr($2), $4); }
 	| DELETE varname		 { $$ = stat2(DELETE, makearr($2), 0); }

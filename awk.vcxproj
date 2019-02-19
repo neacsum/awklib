@@ -156,10 +156,10 @@
     <ClCompile Include="lib.cpp" />
     <ClCompile Include="libmain.cpp" />
     <ClCompile Include="parse.cpp" />
-    <ClCompile Include="proctab.c" />
+    <ClCompile Include="proctab.cpp" />
     <ClCompile Include="run.cpp" />
     <ClCompile Include="tran.cpp" />
-    <ClCompile Include="ytab.c" />
+    <ClCompile Include="ytab.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="awk.h" />
