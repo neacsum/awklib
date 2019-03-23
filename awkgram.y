@@ -29,6 +29,7 @@ THIS SOFTWARE.
 
 void checkdup(Node *list, Cell *item);
 int yywrap(void) { return(1); }
+void yyinit (void);
 
 Node	*beginloc = 0;
 Node	*endloc = 0;
@@ -473,4 +474,12 @@ void checkdup(Node *vl, Cell *cp)	/* check if name already in list */
 			break;
 		}
 	}
+}
+
+void yyinit (void)
+{
+  beginloc = endloc = 0;
+  infunc = inloop = 0;
+  curfname = 0;
+  arglist = 0;
 }

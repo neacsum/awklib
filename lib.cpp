@@ -56,10 +56,12 @@ static Cell dollar1 = { OCELL, CFLD, NULL, NULL, 0.0, FLD | STR | DONTFREE };
 
 static int	refldbld (const char *, const char *);
 
-void recinit (unsigned int n)
+void recinit ()
 {
-  if ((record = (char *)malloc (n)) == NULL
-   || (fields = (char *)malloc (n + 1)) == NULL
+  recsize = RECSIZE;
+  nfields = MAXFLD;
+  if ((record = (char *)malloc (recsize)) == NULL
+   || (fields = (char *)malloc (recsize + 1)) == NULL
    || (fldtab = (Cell **)malloc ((nfields + 1) * sizeof (Cell *))) == NULL
    || (fldtab[0] = (Cell *)malloc (sizeof (Cell))) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space for $0 and fields");

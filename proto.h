@@ -26,9 +26,9 @@ void  setfname (Cell *);
 int   constnode (Node *);
 char* strnode (Node *);
 Node* notnull (Node *);
-
 int   yylex (void);
-int   yyparse ();
+int   yyparse (void);
+void  yyinit (void);
 void  startreg (void);
 
 fa*   makedfa (const char *, int);
@@ -62,7 +62,7 @@ Node* itonp (int);
 void  freenodes (void);
 void  syminit (void);
 void  arginit (int, char **);
-void  envinit (char **);
+void  envinit (void);
 Array*  makearray (int);
 void  freearray (Array *);
 void freecell (Cell *);
@@ -78,7 +78,7 @@ char* getpssval (Cell *);     /* for print */
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
-void  recinit (unsigned int);
+void  recinit (void);
 void  initgetrec (void);
 void  makefields (int, int);
 void  freefields (void);

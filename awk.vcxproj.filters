@@ -36,10 +36,10 @@
     <ClCompile Include="tran.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ytab.cpp">
+    <ClCompile Include="proctab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="proctab.cpp">
+    <ClCompile Include="ytab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

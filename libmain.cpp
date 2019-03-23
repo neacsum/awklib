@@ -165,6 +165,9 @@ int awk_compile (AWKINTERP *pinter)
 
     setlocale (LC_CTYPE, "");
     setlocale (LC_NUMERIC, "C"); /* for parsing cmdline & prog */
+
+    // (Re)init all parsing variables
+    yyinit ();
     yyin = NULL;
     interp->status = AWKS_COMPILING;
     yyparse ();
@@ -177,6 +180,10 @@ int awk_compile (AWKINTERP *pinter)
         print_tree (winner, 1);
 #endif
       interp->prog_root = winner;
+
+      //things we can initialize now
+      envinit ();
+
     }
   }
   catch (int) {
@@ -195,9 +202,8 @@ int awk_exec (AWKINTERP *pinter)
   interp = pinter;
   symtab = interp->symtab;
   try {
+    recinit ();
     arginit (interp->argc, interp->argv);
-    recinit (recsize);
-    envinit (environ);
     initgetrec ();
     run (interp->prog_root);
   }
@@ -256,6 +262,50 @@ void awk_outredir (AWKINTERP* pinter, outproc user_output)
 {
   pinter->outredir = user_output;
 }
+
+/// Retrieve a variable from symbol table
+int awk_getvar (AWKINTERP * pinter, awksymb * var)
+{
+  if (interp->status != AWKS_COMPILED)
+    return 0;
+
+  interp = pinter;
+  symtab = interp->symtab;
+  var->flags = 0;
+  try {
+    Cell *cp = lookup (var->name, symtab);
+    if (!cp)
+      return 0;//not found
+
+    if (cp->tval & ARR)
+    {
+      var->flags = AWKSYMB_ARR;
+      if (!var->index)
+        return 0;
+      Array *arr = (Array*)cp->sval;
+      cp = lookup (var->index, arr);
+      if (!cp)
+        return 0;   //index not found
+    }
+    if (cp->tval & NUM)
+    {
+      var->flags |= AWKSYMB_NUM;
+      var->fval = cp->fval;
+      return 1;
+    }
+    if (cp->tval & STR)
+    {
+      var->flags |= AWKSYMB_STR;
+      var->sval = strdup (cp->sval);
+      return 1;
+    }
+    return 0; //invalid variable type
+  }
+  catch (int&) {
+    return 0;
+  };
+}
+
 
 /*!
   Get 1 character from awk program
@@ -349,12 +399,14 @@ void print_tree (Node *n, int indent)
   int i;
 
   errprintf ("%*cNode 0x%p %s", indent, ' ', n, tokname (n->nobj));
-  while (n)
+  do
   {
     errprintf (" type %s", n->ntype == NVALUE ? "value" : n->ntype == NSTAT ? "statement" : "expression");
     errprintf (" %d arguments\n", n->args);
+    indent++;
     for (i = 0; i < n->args; i++)
     {
+      errprintf ("%*cArg %d of %s\n", indent, ' ', i, tokname(n->nobj));
       if (n->ntype == NVALUE)
         print_cell ((Cell *)n->narg[i], indent + 1);
       else if (n->narg[i])
@@ -362,9 +414,10 @@ void print_tree (Node *n, int indent)
       else
         errprintf ("%*cNull arg\n", indent + 1, ' ');
     }
+    indent--;
     if (n = n->nnext)
       errprintf ("%*cNext node 0x%p %s", indent, ' ', n, tokname (n->nobj));
-  }
+  } while (n);
 }
 #endif
 

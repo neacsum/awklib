@@ -132,15 +132,16 @@ void arginit (int ac, char **av)
 }
 
 /// Set up ENVIRON variable
-void envinit (char **envp)
+void envinit ()
 {
   Cell *cp;
   char *p;
-  Array  *ENVtab;     /* symbol table containing ENVIRON[...] */
-
+  Array  *envtab;     /* symbol table containing ENVIRON[...] */
+  char **envp;
+  envp = environ;
   cp = setsymtab ("ENVIRON", "", 0.0, ARR, symtab);
-  ENVtab = makearray (NSYMTAB);
-  cp->sval = (char *)ENVtab;
+  envtab = makearray (NSYMTAB);
+  cp->sval = (char *)envtab;
   for (; *envp; envp++)
   {
     if ((p = strchr (*envp, '=')) == NULL)
@@ -149,9 +150,9 @@ void envinit (char **envp)
       continue;
     *p++ = 0;  /* split into two strings at = */
     if (is_number (p))
-      setsymtab (*envp, p, atof (p), STR | NUM, ENVtab);
+      setsymtab (*envp, p, atof (p), STR | NUM, envtab);
     else
-      setsymtab (*envp, p, 0.0, STR, ENVtab);
+      setsymtab (*envp, p, 0.0, STR, envtab);
     p[-1] = '=';  /* restore in case env is passed down to a shell */
   }
 }
