@@ -252,14 +252,14 @@ void nextfile (void)
   argno++;
 }
 
-/// Get input char from input file or input redirection function
+/// Get input char from input file or from input redirection function
 int awkgetc (FILE *inf)
 {
   int c = (inf == stdin && interp->inredir) ? interp->inredir() : getc (inf);
   return c;
 }
 
-// write string to output file or output redirection function
+// write string to output file or send it to output redirection function
 int awkputs (const char *str, FILE *fp)
 {
   if (fp == stdout && interp->outredir)

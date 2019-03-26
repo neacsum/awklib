@@ -43,6 +43,57 @@ TEST_FIXTURE (fixt, getvar_array)
   free (v.sval);
 }
 
+TEST_FIXTURE (fixt, setvar_newvar)
+{
+  awksymb v{ "myvar", NULL, AWKSYMB_NUM, 25.0 };
+  awk_setprog (interp, "{myvar++; print myvar, $0}\n");
+  awk_compile (interp);
+  awk_inredir (interp, []()->int {return instr.get (); });
+  CHECK (awk_setvar (interp, &v));
+
+  instr.clear ();
+  instr.seekg (0);
+  awk_exec (interp);
+  awksymb vo{ "myvar"};
+  CHECK (awk_getvar (interp, &vo));
+  CHECK_EQUAL (27, vo.fval);
+}
+
+TEST_FIXTURE (fixt, setvar_existingvar)
+{
+  awksymb v{ "myvar", NULL, AWKSYMB_NUM, 25.0 };
+  awk_setprog (interp, "{myvar++; print myvar, $0}\n");
+  awk_compile (interp);
+  awk_inredir (interp, []()->int {return instr.get (); });
+  CHECK (awk_setvar (interp, &v));
+
+  instr.clear ();
+  instr.seekg (0);
+
+  v.fval = 35;
+  CHECK (awk_setvar (interp, &v));
+  awk_exec (interp);
+  awksymb vo{ "myvar" };
+  CHECK (awk_getvar (interp, &vo));
+  CHECK_EQUAL (37, vo.fval);
+}
+
+TEST_FIXTURE (fixt, setvar_newarray)
+{
+  awksymb v{ "myarray", "index", AWKSYMB_ARR | AWKSYMB_NUM, 25.0 };
+  awk_setprog (interp, "END {print \"at end: \" myarray[\"index\"]}\n");
+  awk_compile (interp);
+  awk_inredir (interp, []()->int {return instr.get (); });
+  CHECK (awk_setvar (interp, &v));
+
+  instr.clear ();
+  instr.seekg (0);
+  awk_exec (interp);
+  awksymb vo{ "myarray", "index" };
+  CHECK (awk_getvar (interp, &vo));
+  CHECK_EQUAL (25, vo.fval);
+}
+
 int main (int argc, char **argv)
 {
   int ret;

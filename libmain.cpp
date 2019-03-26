@@ -299,12 +299,61 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
       var->sval = strdup (cp->sval);
       return 1;
     }
+    var->flags = AWKSYMB_INV;
     return 0; //invalid variable type
   }
   catch (int&) {
     return 0;
   };
 }
+
+/*! 
+  Changes the value of a variable from symbol table or creates a new variable
+*/
+int awk_setvar (AWKINTERP * pinter, awksymb * var)
+{
+  Cell *cp;
+
+  if (interp->status != AWKS_COMPILED)
+    return 0;
+
+  interp = pinter;
+  symtab = interp->symtab;
+  try {
+    cp = lookup (var->name, symtab);
+    if (!cp)
+    {
+      //new variable
+      if ((var->flags & AWKSYMB_ARR) != 0 && !var->index)
+        return 0;
+      int t = (var->flags & AWKSYMB_ARR) ? ARR : (STR | NUM);
+      cp = setsymtab (var->name, "", 0., t, symtab);
+      if (cp->tval & ARR)
+        cp->sval = (char*)makearray (20); //arbitrary size
+    }
+    if (cp->tval & ARR)
+    {
+      //array
+      if (!var->index)
+        return 0;
+      cp = setsymtab (var->index, "", 0., (STR | NUM), (Array*)cp->sval);
+    }
+    if ((cp->tval & (STR | NUM)) == 0)
+    {
+      var->flags = AWKSYMB_INV;
+      return 0;
+    }
+    if (var->flags & AWKSYMB_STR)
+      setsval (cp, var->sval);
+    else
+      setfval (cp, var->fval);
+    return 1;
+  }
+  catch (int&) {
+    return 0;
+  };
+}
+
 
 
 /*!

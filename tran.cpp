@@ -530,11 +530,11 @@ static char *get_str_val (Cell *vp, char **fmt)
     }
     vp->fmt = *fmt;
   }
-  else if ((vp->tval & DONTFREE) != 0 || !isnum (vp) || isfld (vp)) {
-    goto done;
-  }
-  else if (isstr (vp))
+  else
   {
+    if ((vp->tval & DONTFREE) != 0 || !isnum (vp) || isfld (vp))
+      goto done;
+
     if (fmt == OFMT)
     {
       if ((vp->tval & CONVC) != 0
