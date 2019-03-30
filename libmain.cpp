@@ -70,6 +70,7 @@ AWKINTERP* awk_init (const char **vars)
     if (!interp)
       FATAL (AWK_ERR_NOMEM, "Out of memory");
     interp->srand_seed = 1;
+    interp->argno = 1;
     srand ((unsigned int)interp->srand_seed);
     interp->symtab = symtab = makearray (NSYMTAB);
     syminit ();
@@ -181,9 +182,9 @@ int awk_compile (AWKINTERP *pinter)
 #endif
       interp->prog_root = winner;
 
-      //things we can initialize now
+      //things we can/maust initialize now
       envinit ();
-
+      stdinit ();
     }
   }
   catch (int) {
@@ -229,6 +230,7 @@ void awk_end (AWKINTERP *pinter)
   xfree (interp->progs);
   xfree (interp->lexprog);
   xfree (interp->files);
+  xfree (interp->frame);
   free (interp);
 }
 
@@ -252,15 +254,49 @@ void awk_setdebug (int level)
 }
 
 /// Redirect input to a user function
-void awk_inredir (AWKINTERP* pinter, inproc user_input)
+void awk_infunc (AWKINTERP* pinter, inproc user_input)
 {
   pinter->inredir = user_input;
 }
 
 /// Redirect output to a user function
-void awk_outredir (AWKINTERP* pinter, outproc user_output)
+void awk_outfunc (AWKINTERP* pinter, outproc user_output)
 {
   pinter->outredir = user_output;
+}
+
+/// Redirects output to a file
+int awk_setoutput (AWKINTERP* pinter, const char *fname)
+{
+  FILE_STRUC *fs = &pinter->files[1];
+  FILE *f = fopen (fname, "w");
+  if (!f)
+    return 0; //something wrong
+
+  if (fs->fp != stdout)
+    fclose (fs->fp);
+  fs->fp = f;
+
+  free (fs->fname);
+  fs->fname = strdup (fname);
+  return 1;
+}
+
+/// Redirects input to read from a file
+int awk_setinput (AWKINTERP* pinter, const char *fname)
+{
+  FILE_STRUC *fs = &pinter->files[0];
+  FILE *f = fopen (fname, "r");
+  if (!f)
+    return 0; //something wrong
+
+  if (fs->fp != stdin)
+    fclose (fs->fp);
+  fs->fp = f;
+
+  free (fs->fname);
+  fs->fname = strdup (fname);
+  return 1;
 }
 
 /// Retrieve a variable from symbol table
@@ -354,6 +390,26 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   };
 }
 
+int awk_addfunc (AWKINTERP *pinter, char *fname, awkfunc fn, int nargs)
+{
+  if (interp->status != AWKS_COMPILED)
+    return 0;
+
+  interp = pinter;
+  symtab = interp->symtab;
+  try {
+    Cell *cp = lookup (fname, symtab);
+    if (cp)
+      return 0; //already defined
+    cp = setsymtab (fname, "", nargs, EXTFUN, symtab);
+    return 1;
+  }
+  catch (int&) {
+    return 0;
+  };
+
+
+}
 
 
 /*!

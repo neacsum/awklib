@@ -48,7 +48,6 @@ int     donefld;  /* 1 = implies rec broken into fields */
 int     donerec;  /* 1 = record is valid (no flds have changed) */
 
 int     lastfld = 0;  /* last used field */
-int     argno = 1;  /* current input argument number */
 extern  Awkfloat *ARGC;
 
 static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | STR | DONTFREE };
@@ -92,11 +91,11 @@ void makefields (int n1, int n2)
 void freefields (void)
 {
   int i;
-  // will also free the record (is $0)
   for (i = 0; i < nfields; i++)
     freecell (fldtab[i]);
   xfree (fldtab);
   xfree (fields);
+  xfree (record);
 }
 
 /// Find first filename argument and open the file
@@ -110,7 +109,7 @@ void initgetrec (void)
     p = getargv (i); /* find 1st real filename */
     if (p == NULL || *p == '\0')
     {  /* deleted or zapped */
-      argno++;
+      interp->argno++;
       continue;
     }
     if (!isclvar (p))
@@ -119,7 +118,7 @@ void initgetrec (void)
       return;
     }
     setclvar (p);  /* a commandline assignment before filename */
-    argno++;
+    interp->argno++;
   }
   infile = stdin;    /* no filenames, so use stdin */
 }
@@ -181,24 +180,24 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   }
   saveb0 = buf[0];
   buf[0] = 0;
-  while (argno < *ARGC || infile == stdin)
+  while (interp->argno < *ARGC || infile == stdin)
   {
-    dprintf ("argno=%d, file=|%s|\n", argno, NN(file));
+    dprintf ("argno=%d, file=|%s|\n", interp->argno, NN(file));
     if (infile == NULL)
     {
       /* have to open a new file */
-      file = getargv (argno);
+      file = getargv (interp->argno);
       if (file == NULL || *file == '\0')
       {
         /* deleted or zapped */
-        argno++;
+        interp->argno++;
         continue;
       }
       if (isclvar (file))
       {
         /* a var=value arg */
         setclvar (file);
-        argno++;
+        interp->argno++;
         continue;
       }
       *FILENAME = file;
@@ -236,7 +235,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
       fclose (infile);
     infile = NULL;
     *FILENAME = 0;
-    argno++;
+    interp->argno++;
   }
   buf[0] = saveb0;
   *pbuf = buf;
@@ -249,20 +248,20 @@ void nextfile (void)
   if (infile != NULL && infile != stdin)
     fclose (infile);
   infile = NULL;
-  argno++;
+  interp->argno++;
 }
 
 /// Get input char from input file or from input redirection function
 int awkgetc (FILE *inf)
 {
-  int c = (inf == stdin && interp->inredir) ? interp->inredir() : getc (inf);
+  int c = (inf == interp->files[0].fp && interp->inredir) ? interp->inredir() : getc (inf);
   return c;
 }
 
 // write string to output file or send it to output redirection function
 int awkputs (const char *str, FILE *fp)
 {
-  if (fp == stdout && interp->outredir)
+  if (fp == interp->files[1].fp && interp->outredir)
     return interp->outredir (str, strlen (str));
   else
     return fputs (str, fp);
@@ -277,7 +276,6 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
 
   if (strlen (*FS) >= sizeof (inputFS))
     FATAL (AWK_ERR_LIMIT, "field separator %.10s... is too long", *FS);
-  /*fflush(stdout); avoids some buffering problem but makes it 25% slower*/
   strcpy (inputFS, *FS);  /* for subsequent field splitting */
   if ((sep = **RS) == 0)
   {
@@ -486,7 +484,7 @@ void fldbld (void)
     for (j = 0; j <= lastfld; j++)
     {
       p = fldtab[j];
-      printf ("field %d (%s): |%s|\n", j, p->nval, p->sval);
+      dprintf ("field %d (%s): |%s|\n", j, p->nval, p->sval);
     }
   }
 #endif

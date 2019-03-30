@@ -106,10 +106,10 @@ int  is_number (const char *);
 
 int  adjbuf (char **pb, int *sz, int min, int q, char **pbp);
 void  run (Node *);
+void  stdinit (void);
 
 Cell* program (Node **, int);
 Cell* call (Node **, int);
-Cell* copycell (Cell *);
 Cell* arg (Node **, int);
 Cell* jump (Node **, int);
 Cell* awkgetline (Node **, int);
@@ -120,7 +120,6 @@ Cell* intest (Node **, int);
 Cell* matchop (Node **, int);
 Cell* boolop (Node **, int);
 Cell* relop (Node **, int);
-Cell* gettemp (void);
 Cell* field (Node **, int);
 Cell* indirect (Node **, int);
 Cell* substr (Node **, int);

@@ -215,8 +215,7 @@ int yylex (void)
       return word (buf);
     if (isdigit (c))
     {
-      yylval.cp = setsymtab (buf, tostring (buf), atof (buf), CON | NUM, symtab);
-      /* should this also have STR set? */
+      yylval.cp = setsymtab (buf, tostring (buf), atof (buf), (CON | NUM | STR), symtab);
       RET (NUMBER)
     }
 

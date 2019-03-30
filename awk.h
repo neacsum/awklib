@@ -82,9 +82,8 @@ typedef struct Cell {
   uschar  csub;    /* Cell subtype, see below */
 #define CFREE   7
 #define CCOPY   6
-#define CCON    5
+#define CCON    5     //Cell is constant (number or string)
 #define CTEMP   4
-#define CNAME   3 
 #define CVAR    2
 #define CFLD    1
 #define CUNK    0
@@ -115,9 +114,10 @@ typedef struct Cell {
 #define REC       0200  /* this is $0 */
 #define CONVC     0400  /* string was converted from number via CONVFMT */
 #define CONVO     01000 /* string was converted from number via OFMT */
+#define EXTFUN    02000 /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
-  struct Cell *cnext; /* ptr to next if chained */
+  struct Cell *cnext; /* ptr to next in arrays or temps list */
 } Cell;
 
 typedef struct Array {    /* symbol table array */
@@ -181,7 +181,7 @@ inline int isfld (const Cell *c) {return (c->tval & FLD) != 0;}
 inline int isstr (const Cell *c) { return (c->tval & STR) != 0; }
 inline int isnum (const Cell* c) { return (c->tval & NUM) != 0; }
 inline int isarr (const Cell *c) { return (c->tval & ARR) != 0; }
-inline int isfcn (const Cell *c) { return (c->tval & FCN) != 0; }
+inline int isfcn (const Cell *c) { return (c->tval & (FCN | EXTFUN)) != 0; }
 inline int freeable (const Cell *p) { return (p->tval & (STR | DONTFREE)) == STR; }
 
 /* structures used by regular expression matching machinery, mostly b.c: */
@@ -214,9 +214,21 @@ typedef struct fa {
   struct  rrow re[1];  /* variable: actual size set by calling malloc */
 } fa;
 
-struct FILE_STRUC;
+struct FILE_STRUC {
+  FILE  *fp;
+  char  *fname;
+  int  mode;  /* '|', 'a', 'w' => LE/LT, GT */
+};
+
 typedef int (*inproc)();
 typedef int (*outproc)(const char *buf, size_t len);
+
+struct Frame {  /* stack frame for awk function calls */
+  int nargs;      /* number of arguments in this call */
+  Cell *fcncell;  /* pointer to Cell for function */
+  Cell **args;    /* pointer to array of arguments after execute */
+  Cell *retval;   /* return value */
+};
 
 typedef struct AWKINTERP {
   int status;           ///< Interpreter status. See below
@@ -228,9 +240,10 @@ typedef struct AWKINTERP {
 #define AWKS_FATAL      -1  ///< fatal error occurred
   int err;              ///< Last error or warning
   Array *symtab;        ///< symbol table
-  Node *prog_root;      ///< root of prasing tree
+  Node *prog_root;      ///< root of parsing tree
   int argc;             ///< number of arguments
   char **argv;          ///< arguments array
+  int argno;            ///< current input argument number */
   Array *envir;         ///< environment variables
   Awkfloat srand_seed;  ///< seed for random number generator
   char *lexprog;        ///< AWK script
@@ -241,6 +254,9 @@ typedef struct AWKINTERP {
   struct FILE_STRUC *files;    ///< opened files
   inproc inredir;       ///< input redirection function
   outproc outredir;     ///< output redirection function
+  struct Frame* frame;         ///< base of function call frames stack
+  int nframe;           ///< number of frames allocated
+  int frm;              ///< current frame index
 }AWKINTERP;
 
 extern AWKINTERP *interp;

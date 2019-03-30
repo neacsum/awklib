@@ -188,7 +188,7 @@ void freecell (Cell* cp)
     freearray ((Array *)cp->sval);
     cp->sval = 0;
   }
-  else if (isstr (cp))
+  else if (freeable (cp))
   {
     dprintf ("freed %s\n", cp->sval);
     xfree (cp->sval);
@@ -221,6 +221,10 @@ void freearray (Array *ap)
           }
           else
             dprintf (" self\n");
+        }
+        else if (cp->tval & FCN)
+        {
+          dprintf ("... skipping function\n");
         }
         else
         {

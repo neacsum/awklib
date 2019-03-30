@@ -38,6 +38,7 @@ THIS SOFTWARE.
 #include "awk.h"
 #include "ytab.h"
 #include <awkerr.h>
+#include <awklib.h>
 
 jmp_buf env;
 extern  int  pairstack[];
@@ -71,8 +72,7 @@ static void   tfree (Cell *);
 static int    format (char **, int *, const char *, Node *);
 static double ipow (double, int);
 static void   closeall (void);
-static void   stdinit (void);
-
+static Cell*  gettemp (void);
 
 // One-liners
 inline int isnext (const Cell* c) { return c->csub == JNEXT || c->csub == JNEXTFILE; }
@@ -126,10 +126,10 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
 /// Execution of parse tree starts here
 void run (Node *a)
 {
-  stdinit ();
   execute (a);
   closeall ();
   freefields ();
+  xfree (tmps);
 }
 
 inline int notlegal (int n)
@@ -191,7 +191,7 @@ Cell *program (Node **a, int n)
   {    /* BEGIN */
     x = execute (a[0]);
     if (isexit (x))
-      return(True);
+      return True;
     if (isjump (x))
       FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
     tempfree (x);
@@ -220,137 +220,9 @@ ex1:
   return True;
 }
 
-struct Frame {  /* stack frame for awk function calls */
-  int nargs;      /* number of arguments in this call */
-  Cell *fcncell;  /* pointer to Cell for function */
-  Cell **args;    /* pointer to array of arguments after execute */
-  Cell *retval;   /* return value */
-};
-
-#define  NARGS  50  /* max args in a call */
-
-struct Frame *frame = NULL;   /* base of stack frames; dynamically allocated */
-int  nframe = 0;              /* number of frames allocated */
-struct Frame *fp = NULL;      /* frame pointer. bottom level unused */
-
-/// Function call.  very kludgy and fragile
-Cell *call (Node **a, int n)
-{
-  static Cell newcopycell = { OCELL, CCOPY, 0, NULL, 0.0, NUM | STR | DONTFREE, NULL };
-  int i, ncall, ndef;
-  int freed = 0; /* handles potential double freeing when fcn & param share a tempcell */
-  Node *x;
-  Cell *args[NARGS], *oargs[NARGS];  /* BUG: fixed size arrays */
-  Cell *y, *z, *fcn;
-  char *s;
-
-  fcn = execute (a[0]);  /* the function itself */
-  s = fcn->nval;
-  if (!isfcn (fcn))
-    FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", s);
-  if (frame == NULL)
-  {
-    fp = frame = (struct Frame *) calloc (nframe += 100, sizeof (struct Frame));
-    if (frame == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of space for stack frames calling %s", s);
-  }
-  for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
-    ncall++;
-  ndef = (int)fcn->fval;      /* args in defn */
-  dprintf ("calling %s, %d args (%d in defn), fp=%d\n", s, ncall, ndef, (int)(fp - frame));
-  if (ncall > ndef)
-    WARNING ("function %s called with %d args, uses only %d",
-      s, ncall, ndef);
-  if (ncall + ndef > NARGS)
-    FATAL (AWK_ERR_LIMIT, "function %s has %d arguments, limit %d", s, ncall + ndef, NARGS);
-  for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
-  {  /* get call args */
-    dprintf ("evaluate args[%d], fp=%d:\n", i, (int)(fp - frame));
-    y = execute (x);
-    oargs[i] = y;
-    dprintf ("args[%d]: %s %f <%s>, t=%o\n",
-      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval);
-    if (isfcn (y))
-      FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, s);
-    if (isarr (y))
-      args[i] = y;  /* arrays by ref */
-    else
-      args[i] = copycell (y);
-    tempfree (y);
-  }
-  for (; i < ndef; i++)
-  {  /* add null args for ones not provided */
-    args[i] = gettemp ();
-    *args[i] = newcopycell;
-  }
-  fp++;  /* now ok to up frame */
-  if (fp >= frame + nframe)
-  {
-    int dfp = fp - frame;  /* old index */
-    frame = (struct Frame *)
-      realloc ((char *)frame, (nframe += 100) * sizeof (struct Frame));
-    if (frame == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of space for stack frames in %s", s);
-    fp = frame + dfp;
-  }
-  fp->fcncell = fcn;
-  fp->args = args;
-  fp->nargs = ndef;  /* number defined with (excess are locals) */
-  fp->retval = gettemp ();
-
-  dprintf ("start exec of %s, fp=%d\n", s, (int)(fp - frame));
-  y = execute ((Node *)(fcn->sval));  /* execute body */
-  dprintf ("finished exec of %s, fp=%d\n", s, (int)(fp - frame));
-
-  for (i = 0; i < ndef; i++)
-  {
-    Cell *t = fp->args[i];
-    if (isarr (t))
-    {
-      if (t->csub == CCOPY)
-      {
-        if (i >= ncall)
-        {
-          freecell (t);
-          t->csub = CTEMP;
-          tempfree (t);
-        }
-        else
-        {
-          oargs[i]->tval = t->tval;
-          oargs[i]->tval &= ~(STR | NUM | DONTFREE);
-          oargs[i]->sval = t->sval;
-          tempfree (t);
-        }
-      }
-    }
-    else if (t != y)
-    {  /* kludge to prevent freeing twice */
-      t->csub = CTEMP;
-      tempfree (t);
-    }
-    else if (t == y && t->csub == CCOPY)
-    {
-      t->csub = CTEMP;
-      tempfree (t);
-      freed = 1;
-    }
-  }
-  tempfree (fcn);
-  if (isexit (y) || isnext (y))
-    return y;
-  if (freed == 0)
-  {
-    tempfree (y);  /* don't free twice! */
-  }
-  z = fp->retval;      /* return value */
-  dprintf ("%s returns %g |%s| %o\n", s, getfval (z), getsval (z), z->tval);
-  fp--;
-  return z;
-}
 
 /// Make a copy of a cell in a temp
-Cell *copycell (Cell *x)
+static Cell *copycell (Cell *x)
 {
   Cell *y;
 
@@ -371,10 +243,138 @@ Cell *copycell (Cell *x)
   return y;
 }
 
+/*!
+  Function call
+  a[0] - function, a[1] - args
+*/
+Cell *call (Node **a, int n)
+{
+  static Cell newcopycell = { OCELL, CCOPY, 0, NULL, 0.0, NUM | STR | DONTFREE, NULL };
+  int i, ncall, ndef;
+  int freed = 0; /* handles potential double freeing when fcn & param share a tempcell */
+  Node *x;
+  Cell *y, *fcn, *z;
+  char *s;
+
+  fcn = execute (a[0]);  /* the function itself */
+  s = fcn->nval;
+  if (!isfcn (fcn))
+    FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", s);
+  if (interp->frame == NULL)
+  {
+    interp->frame = (struct Frame *) calloc (interp->nframe += 100, sizeof (struct Frame));
+    if (interp->frame == NULL)
+      FATAL (AWK_ERR_NOMEM, "out of space for stack frames calling %s", s);
+  }
+  for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
+    ncall++;
+  ndef = (int)fcn->fval;      /* args in defn */
+  dprintf ("calling %s, %d args (%d in defn), fp=%d\n", s, ncall, ndef, interp->frm);
+  if (ncall > ndef)
+    WARNING ("function %s called with %d args, uses only %d",
+      s, ncall, ndef);
+
+  if (++interp->frm >= interp->nframe)   // increment frame index
+  {
+    interp->frame = (struct Frame *)
+      realloc (interp->frame, (interp->nframe += 100) * sizeof (struct Frame));
+    if (interp->frame == NULL)
+      FATAL (AWK_ERR_NOMEM, "out of space for stack frames in %s", s);
+  }
+  Frame *fp = &interp->frame[interp->frm];
+  fp->fcncell = fcn;
+  fp->nargs = ndef;  // number of arguments
+  fp->retval = gettemp ();
+  fp->args = (Cell**)calloc (ndef, sizeof (Cell*));
+
+  for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
+  {  /* get call args */
+    dprintf ("evaluate args[%d], fp=%d:\n", i, interp->frm);
+    y = execute (x);
+    dprintf ("args[%d]: %s %f <%s>, t=%o\n",
+      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval);
+    if (isfcn (y))
+      FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, s);
+    if (i < ndef)
+    {
+      /* used arguments are stored in args array the rest are just evaluated 
+      (for eventual side effects) */
+      if (isarr (y))
+        fp->args[i] = y;  /* arrays by ref */
+      else
+        fp->args[i] = copycell (y);
+    }
+    tempfree (y);
+  }
+
+  for (; i < ndef; i++)
+  {  /* add null args for ones not provided */
+    fp->args[i] = gettemp ();
+    *fp->args[i] = newcopycell;
+  }
+  dprintf ("start exec of %s, fp=%d\n", s, interp->frm);
+  if (fcn->tval & FCN)
+    y = execute ((Node *)(fcn->sval));  /* execute body */
+  else
+  {
+    //set args for external function
+    awksymb *extargs = (awksymb *)calloc (ndef, sizeof (awksymb));
+    for (i = 0; i < ndef; i++)
+    {
+      extargs[i].name = fp->args[i]->nval;
+      if (fp->args[i]->tval & STR)
+      {
+        extargs[i].sval = getsval (fp->args[i]);
+        extargs[i].flags = AWKSYMB_STR;
+      }
+      else if (fp->args[i]->tval & NUM)
+      {
+        extargs[i].fval = getfval (fp->args[i]);
+        extargs[i].flags = AWKSYMB_NUM;
+      }
+      else if (fp->args[i]->tval & ARR)
+        extargs[i].flags = AWKSYMB_ARR;
+    }
+    awksymb ret{ 0,0,0,0.,0 };
+
+    //call external function
+    ((awkfunc)fcn->sval) (interp, &ret, ndef, extargs);
+
+    //free extargs
+    for (i = 0; i < ndef; i++)
+      if (extargs[i].flags & STR)
+        free (extargs[i].sval);
+    free (extargs);
+    z = gettemp ();
+    if (ret.flags & AWKSYMB_STR)
+      setsval (z, ret.sval);
+    else if (ret.flags & AWKSYMB_NUM)
+      setfval (z, ret.fval);
+  }
+  dprintf ("finished exec of %s, fp=%d\n", s, interp->frm);
+
+  for (i = 0; i < ndef; i++)
+  {
+    Cell *t = fp->args[i];
+    if (!isarr (t))
+      tempfree (t);
+  }
+  free (fp->args);
+  tempfree (fcn);
+  if (isexit (y) || isnext (y))
+    return y;
+
+  z = fp->retval;      /* return value */
+  dprintf ("%s returns %g |%s| %o\n", s, getfval (z), getsval (z), z->tval);
+  interp->frm--;
+  return z;
+}
+
 /// nth argument of a function
 Cell *arg (Node **a, int n)
 {
   n = ptoi (a[0]);  /* argument number, counting from 0 */
+  Frame *fp = interp->frame + interp->frm;
   dprintf ("arg(%d), fp->nargs=%d\n", n, fp->nargs);
   if (n + 1 > fp->nargs)
     FATAL (AWK_ERR_RUNTIME, "argument #%d of function %s was not supplied",
@@ -402,6 +402,7 @@ Cell *jump (Node **a, int n)
     if (a[0] != NULL)
     {
       y = execute (a[0]);
+      Frame *fp = interp->frame + interp->frm;
       if ((y->tval & (STR | NUM)) == (STR | NUM))
       {
         setsval (fp->retval, getsval (y));
@@ -451,7 +452,7 @@ Cell *awkgetline (Node **a, int n)
   if ((buf = (char *)malloc (bufsize)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in getline");
 
-  fflush (stdout);  /* in case someone is waiting for a prompt */
+  fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
   r = gettemp ();
   if (a[1] != NULL)
   {    /* getline < file */
@@ -1111,9 +1112,9 @@ Cell *awkprintf (Node **a, int n)
       interp->outredir (buf, len);
     else
     {
-      fwrite (buf, len, 1, stdout);
-      if (ferror (stdout))
-        FATAL (AWK_ERR_OUTFILE, "write error on stdout");
+      fwrite (buf, len, 1, interp->files[1].fp);
+      if (ferror (interp->files[1].fp))
+        FATAL (AWK_ERR_OUTFILE, "write error on %s", interp->files[1].fname);
     }
   }
   else
@@ -1809,7 +1810,7 @@ Cell *printstat (Node **a, int n)
   FILE *fp;
 
   if (a[1] == 0)  /* a[1] is redirection operator, a[2] is file */
-    fp = stdout;
+    fp = interp->files[1].fp;
   else
     fp = redirect (ptoi (a[1]), a[2]);
   for (x = a[0]; x != NULL; x = x->nnext)
@@ -1848,12 +1849,6 @@ FILE *redirect (int a, Node *b)
   tempfree (x);
   return fp;
 }
-
-struct FILE_STRUC {
-  FILE  *fp;
-  const char  *fname;
-  int  mode;  /* '|', 'a', 'w' => LE/LT, GT */
-};
 
 int nfiles;
 
@@ -1909,7 +1904,7 @@ FILE *openfile (int a, const char *us)
     nfiles = nnf;
     interp->files = nf;
   }
-  fflush (stdout);  /* force a semblance of order */
+  fflush (interp->files[1].fp);  /* force a semblance of order */
   m = a;
   if (a == GT)
   {
@@ -2000,6 +1995,13 @@ void closeall (void)
   int i, stat;
 
   //skip stdin, stdout and stderr
+  if (interp->files[0].fp != stdin)
+    fclose (interp->files[0].fp);
+  if (interp->files[1].fp != stdout)
+    fclose (interp->files[1].fp);
+  if (interp->files[2].fp != stderr)
+    fclose (interp->files[2].fp);
+
   for (i = 3; i < FOPEN_MAX; i++)
   {
     if (interp->files[i].fp)

@@ -61,8 +61,8 @@ void freenodes (void)
   while (temp)
   {
     alloc_list = temp->lalloc;
-    errprintf ("%Deleting node 0x%p %s", temp, tokname (temp->nobj));
-    errprintf (" type %s\n", temp->ntype == NVALUE ? "value" : temp->ntype == NSTAT ? "statement" : "expression");
+    dprintf ("%Deleting node 0x%p %s", temp, tokname (temp->nobj));
+    dprintf (" type %s\n", temp->ntype == NVALUE ? "value" : temp->ntype == NSTAT ? "statement" : "expression");
     free (temp);
     temp = alloc_list;
   }

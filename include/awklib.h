@@ -20,10 +20,9 @@ struct awksymb {
 #define AWKSYMB_INV   8   //invalid variable type
   double fval;
   char *sval;
-
 };
 
-typedef int (*awkfunc)(AWKINTERP *pinter, awksymb *ret, int nargs, ...);
+typedef int (*awkfunc)(AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args);
 
 AWKINTERP* awk_init (const char **vars);
 int awk_err (const char **msg);
@@ -34,9 +33,11 @@ int awk_addarg (AWKINTERP* pinter, const char *arg);
 int awk_exec (AWKINTERP* pinter);
 void awk_end (AWKINTERP* pinter);
 void awk_setdebug (int level);
-void awk_inredir (AWKINTERP* pinter, inproc user_input);
-void awk_outredir (AWKINTERP* pinter, outproc user_output);
-void awk_addfunc (AWKINTERP *pinter, awkfunc fn);
+void awk_infunc (AWKINTERP* pinter, inproc user_input);
+void awk_outfunc (AWKINTERP* pinter, outproc user_output);
+int awk_setoutput (AWKINTERP* pinter, const char *fname);
+int awk_setinput (AWKINTERP* pinter, const char *fname);
+int awk_addfunc (AWKINTERP *pinter, char *fname, awkfunc fn, int nargs);
 int awk_getvartype (AWKINTERP *pinter, awksymb* var);
 int awk_getvar (AWKINTERP *pinter, awksymb* var);
 int awk_setvar (AWKINTERP *pinter, awksymb* var);
