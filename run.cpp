@@ -45,7 +45,6 @@ extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
 
 Node  *winner = NULL;  /* root of parse tree */
-Cell  *tmps;    /* free temporary cells for execution */
 
 static Cell  truecell  ={ OBOOL, BTRUE, 0, 0, 1.0, NUM, NULL };
 Cell  *True  = &truecell;
@@ -63,9 +62,7 @@ static Cell  exitcell  ={ OJUMP, JEXIT, 0, 0, 0.0, NUM, NULL };
 Cell  *jexit  = &exitcell;
 static Cell  retcell    ={ OJUMP, JRET, 0, 0, 0.0, NUM, NULL };
 Cell  *jret  = &retcell;
-static Cell  tempcell  ={ OCELL, CTEMP, 0, NULL, 0.0, NUM|STR|DONTFREE, NULL };
 
-Node  *curnode = NULL;  /* the node being executed, for debugging */
 
 static Cell*  execute (Node *);
 static void   tfree (Cell *);
@@ -84,11 +81,7 @@ inline int isjump (const Cell* c) { return c->ctype == OJUMP; }
 inline int isexit (const Cell* c) { return c->csub == JEXIT; }
 inline int istrue (const Cell *c) { return c->csub == BTRUE; }
 
-inline void tempfree (Cell *x)
-{
-  if (x->csub == CTEMP)
-    tfree (x);
-}
+static void tempfree (Cell *x);
 
 
 
@@ -129,7 +122,6 @@ void run (Node *a)
   execute (a);
   closeall ();
   freefields ();
-  xfree (tmps);
 }
 
 inline int notlegal (int n)
@@ -151,7 +143,6 @@ Cell *execute (Node *u)
 
   for (a = u; ; a = a->nnext)
   {
-    curnode = a;
     if (isvalue (a))
     {
       x = (Cell *)(a->narg[0]);
@@ -221,165 +212,141 @@ ex1:
 }
 
 
-/// Make a copy of a cell in a temp
-static Cell *copycell (Cell *x)
-{
-  Cell *y;
-
-  /* copy is not constant or field */
-
-  y = gettemp ();
-  y->tval = x->tval & ~(CON | FLD | REC);
-  y->csub = CCOPY;  /* prevents freeing until call is over */
-  y->nval = x->nval;  /* BUG? */
-  if (isstr (x) /* || x->ctype == OCELL */)
-  {
-    y->sval = tostring (x->sval);
-    y->tval &= ~DONTFREE;
-  }
-  else
-    y->tval |= DONTFREE;
-  y->fval = x->fval;
-  return y;
-}
-
 /*!
   Function call
   a[0] - function, a[1] - args
 */
 Cell *call (Node **a, int n)
 {
-  static Cell newcopycell = { OCELL, CCOPY, 0, NULL, 0.0, NUM | STR | DONTFREE, NULL };
   int i, ncall, ndef;
-  int freed = 0; /* handles potential double freeing when fcn & param share a tempcell */
   Node *x;
-  Cell *y, *fcn, *z;
-  char *s;
+  Cell *y;
+  Frame frm;
 
-  fcn = execute (a[0]);  /* the function itself */
-  s = fcn->nval;
-  if (!isfcn (fcn))
-    FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", s);
-  if (interp->frame == NULL)
-  {
-    interp->frame = (struct Frame *) calloc (interp->nframe += 100, sizeof (struct Frame));
-    if (interp->frame == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of space for stack frames calling %s", s);
-  }
+  frm.fcn = execute (a[0]);  /* the function itself */
+  if (!isfcn (frm.fcn))
+    FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", frm.fcn->nval);
   for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
     ncall++;
-  ndef = (int)fcn->fval;      /* args in defn */
-  dprintf ("calling %s, %d args (%d in defn), fp=%d\n", s, ncall, ndef, interp->frm);
+  ndef = (int)frm.fcn->fval;      /* args in defn */
+  dprintf ("calling %s, %d args (%d in defn)\n", frm.fcn->nval, ncall, ndef);
   if (ncall > ndef)
     WARNING ("function %s called with %d args, uses only %d",
-      s, ncall, ndef);
+      frm.fcn->nval, ncall, ndef);
 
-  if (++interp->frm >= interp->nframe)   // increment frame index
-  {
-    interp->frame = (struct Frame *)
-      realloc (interp->frame, (interp->nframe += 100) * sizeof (struct Frame));
-    if (interp->frame == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of space for stack frames in %s", s);
-  }
-  Frame *fp = &interp->frame[interp->frm];
-  fp->fcncell = fcn;
-  fp->nargs = ndef;  // number of arguments
-  fp->retval = gettemp ();
-  fp->args = (Cell**)calloc (ndef, sizeof (Cell*));
+  frm.args = 0;
+  if (ndef)
+    frm.args = (Cell**)calloc (ndef, sizeof (Cell*));
 
   for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
   {  /* get call args */
-    dprintf ("evaluate args[%d], fp=%d:\n", i, interp->frm);
     y = execute (x);
-    dprintf ("args[%d]: %s %f <%s>, t=%o\n",
-      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), y->tval);
+    dprintf ("args[%d]: %s %f <%s>, t=%s\n",
+      i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), flags2str (y->tval));
     if (isfcn (y))
-      FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, s);
+      FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, frm.fcn->nval);
     if (i < ndef)
     {
-      /* used arguments are stored in args array the rest are just evaluated 
+      /* used arguments are stored in args array the rest are just evaluated
       (for eventual side effects) */
       if (isarr (y))
-        fp->args[i] = y;  /* arrays by ref */
+        frm.args[i] = y;  // arrays by ref
       else
-        fp->args[i] = copycell (y);
+      {
+        frm.args[i] = gettemp ();
+        frm.args[i]->csub = CARG;
+        if (isstr (y))
+        {
+          frm.args[i]->sval = tostring (y->sval);
+          frm.args[i]->tval |= STR;
+        }
+        frm.args[i]->fval = y->fval;
+      }
     }
     tempfree (y);
   }
 
   for (; i < ndef; i++)
   {  /* add null args for ones not provided */
-    fp->args[i] = gettemp ();
-    *fp->args[i] = newcopycell;
+    frm.args[i] = gettemp ();
   }
-  dprintf ("start exec of %s, fp=%d\n", s, interp->frm);
-  if (fcn->tval & FCN)
-    y = execute ((Node *)(fcn->sval));  /* execute body */
+  frm.nargs = ndef;
+  frm.ret = gettemp ();
+
+  //save previous function call frame
+  Frame prev = interp->fn;
+
+  //and replace it with current frame
+  interp->fn = frm;
+
+  dprintf ("start exec of %s\n", frm.fcn->nval);
+  if (frm.fcn->tval & FCN)
+    y = execute ((Node *)(frm.fcn->sval));  /* execute body */
   else
   {
     //set args for external function
     awksymb *extargs = (awksymb *)calloc (ndef, sizeof (awksymb));
     for (i = 0; i < ndef; i++)
     {
-      extargs[i].name = fp->args[i]->nval;
-      if (fp->args[i]->tval & STR)
+      extargs[i].name = frm.args[i]->nval;
+      if (frm.args[i]->tval & STR)
       {
-        extargs[i].sval = getsval (fp->args[i]);
+        extargs[i].sval = getsval (frm.args[i]);
         extargs[i].flags = AWKSYMB_STR;
       }
-      else if (fp->args[i]->tval & NUM)
+      else if (frm.args[i]->tval & NUM)
       {
-        extargs[i].fval = getfval (fp->args[i]);
+        extargs[i].fval = getfval (frm.args[i]);
         extargs[i].flags = AWKSYMB_NUM;
       }
-      else if (fp->args[i]->tval & ARR)
+      else if (frm.args[i]->tval & ARR)
         extargs[i].flags = AWKSYMB_ARR;
     }
-    awksymb ret{ 0,0,0,0.,0 };
+    awksymb extret{ 0,0,0,0.,0 };
 
     //call external function
-    ((awkfunc)fcn->sval) (interp, &ret, ndef, extargs);
+    ((awkfunc)frm.fcn->sval) (interp, &extret, ndef, extargs);
 
     //free extargs
     for (i = 0; i < ndef; i++)
       if (extargs[i].flags & STR)
         free (extargs[i].sval);
     free (extargs);
-    z = gettemp ();
-    if (ret.flags & AWKSYMB_STR)
-      setsval (z, ret.sval);
-    else if (ret.flags & AWKSYMB_NUM)
-      setfval (z, ret.fval);
+    if (extret.flags & AWKSYMB_STR)
+      setsval (frm.ret, extret.sval);
+    else if (extret.flags & AWKSYMB_NUM)
+      setfval (frm.ret, extret.fval);
   }
-  dprintf ("finished exec of %s, fp=%d\n", s, interp->frm);
-
+  dprintf ("finished exec of %s\n", frm.fcn->nval);
+  interp->fn = prev;    //restore previous function frame
   for (i = 0; i < ndef; i++)
   {
-    Cell *t = fp->args[i];
-    if (!isarr (t))
+    Cell *t = frm.args[i];
+    if (t->csub = CARG)
+    {
+      t->csub = CTEMP;
       tempfree (t);
+    }
   }
-  free (fp->args);
-  tempfree (fcn);
+  xfree (frm.args);
+  tempfree (frm.fcn);
   if (isexit (y) || isnext (y))
     return y;
 
-  z = fp->retval;      /* return value */
-  dprintf ("%s returns %g |%s| %o\n", s, getfval (z), getsval (z), z->tval);
-  interp->frm--;
-  return z;
+  dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval, getfval (frm.ret),
+    getsval (frm.ret), flags2str (frm.ret->tval));
+  return frm.ret;
 }
 
 /// nth argument of a function
 Cell *arg (Node **a, int n)
 {
   n = ptoi (a[0]);  /* argument number, counting from 0 */
-  Frame *fp = interp->frame + interp->frm;
-  dprintf ("arg(%d), fp->nargs=%d\n", n, fp->nargs);
-  if (n + 1 > fp->nargs)
+  dprintf ("arg(%d), nargs=%d\n", n, interp->fn.nargs);
+  if (n + 1 > interp->fn.nargs)
     FATAL (AWK_ERR_RUNTIME, "argument #%d of function %s was not supplied",
-      n + 1, fp->fcncell->nval);
-  return fp->args[n];
+      n + 1, interp->fn.fcn->nval);
+  return interp->fn.args[n];
 }
 
 /// break, continue, next, nextfile, return
@@ -401,18 +368,18 @@ Cell *jump (Node **a, int n)
   case RETURN:
     if (a[0] != NULL)
     {
+      Cell *pr = interp->fn.ret;
       y = execute (a[0]);
-      Frame *fp = interp->frame + interp->frm;
       if ((y->tval & (STR | NUM)) == (STR | NUM))
       {
-        setsval (fp->retval, getsval (y));
-        fp->retval->fval = getfval (y);
-        fp->retval->tval |= NUM;
+        setsval (pr, getsval (y));
+        pr->fval = getfval (y);
+        pr->tval |= NUM;
       }
       else if (y->tval & STR)
-        setsval (fp->retval, getsval (y));
+        setsval (pr, getsval (y));
       else if (y->tval & NUM)
-        setfval (fp->retval, getfval (y));
+        setfval (pr, getfval (y));
       else    /* can't happen */
         FATAL (AWK_ERR_RUNTIME, "bad type variable %d", y->tval);
       tempfree (y);
@@ -759,38 +726,29 @@ Cell *relop (Node **a, int n)
 }
 
 /// Free a tempcell
-void tfree (Cell *a)
+void tempfree (Cell *a)
 {
+  if (a->csub != CTEMP)
+    return;
+
   if (freeable (a))
   {
-    dprintf ("freeing %s %s %o\n", NN (a->nval), NN (a->sval), a->tval);
+    dprintf ("freeing %s %s %s\n", NN (a->nval), NN (a->sval), flags2str(a->tval));
     xfree (a->sval);
   }
-  if (a == tmps)
-    FATAL (AWK_ERR_OTHER, "tempcell list is curdled");
-  a->cnext = tmps;
-  tmps = a;
+  free (a);
 }
 
-/// Get a tempcell
+#define TEMPSCHUNK  100
+
+///  Get a tempcell
 Cell *gettemp (void)
 {
-  int i;
-  Cell *x;
+  Cell *x = (Cell*)calloc (1, sizeof(Cell));
 
-  if (!tmps)
-  {
-    tmps = (Cell *)calloc (100, sizeof (Cell));
-    if (!tmps)
-      FATAL (AWK_ERR_NOMEM, "out of space for temporaries");
-    for (i = 1; i < 100; i++)
-      tmps[i - 1].cnext = &tmps[i];
-    tmps[i - 1].cnext = 0;
-  }
-  x = tmps;
-  tmps = x->cnext;
-  *x = tempcell;
-
+  x->ctype = OCELL;
+  x->csub = CTEMP;
+  x->tval = NUM;
   return x;
 }
 

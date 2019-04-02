@@ -230,7 +230,6 @@ void awk_end (AWKINTERP *pinter)
   xfree (interp->progs);
   xfree (interp->lexprog);
   xfree (interp->files);
-  xfree (interp->frame);
   free (interp);
 }
 
@@ -242,15 +241,18 @@ int awk_err (const char **msg)
   return errorflag;
 }
 
-/// Sets debug level
-void awk_setdebug (int level)
+/// Set a new debug level. Return previous debug level
+int awk_setdebug (int level)
 {
 #ifndef NDEBUG
+  int prev = dbg;
   dbg = level;
   if (dbg > 1)
     yydebug = 1;
   errprintf ("Debug level is %d\n", dbg);
+  return prev;
 #endif
+  return 0;
 }
 
 /// Redirect input to a user function
@@ -479,7 +481,6 @@ int errprintf (const char *fmt, ...)
 }
 
 #ifndef NDEBUG
-const char *flags2str (int flags);
 
 void print_cell (Cell *c, int indent)
 {
@@ -491,12 +492,12 @@ void print_cell (Cell *c, int indent)
     "BTRUE", "BFALSE", "13", "14", "15", "16", "17", "18", "19", "20",
     "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE" };
 
-  errprintf ("%*cCell 0x%p ", indent, ' ', c);
-  errprintf (" %s %s Flags: %s", ctype_str[c->ctype], csub_str[c->csub], flags2str(c->tval));
-  errprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
+  dprintf ("%*cCell 0x%p ", indent, ' ', c);
+  dprintf (" %s %s Flags: %s", ctype_str[c->ctype], csub_str[c->csub], flags2str(c->tval));
+  dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
   if (c->nval)
-    errprintf (" Name: %s", c->nval);
-  errprintf (" Next: %p\n", c->cnext);
+    dprintf (" Name: %s", c->nval);
+  dprintf (" Next: %p\n", c->cnext);
 }
 
 void print_tree (Node *n, int indent)
@@ -607,8 +608,6 @@ void eprint (void)  /* try to print context around error */
 /// Print error location
 void error ()
 {
-  extern Node *curnode;
-
   errprintf ("\n");
   if (interp->status == AWKS_RUN && NR && *NR > 0)
   {
@@ -619,9 +618,7 @@ void error ()
   }
   if (interp->status == AWKS_COMPILING)
   {
-    if (curnode)
-      errprintf (" source line number %d", curnode->lineno);
-    else if (lineno)
+    if (lineno)
       errprintf (" source line number %d", lineno);
     if (cursource ())
       errprintf (" source file %s", cursource ());

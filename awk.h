@@ -80,8 +80,7 @@ typedef struct Cell {
 #define OJUMP   3
 
   uschar  csub;    /* Cell subtype, see below */
-#define CFREE   7
-#define CCOPY   6
+#define CARG    6     //Cell is function call argument
 #define CCON    5     //Cell is constant (number or string)
 #define CTEMP   4
 #define CVAR    2
@@ -117,7 +116,7 @@ typedef struct Cell {
 #define EXTFUN    02000 /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
-  struct Cell *cnext; /* ptr to next in arrays or temps list */
+  struct Cell *cnext; /* ptr to next in arrays*/
 } Cell;
 
 typedef struct Array {    /* symbol table array */
@@ -223,11 +222,12 @@ struct FILE_STRUC {
 typedef int (*inproc)();
 typedef int (*outproc)(const char *buf, size_t len);
 
-struct Frame {  /* stack frame for awk function calls */
-  int nargs;      /* number of arguments in this call */
-  Cell *fcncell;  /* pointer to Cell for function */
-  Cell **args;    /* pointer to array of arguments after execute */
-  Cell *retval;   /* return value */
+// Function call frame
+struct Frame {
+  Cell *fcn;    //the function
+  Cell **args;  //arguments
+  int nargs;    //number of arguments
+  Cell *ret;    // return value
 };
 
 typedef struct AWKINTERP {
@@ -254,10 +254,8 @@ typedef struct AWKINTERP {
   struct FILE_STRUC *files;    ///< opened files
   inproc inredir;       ///< input redirection function
   outproc outredir;     ///< output redirection function
-  struct Frame* frame;         ///< base of function call frames stack
-  int nframe;           ///< number of frames allocated
-  int frm;              ///< current frame index
-}AWKINTERP;
+  struct Frame  fn;     ///< frame data for current function call
+} AWKINTERP;
 
 extern AWKINTERP *interp;
 

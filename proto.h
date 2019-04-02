@@ -155,3 +155,4 @@ int   pclose (FILE *);
 void  SYNTAX (const char *, ...);
 void  FATAL (int err, const char *, ...);
 
+const char *flags2str (int flags);

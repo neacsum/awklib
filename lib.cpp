@@ -123,7 +123,6 @@ void initgetrec (void)
   infile = stdin;    /* no filenames, so use stdin */
 }
 
-#ifndef NDEBUG
 /// Quick and dirty character quoting can quote a few short character strings
 char *quote (char* in)
 {
@@ -159,7 +158,6 @@ char *quote (char* in)
   beg = out;
   return ret;
 }
-#endif
 
 /// Get next input record
 int getrec (char **pbuf, int *pbufsize, int isrecord)

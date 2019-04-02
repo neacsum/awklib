@@ -32,7 +32,7 @@ int awk_compile (AWKINTERP* pinter);
 int awk_addarg (AWKINTERP* pinter, const char *arg);
 int awk_exec (AWKINTERP* pinter);
 void awk_end (AWKINTERP* pinter);
-void awk_setdebug (int level);
+int awk_setdebug (int level);
 void awk_infunc (AWKINTERP* pinter, inproc user_input);
 void awk_outfunc (AWKINTERP* pinter, outproc user_output);
 int awk_setoutput (AWKINTERP* pinter, const char *fname);

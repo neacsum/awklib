@@ -135,32 +135,35 @@ public:
     xclose (out);
     xclose (prog);
     xclose (ref);
+    cleanup ();
   }
 
   void setup (const char *testfname);
   void makefiles ();
+  void cleanup ();
+
   AWKINTERP *interp;
+  string progname, inname, refname, outname;
   FILE *tst, *in, *out, *prog, *ref;
 };
 
 void awk_tester::setup (const char *testfile)
 {
-  char *testname, fname[FILENAME_MAX];
+  char *testname;
 
   CHECK (tst = fopen (testfile, "r"));
 
   testname = basename (testfile);
-  strcpy (fname, testname);
-  strcat (fname, ".awk");
-  CHECK (prog = fopen (fname, "w"));
+  progname = testname + string(".awk");
+  CHECK (prog = fopen (progname.c_str(), "w"));
 
-  strcpy (fname, testname);
-  strcat (fname, ".in");
-  CHECK (in = fopen (fname, "w"));
+  inname = testname + string (".in");
+  CHECK (in = fopen (inname.c_str(), "w"));
 
-  strcpy (fname, testname);
-  strcat (fname, ".ref");
-  CHECK (ref = fopen (fname, "w"));
+  refname = testname + string (".ref");
+  CHECK (ref = fopen (refname.c_str(), "w"));
+
+  outname = testname + string (".out");
 
   makefiles ();
   xclose (tst);
@@ -168,19 +171,10 @@ void awk_tester::setup (const char *testfile)
   xclose (prog);
   xclose (ref);
 
-  strcpy (fname, testname);
-  strcat (fname, ".awk");
-  CHECK (awk_addprogfile (interp, fname));
+  CHECK (awk_addprogfile (interp, progname.c_str()));
   CHECK (awk_compile (interp));
-
-  strcpy (fname, testname);
-  strcat (fname, ".in");
-  CHECK (awk_addarg (interp, fname));
-
-  strcpy (fname, testname);
-  strcat (fname, ".out");
-  CHECK (awk_setoutput (interp, fname));
-
+  CHECK (awk_addarg (interp, inname.c_str()));
+  CHECK (awk_setoutput (interp, outname.c_str()));
   CHECK (awk_exec (interp));
 }
 
@@ -188,7 +182,7 @@ void awk_tester::makefiles ()
 {
   int step = 0;
   char line[1024];
-  FILE *out = prog;
+  FILE *output = prog;
   while (fgets (line, sizeof (line), tst))
   {
     if (line[0] == '#' && line[1] == '#')
@@ -196,10 +190,10 @@ void awk_tester::makefiles ()
       switch (step++)
       {
       case 0: // end of program; beginning of input data
-        out = in; break;
+        output = in; break;
 
       case 1: // end of input data; beginning of reference output
-        out = ref; break;
+        output = ref; break;
 
       case 2: //The End
         return;
@@ -210,34 +204,54 @@ void awk_tester::makefiles ()
       }
     }
     else
-      fputs (line, out);
+      fputs (line, output);
   }
   return;
 }
 
+void awk_tester::cleanup ()
+{
+  remove (progname.c_str());
+  remove (inname.c_str());
+  remove (refname.c_str());
+  remove (outname.c_str());
+}
 
 TEST_FIXTURE (awk_tester, T1)
 {
   setup ("..\\testdir\\tests\\1_printall.tst");
   CHECK_FILE_EQUAL ("1_printall.out", "1_printall.ref");
-
-  system ("del 1_printall.*");
 }
 
 TEST_FIXTURE (awk_tester, T63)
 {
   setup ("..\\testdir\\tests\\63_fun.tst");
   CHECK_FILE_EQUAL ("63_fun.out", "63_fun.ref");
-
-  system ("del 63_fun.*");
 }
 
+TEST_FIXTURE (awk_tester, T64)
+{
+  setup ("..\\testdir\\tests\\64_funarg.tst");
+  CHECK_FILE_EQUAL ("64_funarg.out", "64_funarg.ref");
+}
+
+TEST_FIXTURE (awk_tester, T65)
+{
+  int lvl = awk_setdebug (0);
+  UnitTest::Timer t;
+  t.Start ();
+  setup ("..\\testdir\\tests\\65_funackermann.tst");
+  int ms = t.GetTimeInMs ();
+  printf ("Ackermann test done in %d msec\n", ms);
+  CHECK_FILE_EQUAL ("65_funackermann.out", "65_funackermann.ref");
+  awk_setdebug (lvl);
+}
 
 int main (int argc, char **argv)
 {
   int ret;
-
   awk_setdebug (3);
+#if 0
   AWKINTERP *interp = awk_init (NULL);
   if (awk_setprog (interp, prog)
    && awk_compile (interp))
@@ -251,6 +265,7 @@ int main (int argc, char **argv)
   puts (out.str ().c_str ());
   awk_end (interp);
 
+#endif
 
   ret = UnitTest::RunAllTests ();
 
