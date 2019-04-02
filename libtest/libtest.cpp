@@ -99,6 +99,26 @@ TEST_FIXTURE (fixt, setvar_newarray)
   CHECK_EQUAL (35, vo.fval);
 }
 
+void fact (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
+{
+  int prod = 1;
+  for (int i = 2; i <= args[0].fval; i++)
+    prod *= i;
+  ret->fval = prod;
+  ret->flags = AWKSYMB_NUM;
+}
+
+TEST_FIXTURE (fixt, extfun)
+{
+  awk_setprog (interp, " BEGIN {n = factorial(3); print \"factorial(\" 3 \")=\", n}");
+  awk_compile (interp);
+  awk_addfunc (interp, "factorial", fact, 1);
+  awk_exec (interp);
+  awksymb n{ "n" };
+  awk_getvar (interp, &n);
+  CHECK_EQUAL (6, n.fval);
+}
+
 char *basename (const char *path)
 {
   static char buf[FILENAME_MAX];

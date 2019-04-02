@@ -222,7 +222,7 @@ void freearray (Array *ap)
           else
             dprintf (" self\n");
         }
-        else if (cp->tval & FCN)
+        else if (cp->tval & (FCN|EXTFUN))
         {
           dprintf ("... skipping function\n");
         }

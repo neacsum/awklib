@@ -288,33 +288,27 @@ Cell *call (Node **a, int n)
     awksymb *extargs = (awksymb *)calloc (ndef, sizeof (awksymb));
     for (i = 0; i < ndef; i++)
     {
-      extargs[i].name = frm.args[i]->nval;
-      if (frm.args[i]->tval & STR)
+      if (frm.args[i]->tval & ARR)
+      {
+        extargs[i].flags = AWKSYMB_ARR;
+        extargs[i].name = frm.args[i]->nval;
+      }
+      else
       {
         extargs[i].sval = getsval (frm.args[i]);
-        extargs[i].flags = AWKSYMB_STR;
-      }
-      else if (frm.args[i]->tval & NUM)
-      {
         extargs[i].fval = getfval (frm.args[i]);
-        extargs[i].flags = AWKSYMB_NUM;
+        extargs[i].flags = AWKSYMB_NUM | AWKSYMB_STR;
       }
-      else if (frm.args[i]->tval & ARR)
-        extargs[i].flags = AWKSYMB_ARR;
     }
     awksymb extret{ 0,0,0,0.,0 };
 
     //call external function
     ((awkfunc)frm.fcn->sval) (interp, &extret, ndef, extargs);
 
-    //free extargs
-    for (i = 0; i < ndef; i++)
-      if (extargs[i].flags & STR)
-        free (extargs[i].sval);
     free (extargs);
     if (extret.flags & AWKSYMB_STR)
       setsval (frm.ret, extret.sval);
-    else if (extret.flags & AWKSYMB_NUM)
+    if (extret.flags & AWKSYMB_NUM)
       setfval (frm.ret, extret.fval);
   }
   dprintf ("finished exec of %s\n", frm.fcn->nval);

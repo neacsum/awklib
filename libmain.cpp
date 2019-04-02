@@ -392,7 +392,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   };
 }
 
-int awk_addfunc (AWKINTERP *pinter, char *fname, awkfunc fn, int nargs)
+int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
 {
   if (interp->status != AWKS_COMPILED)
     return 0;
@@ -401,16 +401,16 @@ int awk_addfunc (AWKINTERP *pinter, char *fname, awkfunc fn, int nargs)
   symtab = interp->symtab;
   try {
     Cell *cp = lookup (fname, symtab);
-    if (cp)
-      return 0; //already defined
-    cp = setsymtab (fname, "", nargs, EXTFUN, symtab);
-    return 1;
+    if (!cp)
+      return 0; //symbol not seen in compiled program
+    cp->tval = EXTFUN;
+    cp->fval = nargs;
+    cp->sval = (char *)fn;
   }
   catch (int&) {
     return 0;
   };
-
-
+  return 1;
 }
 
 

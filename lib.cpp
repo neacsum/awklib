@@ -104,6 +104,7 @@ void initgetrec (void)
   int i;
   char *p;
 
+  infile = NULL;
   for (i = 1; i < *ARGC; i++)
   {
     p = getargv (i); /* find 1st real filename */

@@ -22,7 +22,7 @@ struct awksymb {
   char *sval;
 };
 
-typedef int (*awkfunc)(AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args);
+typedef void (*awkfunc)(AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args);
 
 AWKINTERP* awk_init (const char **vars);
 int awk_err (const char **msg);
@@ -37,7 +37,7 @@ void awk_infunc (AWKINTERP* pinter, inproc user_input);
 void awk_outfunc (AWKINTERP* pinter, outproc user_output);
 int awk_setoutput (AWKINTERP* pinter, const char *fname);
 int awk_setinput (AWKINTERP* pinter, const char *fname);
-int awk_addfunc (AWKINTERP *pinter, char *fname, awkfunc fn, int nargs);
+int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs);
 int awk_getvartype (AWKINTERP *pinter, awksymb* var);
 int awk_getvar (AWKINTERP *pinter, awksymb* var);
 int awk_setvar (AWKINTERP *pinter, awksymb* var);
