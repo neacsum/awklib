@@ -102,7 +102,7 @@ void freefields (void)
 void initgetrec (void)
 {
   int i;
-  char *p;
+  const char *p;
 
   infile = NULL;
   for (i = 1; i < *ARGC; i++)
@@ -168,7 +168,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
   char *buf = *pbuf;
   uschar saveb0;
   int bufsize = *pbufsize, savebufsize = bufsize;
-  char* file = 0;
+  const char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
     quote(*RS), quote(*FS), *ARGC, *FILENAME);
@@ -321,10 +321,11 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
 }
 
 /// Get ARGV[n]
-char *getargv (int n)
+const char *getargv (int n)
 {
   Cell *x;
-  char *s, temp[50];
+  const char *s;
+  char temp[50];
   extern Array *ARGVtab;
 
   sprintf (temp, "%d", n);
@@ -616,7 +617,8 @@ int refldbld (const char *rec, const char *fs)
 void recbld (void)
 {
   int i;
-  char *r, *p;
+  char *r;
+  const char *p;
 
   if (donerec == 1)
     return;

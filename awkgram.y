@@ -33,6 +33,7 @@ void yyinit (void);
 
 Node	*beginloc = 0;
 Node	*endloc = 0;
+Node	*winner = 0;
 int	infunc	= 0;	/* = 1 if in arglist or body of func */
 int	inloop	= 0;	/* = 1 if in while, for, do */
 char	*curfname = 0;	/* current function name */
@@ -425,7 +426,7 @@ varlist:
 varname:
 	  VAR			{ $$ = celltonode($1, CVAR); }
 	| ARG 			{ $$ = op1(ARG, itonp($1)); }
-	| VARNF			{ $$ = op1(VARNF, (Node *) $1); }
+	| VARNF			{ $$ = op1(VARNF, celltonode($1, CVAR)); }
 	;
 
 

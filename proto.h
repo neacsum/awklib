@@ -49,7 +49,7 @@ Node* op3 (int, Node *, Node *, Node *);
 Node* op4 (int, Node *, Node *, Node *, Node *);
 Node* stat2 (int, Node *, Node *);
 Node* stat4 (int, Node *, Node *, Node *, Node *);
-Node* celltonode (Cell *, int);
+Node* celltonode (Cell *c, int csub);
 Node* rectonode (void);
 Node* makearr (Node *);
 Node* pa2stat (Node *, Node *, Node *);
@@ -59,7 +59,7 @@ int   isarg (const char *);
 Cell* (*proctab[])(Node **, int);
 int   ptoi (void *);
 Node* itonp (int);
-void  freenodes (void);
+void  freenode (Node* n);
 void  syminit (void);
 void  arginit (int, char **);
 void  envinit (void);
@@ -71,10 +71,10 @@ Cell* setsymtab (const char *name, const char *sval, Awkfloat nval, unsigned int
 Cell* lookup (const char *name, Array *tab);
 double setfval (Cell *, Awkfloat);
 void  funnyvar (Cell *, const char *);
-char* setsval (Cell *, const char *);
+const char* setsval (Cell *, const char *);
 double getfval (Cell *);
-char* getsval (Cell *);
-char* getpssval (Cell *);     /* for print */
+const char* getsval (Cell *);
+const char* getpssval (Cell *);     /* for print */
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
@@ -88,7 +88,7 @@ int   awkputs (const char *str, FILE *fp);
 
 void  nextfile (void);
 int   readrec (char **buf, int *bufsize, FILE *inf);
-char* getargv (int);
+const char* getargv (int);
 void  setclvar (const char *);
 void  fldbld (void);
 void  cleanfld (int, int);

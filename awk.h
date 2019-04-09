@@ -56,7 +56,7 @@ extern char  **OFMT;
 extern Awkfloat *NR;
 extern Awkfloat *FNR;
 extern Awkfloat *NF;
-extern char  **FILENAME;
+extern const char** FILENAME;
 extern char  **SUBSEP;
 extern Awkfloat *RSTART;
 extern Awkfloat *RLENGTH;
@@ -85,7 +85,6 @@ typedef struct Cell {
 #define CTEMP   4
 #define CVAR    2
 #define CFLD    1
-#define CUNK    0
 
 /* bool subtypes */
 #define BTRUE   11
@@ -103,17 +102,15 @@ typedef struct Cell {
   char  *sval;        /* string value */
   Awkfloat fval;      /* value as number */
   int   tval;         /* type info: STR|NUM|ARR|FCN|FLD|CON|DONTFREE|CONVC|CONVO */
-#define NUM       01    /* number value is valid */
-#define STR       02    /* string value is valid */
-#define DONTFREE  04    /* string space is not freeable */
-#define CON       010   /* this is a constant */
-#define ARR       020   /* this is an array */
-#define FCN       040   /* this is a function name */
-#define FLD       0100  /* this is a field $1, $2, ... */
-#define REC       0200  /* this is $0 */
-#define CONVC     0400  /* string was converted from number via CONVFMT */
-#define CONVO     01000 /* string was converted from number via OFMT */
-#define EXTFUN    02000 /* external function */
+#define NUM       0x001   /* number value is valid */
+#define STR       0x002   /* string value is valid */
+#define DONTFREE  0x004   /* string space is not freeable */
+#define ARR       0x008   /* this is an array */
+#define FCN       0x010   /* this is a function name */
+#define FLD       0x020   /* this is a field $1, $2, ... */
+#define REC       0x040   /* this is $0 */
+#define CONVC     0x080   /* string was converted from number via CONVFMT */
+#define EXTFUN    0x100   /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
   struct Cell *cnext; /* ptr to next in arrays*/
@@ -162,13 +159,11 @@ typedef struct Node {
   int  lineno;
   int  nobj;              ///<token id
   int  args;              ///< number of arguments
-  struct Node *lalloc;    ///< Linked list of allocated nodes
   struct  Node *narg[1];  ///< variable: actual size set by calling malloc
 } Node;
 
 #define  NIL  ((Node *) 0)
 
-extern Node  *winner;
 extern Node  *nullstat;
 extern Node  *nullnode;
 

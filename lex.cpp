@@ -215,7 +215,7 @@ int yylex (void)
       return word (buf);
     if (isdigit (c))
     {
-      yylval.cp = setsymtab (buf, tostring (buf), atof (buf), (CON | NUM | STR), symtab);
+      yylval.cp = setsymtab (buf, NULL, atof (buf), NUM, symtab);
       RET (NUMBER)
     }
 
@@ -394,7 +394,7 @@ int yylex (void)
           unputstr (buf);
           RET (INDIRECT)
         }
-        yylval.cp = setsymtab (buf, "", 0.0, STR | NUM, symtab);
+        yylval.cp = setsymtab (buf, NULL, 0.0, NUM, symtab);
         RET (IVAR)
       }
       else if (c == 0)
@@ -525,7 +525,8 @@ int string (void)
   *bp = 0;
   s = tostring (buf);
   *bp++ = ' '; *bp++ = 0;
-  yylval.cp = setsymtab (buf, s, 0.0, CON | STR | DONTFREE, symtab);
+  yylval.cp = setsymtab (buf, s, 0.0, STR, symtab);
+  free (s);
   RET (STRING)
 }
 
@@ -574,7 +575,7 @@ int word (char *w)
       RET (kp->type)
 
     case VARNF:
-      yylval.cp = setsymtab ("NF", "", 0.0, NUM, symtab);
+      yylval.cp = setsymtab ("NF", NULL, 0.0, NUM, symtab);
       RET (VARNF)
 
     default:
@@ -589,7 +590,7 @@ int word (char *w)
   }
   else
   {
-    yylval.cp = setsymtab (w, "", 0.0, STR | NUM | DONTFREE, symtab);
+    yylval.cp = setsymtab (w, NULL, 0.0, NUM, symtab);
     if (c == '(')
       RET (CALL)
     else

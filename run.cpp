@@ -24,7 +24,6 @@ THIS SOFTWARE.
 
 #include <stdio.h>
 #include <ctype.h>
-#include <setjmp.h>
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -40,11 +39,8 @@ THIS SOFTWARE.
 #include <awkerr.h>
 #include <awklib.h>
 
-jmp_buf env;
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
-
-Node  *winner = NULL;  /* root of parse tree */
 
 static Cell  truecell  ={ OBOOL, BTRUE, 0, 0, 1.0, NUM, NULL };
 Cell  *True  = &truecell;
@@ -76,7 +72,6 @@ inline int isnext (const Cell* c) { return c->csub == JNEXT || c->csub == JNEXTF
 inline int isret (const Cell* c) { return c->csub == JRET; }
 inline int isbreak (const Cell* c) { return c->csub == JBREAK; }
 inline int iscont (const Cell* c) { return c->csub == JCONT; }
-inline int isexpr (const Node* n) { return n->ntype == NEXPR; }
 inline int isjump (const Cell* c) { return c->ctype == OJUMP; }
 inline int isexit (const Cell* c) { return c->csub == JEXIT; }
 inline int istrue (const Cell *c) { return c->csub == BTRUE; }
@@ -114,6 +109,10 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
       *pbptr = tbuf + boff;
   }
   return 1;
+}
+
+void cells_init ()
+{
 }
 
 /// Execution of parse tree starts here
@@ -161,7 +160,7 @@ Cell *execute (Node *u)
       fldbld ();
     else if (isrec (x) && !donerec)
       recbld ();
-    if (isexpr (a))
+    if (a->ntype == NEXPR)
       return x;
     if (isjump (x))
       return x;
@@ -176,38 +175,42 @@ Cell *program (Node **a, int n)
 {        /* a[0] = BEGIN, a[1] = body, a[2] = END */
   Cell *x;
 
-  if (setjmp (env) != 0)
-    goto ex;
-  if (a[0]) 
-  {    /* BEGIN */
-    x = execute (a[0]);
-    if (isexit (x))
-      return True;
-    if (isjump (x))
-      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
-    tempfree (x);
-  }
-  if (a[1] || a[2])
-  {
-    while (getrec (&record, &recsize, 1) > 0)
-    {
-      x = execute (a[1]);
+  try {
+    if (a[0])
+    {    /* BEGIN */
+      x = execute (a[0]);
       if (isexit (x))
-        break;
+        return True;
+      if (isjump (x))
+        FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
       tempfree (x);
     }
+    if (a[1] || a[2])
+    {
+      while (getrec (&record, &recsize, 1) > 0)
+      {
+        x = execute (a[1]);
+        if (isexit (x))
+          break;
+        tempfree (x);
+      }
+    }
   }
-ex:
-  if (setjmp (env) != 0)  /* handles exit within END */
-    goto ex1;
-  if (a[2])
-  {    /* END */
-    x = execute (a[2]);
-    if (isbreak (x) || isnext (x) || iscont (x))
-      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
-    tempfree (x);
+  catch (int rc)
+  {
+    if (rc == 0)
+    {
+      if (a[2])
+      {    /* END */
+        x = execute (a[2]);
+        if (isbreak (x) || isnext (x) || iscont (x))
+          FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
+        tempfree (x);
+      }
+    }
+    else
+      throw;
   }
-ex1:
   return True;
 }
 
@@ -295,7 +298,7 @@ Cell *call (Node **a, int n)
       }
       else
       {
-        extargs[i].sval = getsval (frm.args[i]);
+        extargs[i].sval = (char *)getsval (frm.args[i]);
         extargs[i].fval = getfval (frm.args[i]);
         extargs[i].flags = AWKSYMB_NUM | AWKSYMB_STR;
       }
@@ -357,7 +360,7 @@ Cell *jump (Node **a, int n)
       errorflag = (int)getfval (y);
       tempfree (y);
     }
-    longjmp (env, 1);
+    throw (int)0;
 
   case RETURN:
     if (a[0] != NULL)
@@ -469,14 +472,15 @@ Cell *getnf (Node **a, int n)
 {
   if (donefld == 0)
     fldbld ();
-  return (Cell *)a[0];
+  Cell *pnf = execute (a[0]);
+  return pnf;
 }
 
 Cell *array (Node **a, int n)
 {
   /* a[0] is symtab, a[1] is list of subscripts */
   Cell *x, *y, *z;
-  char *s;
+  const char *s;
   Node *np;
   char *buf;
   int bufsz = recsize;
@@ -521,7 +525,7 @@ Cell *awkdelete (Node **a, int n)
   /* a[0] is symtab, a[1] is list of subscripts */
   Cell *x, *y;
   Node *np;
-  char *s;
+  const char *s;
   int nsub = strlen (*SUBSEP);
 
   x = execute (a[0]);  /* Cell* for symbol table */
@@ -566,7 +570,7 @@ Cell *intest (Node **a, int n)
   Cell *x, *ap, *k;
   Node *p;
   char *buf;
-  char *s;
+  const char *s;
   int bufsz = recsize;
   int nsub = strlen (*SUBSEP);
 
@@ -609,7 +613,7 @@ Cell *intest (Node **a, int n)
 Cell *matchop (Node **a, int n)
 {
   Cell *x, *y;
-  char *s, *t;
+  const char *s, *t;
   int i;
   fa *pfa;
   int (*mf)(fa *, const char *) = match, mode = 0;
@@ -752,7 +756,7 @@ Cell *indirect (Node **a, int n)
   Awkfloat val;
   Cell *x;
   int m;
-  char *s;
+  const char *s;
 
   x = execute (a[0]);
   val = getfval (x);  /* freebsd: defend against super large field numbers */
@@ -764,8 +768,6 @@ Cell *indirect (Node **a, int n)
   /* BUG: can x->nval ever be null??? */
   tempfree (x);
   x = fieldadr (m);
-  x->ctype = OCELL;  /* BUG?  why are these needed? */
-  x->csub = CFLD;
   return x;
 }
 
@@ -773,8 +775,8 @@ Cell *indirect (Node **a, int n)
 Cell *substr (Node **a, int nnn)
 {
   int k, m, n;
-  char *s;
-  int temp;
+  const char *s;
+  char *ss;
   Cell *x, *y, *z = 0;
 
   x = execute (a[0]);
@@ -812,10 +814,10 @@ Cell *substr (Node **a, int nnn)
     n = k - m;
   dprintf ("substr: m=%d, n=%d, s=%s\n", m, n, s);
   y = gettemp ();
-  temp = s[n + m - 1];  /* with thanks to John Linderman */
-  s[n + m - 1] = '\0';
-  setsval (y, s + m - 1);
-  s[n + m - 1] = temp;
+  ss = strdup (s);
+  ss[n + m - 1] = '\0';
+  setsval (y, &ss[m - 1]);
+  free (ss);
   tempfree (x);
   return(y);
 }
@@ -824,7 +826,7 @@ Cell *substr (Node **a, int nnn)
 Cell *sindex (Node **a, int nnn)
 {
   Cell *x, *y, *z;
-  char *s1, *s2, *p1, *p2, *q;
+  const char *s1, *s2, *p1, *p2, *q;
   Awkfloat v = 0.0;
 
   x = execute (a[0]);
@@ -965,14 +967,15 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p);
     switch (flag)
     {
-    case '?':  sprintf (p, "%s", fmt);  /* unknown, so dump it too */
-      t = getsval (x);
-      n = strlen (t);
+    case '?':
+      sprintf (p, "%s", fmt);  /* unknown, so dump it too */
+      os = getsval (x);
+      n = strlen (os);
       if (fmtwd > n)
         n = fmtwd;
       adjbuf (&buf, &bufsize, 1 + strlen (p) + n + p - buf, recsize, &p);
       p += strlen (p);
-      sprintf (p, "%s", t);
+      sprintf (p, "%s", os);
       break;
     case 'a':
     case 'A':
@@ -980,13 +983,13 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     case 'd':  sprintf (p, fmt, (long)getfval (x)); break;
     case 'u':  sprintf (p, fmt, (int)getfval (x)); break;
     case 's':
-      t = getsval (x);
-      n = strlen (t);
+      os = getsval (x);
+      n = strlen (os);
       if (fmtwd > n)
         n = fmtwd;
       if (!adjbuf (&buf, &bufsize, 1 + n + p - buf, recsize, &p))
-        FATAL (AWK_ERR_NOMEM, "huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, t);
-      sprintf (p, fmt, t);
+        FATAL (AWK_ERR_NOMEM, "huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, os);
+      sprintf (p, fmt, os);
       break;
     case 'c':
       if (isnum (x))
@@ -1793,7 +1796,7 @@ FILE *redirect (int a, Node *b)
 {
   FILE *fp;
   Cell *x;
-  char *fname;
+  const char *fname;
 
   x = execute (b);
   fname = getsval (x);
@@ -1983,16 +1986,18 @@ void flush_all (void)
       fflush (interp->files[i].fp);
 }
 
-void backsub(char **pb_ptr, char **sptr_ptr);
+void backsub(char **pb_ptr, const char **sptr_ptr);
 
 /// substitute command
 Cell *sub (Node **a, int nnn)
 {
-  char *sptr, *pb, *q;
+  char *pb, *q;
   Cell *x, *y, *result;
-  char *t, *buf;
+  const char *t, *sptr;
+  char *buf;
   fa *pfa;
   int bufsz = recsize;
+
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in sub");
@@ -2058,7 +2063,8 @@ Cell *sub (Node **a, int nnn)
 Cell *gsub (Node **a, int nnn)
 {
   Cell *x, *y;
-  char *rptr, *sptr, *t, *pb, *q;
+  char *pb, *q;
+  const char *t, *rptr, *sptr;
   char *buf;
   fa *pfa;
   int mflag, tempstat, num;
@@ -2172,11 +2178,12 @@ Cell *gsub (Node **a, int nnn)
   return x;
 }
 
-///  handle \\& variations
-void backsub (char **pb_ptr, char **sptr_ptr)
+/*!  handle \\& variations */
+void backsub (char **pb_ptr, const char **sptr_ptr)
 {
   /* sptr[0] == '\\' */
-  char *pb = *pb_ptr, *sptr = *sptr_ptr;
+  char *pb = *pb_ptr;
+  const char* sptr = *sptr_ptr;
 
   if (sptr[1] == '\\')
   {

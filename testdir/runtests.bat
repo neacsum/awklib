@@ -3,11 +3,13 @@ rem
 rem Run all tests in tests directory.
 rem
 
-awk --version
+set AWK="..\x86\debug\awk.exe"
+
+%awk% --version
 for %%i in (tests\*.tst) do (
   .\echo -n "Running test %%~ni... "
   maketest %%i
-  awk -f %%~ni.awk %%~ni.in >%%~ni.out
+  %awk% -f %%~ni.awk %%~ni.in >%%~ni.out
   fc /A %%~ni.ref %%~ni.out >NUL
   if errorlevel 1 (
     .\echo failed

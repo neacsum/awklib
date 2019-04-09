@@ -15,6 +15,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libtest", "libtest\libtest.
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0} = {DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "interp", "interp\interp.vcxproj", "{398F290F-49A7-498A-9DD2-AE6235E37995}"
+	ProjectSection(ProjectDependencies) = postProject
+		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0} = {DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -47,6 +52,14 @@ Global
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Release|x64.Build.0 = Release|x64
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Release|x86.ActiveCfg = Release|Win32
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Release|x86.Build.0 = Release|Win32
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Debug|x64.ActiveCfg = Debug|x64
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Debug|x64.Build.0 = Debug|x64
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Debug|x86.ActiveCfg = Debug|Win32
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Debug|x86.Build.0 = Debug|Win32
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Release|x64.ActiveCfg = Release|x64
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Release|x64.Build.0 = Release|x64
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Release|x86.ActiveCfg = Release|Win32
+		{398F290F-49A7-498A-9DD2-AE6235E37995}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

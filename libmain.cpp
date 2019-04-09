@@ -22,7 +22,7 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ****************************************************************/
 
-const char  *version = "version " __DATE__;
+static const char  *version = "version " __DATE__;
 
 #include <stdio.h>
 #include <ctype.h>
@@ -38,13 +38,14 @@ const char  *version = "version " __DATE__;
 #define  MAX_PFILE  20  /* max number of -f's */
 
 extern  int  nfields;
-extern  FILE* yyin;  /* lex input file */
+extern  FILE* yyin;     /* lex input file */
 extern char *curfname;  ///<current function name
 
 AWKINTERP *interp;      ///< current interpreter status block
 
-char errmsg[1024];    ///< last error message
-extern  int errorflag; ///< non-zero if any syntax errors; set by yyerror
+char errmsg[1024];      ///< last error message
+extern  int errorflag;  ///< non-zero if any syntax errors; set by yyerror
+extern Node *winner;    // parser stores root of program tree here
 
 #ifndef NDEBUG
 int dbg  = 0;
@@ -76,7 +77,7 @@ AWKINTERP* awk_init (const char **vars)
     syminit ();
 
     //add all user set variables
-    while (vars)
+    while (vars && *vars)
     {
       if (isclvar (*vars))
         setclvar (*vars++);
@@ -188,7 +189,7 @@ int awk_compile (AWKINTERP *pinter)
     }
   }
   catch (int) {
-    freenodes ();
+    freenode (interp->prog_root);
     interp->status = AWKS_FATAL;
     return 0;
   }
@@ -222,7 +223,7 @@ void awk_end (AWKINTERP *pinter)
   for (int i = 0; i < interp->argc; i++)
     free (interp->argv[i]);
   xfree (interp->argv);
-  freenodes ();
+  freenode (interp->prog_root);
   dprintf ("freeing symbol table\n");
   freearray (interp->symtab);
   for (int i = 0; i < interp->nprog; i++)
