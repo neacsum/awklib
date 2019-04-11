@@ -653,10 +653,10 @@ int input (void)
   int c;
 
   if (yysptr > yysbuf)
-    c = (uschar)*--yysptr;
+    c = (unsigned char)*--yysptr;
   else if (interp->lexptr != NULL)
   {  /* awk '...' */
-    if ((c = (uschar)*interp->lexptr) != 0)
+    if ((c = (unsigned char)*interp->lexptr) != 0)
       interp->lexptr++;
   }
   else        /* awk -f ... */

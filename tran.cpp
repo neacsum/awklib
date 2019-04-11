@@ -576,14 +576,14 @@ char *qstring (const char *is, int delim)
   const char *pd;
   int c, n;
 
-  uschar *s = (uschar *)is;
-  uschar *buf, *bp;
+  const char *s = is;
+  char *buf, *bp;
 
   if (!(pd = strchr (is, delim)))
     FATAL (AWK_ERR_ARG, "invalid delimiter for qstring");
 
   n = pd - is;
-  if ((buf = (uschar *)malloc (n + 3)) == NULL)
+  if ((buf = (char *)malloc (n + 3)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space in qstring(%s)", s);
   for (bp = buf; (c = *s) != delim; s++)
   {

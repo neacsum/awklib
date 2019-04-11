@@ -28,7 +28,7 @@ typedef double  Awkfloat;
 
 /* unsigned char is more trouble than it's worth */
 
-typedef  unsigned char uschar;
+//typedef  unsigned char uschar;
 
 #define  xfree(a)  { if ((a) != NULL) { free((void *) (a)); (a) = NULL; } }
 
@@ -73,12 +73,12 @@ extern  int  patlen;    /* length of pattern matched.  set in b.c */
 /* Cell:  all information about a variable or constant */
 
 typedef struct Cell {
-  uschar  ctype;    /* Cell type, see below */
+  unsigned char ctype;    /* Cell type, see below */
 #define OCELL   1
 #define OBOOL   2
 #define OJUMP   3
 
-  uschar  csub;    /* Cell subtype, see below */
+  unsigned char csub;    /* Cell subtype, see below */
 #define CARG    6     //Cell is function call argument
 #define CCON    5     //Cell is constant (number or string)
 #define CTEMP   4
@@ -186,15 +186,15 @@ typedef struct rrow {
   union {
     int i;
     Node *np;
-    uschar *up;
+    unsigned char *up;
   } lval;    /* because Al stores a pointer in it! */
   int  *lfollow;
 } rrow;
 
 typedef struct fa {
-  uschar  gototab[NSTATES][NCHARS];
-  uschar  out[NSTATES];
-  uschar  *restr;
+  unsigned char  gototab[NSTATES][NCHARS];
+  unsigned char  out[NSTATES];
+  unsigned char  *restr;
   int  *posns[NSTATES];
   int  anchor;
   int  use;

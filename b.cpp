@@ -62,9 +62,9 @@ int  maxsetvec = 0;
 
 int  rtok;    /* next token in current re */
 int  rlxval;
-static uschar  *rlxstr;
-static uschar  *prestr;  /* current position in current re */
-static uschar  *lastre;  /* origin of last re */
+static unsigned char  *rlxstr;
+static unsigned char  *prestr;  /* current position in current re */
+static unsigned char  *lastre;  /* origin of last re */
 
 static  int setcnt;
 static  int poscnt;
@@ -80,8 +80,8 @@ static int    makeinit (fa *, int);
 static fa*    mkdfa (const char *, int);
 static void   penter (Node *);
 static void   freetr (Node *);
-static int    hexstr (uschar **);
-static int    quoted (uschar **);
+static int    hexstr (unsigned char **);
+static int    quoted (unsigned char **);
 static char*  cclenter (const char *);
 static void   overflo (const char *);
 static void   cfoll (fa *, Node *);
@@ -179,7 +179,7 @@ fa* mkdfa (const char *s, int anchor)
   *f->posns[1] = 0;
   f->initstat = makeinit (f, anchor);
   f->anchor = anchor;
-  f->restr = (uschar *)tostring (s);
+  f->restr = (unsigned char *)tostring (s);
   return f;
 }
 
@@ -273,14 +273,14 @@ void freetr (Node *p)  /* free parse tree */
 /* to be seen literally;  \056 is not a metacharacter. */
 
 /// Find and eval hex string at pp, return new p
-int hexstr (uschar **pp)
+int hexstr (unsigned char **pp)
 {
   /* only pick up one 8-bit byte (2 chars) */
-  uschar *p;
+  unsigned char *p;
   int n = 0;
   int i;
 
-  for (i = 0, p = (uschar *)*pp; i < 2 && isxdigit (*p); i++, p++)
+  for (i = 0, p = (unsigned char *)*pp; i < 2 && isxdigit (*p); i++, p++)
   {
     if (isdigit (*p))
       n = 16 * n + *p - '0';
@@ -289,16 +289,16 @@ int hexstr (uschar **pp)
     else if (*p >= 'A' && *p <= 'F')
       n = 16 * n + *p - 'A' + 10;
   }
-  *pp = (uschar *)p;
+  *pp = (unsigned char *)p;
   return n;
 }
 
 #define isoctdigit(c) ((c) >= '0' && (c) <= '7')  /* multiple use of arg */
 
 /// Pick up next thing after a \\ and increment *pp
-int quoted (uschar **pp)
+int quoted (unsigned char **pp)
 {
-  uschar *p = *pp;
+  unsigned char *p = *pp;
   int c;
 
   if ((c = *p++) == 't')
@@ -337,13 +337,13 @@ int quoted (uschar **pp)
 char* cclenter (const char *argp)
 {
   int i, c, c2;
-  uschar *p = (uschar *)argp;
-  uschar *op, *bp;
-  static uschar *buf = 0;
+  unsigned char *p = (unsigned char *)argp;
+  unsigned char *op, *bp;
+  static unsigned char *buf = 0;
   static int bufsz = 100;
 
   op = p;
-  if (buf == 0 && (buf = (uschar *)malloc (bufsz)) == NULL)
+  if (buf == 0 && (buf = (unsigned char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 1", p);
   bp = buf;
   for (i = 0; (c = *p++) != 0; )
@@ -534,7 +534,7 @@ void follow (Node *v)
 /// Is c in s?
 int member (int c, const char *sarg)
 {
-  uschar *s = (uschar *)sarg;
+  unsigned char *s = (unsigned char *)sarg;
 
   while (*s)
     if (c == *s++)
@@ -545,7 +545,7 @@ int member (int c, const char *sarg)
 int match (fa *f, const char *p0)  /* shortest match ? */
 {
   int s, ns;
-  uschar *p = (uschar *)p0;
+  unsigned char *p = (unsigned char *)p0;
 
   s = f->reset ? makeinit (f, 0) : f->initstat;
   if (f->out[s])
@@ -566,8 +566,8 @@ int match (fa *f, const char *p0)  /* shortest match ? */
 int pmatch (fa *f, const char *p0)
 {
   int s, ns;
-  uschar *p = (uschar *)p0;
-  uschar *q;
+  unsigned char *p = (unsigned char *)p0;
+  unsigned char *q;
   int i, k;
 
   /* s = f->reset ? makeinit(f,1) : f->initstat; */
@@ -629,8 +629,8 @@ int pmatch (fa *f, const char *p0)
 int nematch (fa *f, const char *p0)
 {
   int s, ns;
-  uschar *p = (uschar *)p0;
-  uschar *q;
+  unsigned char *p = (unsigned char *)p0;
+  unsigned char *q;
   int i, k;
 
   /* s = f->reset ? makeinit(f,1) : f->initstat; */
@@ -699,7 +699,7 @@ Node *reparse (const char *p)
   Node *np;
 
   dprintf ("reparse <%s>\n", p);
-  lastre = prestr = (uschar *)p;  /* prestr points to string to be parsed */
+  lastre = prestr = (unsigned char *)p;  /* prestr points to string to be parsed */
   rtok = relex ();
   /* GNU compatibility: an empty regexp matches anything */
   if (rtok == '\0')
@@ -881,9 +881,9 @@ int relex (void)
 {
   int c, n;
   int cflag;
-  static uschar *buf = 0;
+  static unsigned char *buf = 0;
   static int bufsz = 100;
-  uschar *bp;
+  unsigned char *bp;
   struct charclass *cc;
   int i;
 
@@ -907,7 +907,7 @@ int relex (void)
     rlxval = c;
     return CHAR;
   case '[':
-    if (buf == 0 && (buf = (uschar *)malloc (bufsz)) == NULL)
+    if (buf == 0 && (buf = (unsigned char *)malloc (bufsz)) == NULL)
       FATAL (AWK_ERR_NOMEM, "out of space in reg expr %.10s..", lastre);
     bp = buf;
     if (*prestr == '^')
@@ -964,7 +964,7 @@ int relex (void)
       else if (c == ']')
       {
         *bp++ = 0;
-        rlxstr = (uschar *)tostring ((char *)buf);
+        rlxstr = (unsigned char *)tostring ((char *)buf);
         if (cflag == 0)
           return CCL;
         else

@@ -159,9 +159,6 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
 {
   /* note: cares whether buf == record */
   int c;
-  char *buf = *pbuf;
-  uschar saveb0;
-  int bufsize = *pbufsize, savebufsize = bufsize;
   const char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
@@ -171,8 +168,7 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
     donefld = 0;
     donerec = 1;
   }
-  saveb0 = buf[0];
-  buf[0] = 0;
+  *pbuf[0] = 0;
   while (interp->argno < *ARGC || infile == stdin)
   {
     dprintf ("argno=%d, file=|%s|\n", interp->argno, NN(file));
@@ -202,8 +198,8 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
         FATAL (AWK_ERR_INFILE, "can't open file %s", file);
       setfval (fnrloc, 0.0);
     }
-    c = readrec (&buf, &bufsize, infile);
-    if (c != 0 || buf[0] != '\0')
+    c = readrec (pbuf, pbufsize, infile);
+    if (c != 0 || *pbuf[0] != '\0')
     {
       /* normal record */
       if (isrecord)
@@ -217,8 +213,6 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
       }
       setfval (nrloc, nrloc->fval + 1);
       setfval (fnrloc, fnrloc->fval + 1);
-      *pbuf = buf;
-      *pbufsize = bufsize;
       return 1;
     }
     /* EOF arrived on this file; set up next */
@@ -228,9 +222,6 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
     *FILENAME = 0;
     interp->argno++;
   }
-  buf[0] = saveb0;
-  *pbuf = buf;
-  *pbufsize = savebufsize;
   return 0;  /* true end of file */
 }
 
@@ -402,8 +393,7 @@ void fldbld (void)
     for (i = 0; *fb != 0; fb++)
     {
       char buf[2];
-      i++;
-      if (i > nfields)
+      if (++i > nfields)
         growfldtab (i);
       buf[0] = *fb;
       buf[1] = 0;
@@ -425,17 +415,18 @@ void fldbld (void)
     if (strlen (*RS) > 0)
       rtest = '\0';
     fe = fb;
-    for (i = 1; !end_seen; i++)
+    for (i = 0; !end_seen; )
     {
       fb = fe;
-      if (i > nfields)
-        growfldtab (i);
-      while (*fe != sep && *fe != rtest && *fe != '\0')  /* \0 is always a separator */
+      while (*fe && *fe != sep && *fe != rtest)
         fe++;
       if (*fe)
         *fe++ = 0;
       else
         end_seen = 1;
+
+      if (++i > nfields)
+        growfldtab (i);
       xfree (fldtab[i]->sval);
       fldtab[i]->sval = strdup(fb);
       fldtab[i]->tval = FLD | STR;
@@ -642,10 +633,10 @@ int isclvar (const char *s)
 {
   const char *os = s;
 
-  if (!isalpha ((uschar)*s) && *s != '_')
+  if (!isalpha (*s) && *s != '_')
     return 0;
   for (; *s; s++)
-    if (!(isalnum ((uschar)*s) || *s == '_'))
+    if (!(isalnum (*s) || *s == '_'))
       break;
   return *s == '=' && s > os && *(s + 1) != '=';
 }

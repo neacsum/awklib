@@ -894,7 +894,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     {
       if (!adjbuf (&fmt, &fmtsz, MAXNUMSIZE + 1 + t - fmt, recsize, &t))
         FATAL (AWK_ERR_NOMEM, "format item %.30s... ran format() out of memory", os);
-      if (isalpha ((uschar)*s) && *s != 'l' && *s != 'h' && *s != 'L')
+      if (isalpha (*s) && *s != 'l' && *s != 'h' && *s != 'L')
         break;  /* the ansi panoply */
       if (*s == '$')
         FATAL (AWK_ERR_ARG, "'$' not permitted in awk formats");
@@ -1409,7 +1409,7 @@ Cell *split (Node **a, int nnn)
       sprintf (num, "%d", n);
       buf[0] = *s;
       buf[1] = 0;
-      if (isdigit ((uschar)buf[0]))
+      if (isdigit (buf[0]))
         setsymtab (num, buf, atof (buf), STR | NUM, (Array *)ap->sval);
       else
         setsymtab (num, buf, 0.0, STR, (Array *)ap->sval);
@@ -1684,14 +1684,14 @@ Cell *bltin (Node **a, int n)
     if (t == FTOUPPER)
     {
       for (p = buf; *p; p++)
-        if (islower ((uschar)*p))
-          *p = toupper ((uschar)*p);
+        if (islower (*p))
+          *p = toupper (*p);
     }
     else
     {
       for (p = buf; *p; p++)
-        if (isupper ((uschar)*p))
-          *p = tolower ((uschar)*p);
+        if (isupper (*p))
+          *p = tolower (*p);
     }
     tempfree (x);
     x = gettemp ();
