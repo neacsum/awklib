@@ -63,7 +63,6 @@ Cell  *jret  = &retcell;
 static Cell*  execute (Node *);
 static void   tfree (Cell *);
 static int    format (char **, int *, const char *, Node *);
-static double ipow (double, int);
 static void   closeall (void);
 static Cell*  gettemp (void);
 
@@ -187,11 +186,18 @@ Cell *program (Node **a, int n)
     }
     if (a[1] || a[2])
     {
-      while (getrec (&record, &recsize, 1) > 0)
+      while (getrec (&fldtab[0]->sval, &recsize, 1) > 0)
       {
         x = execute (a[1]);
         if (isexit (x))
           break;
+        tempfree (x);
+      }
+      if (a[2])
+      {    /* END */
+        x = execute (a[2]);
+        if (isbreak (x) || isnext (x) || iscont (x))
+          FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
         tempfree (x);
       }
     }
@@ -200,13 +206,6 @@ Cell *program (Node **a, int n)
   {
     if (rc == 0)
     {
-      if (a[2])
-      {    /* END */
-        x = execute (a[2]);
-        if (isbreak (x) || isnext (x) || iscont (x))
-          FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
-        tempfree (x);
-      }
     }
     else
       throw;
@@ -360,7 +359,7 @@ Cell *jump (Node **a, int n)
       errorflag = (int)getfval (y);
       tempfree (y);
     }
-    throw (int)0;
+    return jexit;
 
   case RETURN:
     if (a[0] != NULL)
@@ -407,17 +406,31 @@ Cell *awkgetline (Node **a, int n)
 {
   /* a[0] is variable, a[1] is operator, a[2] is filename */
   Cell *r, *x;
-  extern Cell **fldtab;
   FILE *fp;
   char *buf;
   int bufsize = recsize;
   int mode;
 
-  if ((buf = (char *)malloc (bufsize)) == NULL)
-    FATAL (AWK_ERR_NOMEM, "out of memory in getline");
+  char **pline;
+  int *psize;
+  if (a[0])
+  {
+    //getline to var
+    r = execute (a[0]);
+    if ((buf = (char *)malloc (bufsize)) == NULL)
+      FATAL (AWK_ERR_NOMEM, "out of memory in getline");
+    psize = &bufsize;
+    r->sval = buf;
+  }
+  else
+  {
+    //getline to $0
+    psize = &recsize;
+    r = fldtab[0];
+  }
+  pline = &r->sval;
 
   fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
-  r = gettemp ();
   if (a[1] != NULL)
   {    /* getline < file */
     x = execute (a[2]);    /* filename */
@@ -429,41 +442,22 @@ Cell *awkgetline (Node **a, int n)
     if (fp == NULL)
       n = -1;
     else
-      n = readrec (&buf, &bufsize, fp);
-    if (n <= 0)
-    {
-      ;
-    }
-    else if (a[0] != NULL)
-    {  /* getline var <file */
-      x = execute (a[0]);
-      setsval (x, buf);
-      tempfree (x);
-    }
-    else
-    {      /* getline <file */
-      setsval (fldtab[0], buf);
-      if (is_number (fldtab[0]->sval))
-      {
-        fldtab[0]->fval = atof (fldtab[0]->sval);
-        fldtab[0]->tval |= NUM;
-      }
-    }
+      n = readrec (pline, psize, fp);
   }
   else
   {      /* bare getline; use current input */
-    if (a[0] == NULL)  /* getline */
-      n = getrec (&record, &recsize, 1);
-    else
-    {      /* getline var */
-      n = getrec (&buf, &bufsize, 0);
-      x = execute (a[0]);
-      setsval (x, buf);
-      tempfree (x);
-    }
+    n = getrec (pline, psize, (a[0] != 0));
   }
-  setfval (r, (Awkfloat)n);
-  free (buf);
+  if (n > 0 && is_number (r->sval))
+  {
+    r->fval = atof (r->sval);
+    r->tval |= NUM;
+  }
+  if (!a[0])
+  {
+    donerec = 1;
+    fldbld ();
+  }
   return r;
 }
 
@@ -505,9 +499,8 @@ Cell *array (Node **a, int n)
   if (!isarr (x))
   {
     dprintf ("making %s into an array\n", NN (x->nval));
-    if (freeable (x))
-      xfree (x->sval);
-    x->tval &= ~(STR | NUM | DONTFREE);
+    xfree (x->sval);
+    x->tval &= ~(STR | NUM);
     x->tval |= ARR;
     x->sval = (char *)makearray (NSYMTAB);
   }
@@ -578,9 +571,8 @@ Cell *intest (Node **a, int n)
   if (!isarr (ap))
   {
     dprintf ("making %s into an array\n", ap->nval);
-    if (freeable (ap))
-      xfree (ap->sval);
-    ap->tval &= ~(STR | NUM | DONTFREE);
+    xfree (ap->sval);
+    ap->tval &= ~(STR | NUM);
     ap->tval |= ARR;
     ap->sval = (char *)makearray (NSYMTAB);
   }
@@ -729,11 +721,8 @@ void tempfree (Cell *a)
   if (a->csub != CTEMP)
     return;
 
-  if (freeable (a))
-  {
-    dprintf ("freeing %s %s %s\n", NN (a->nval), NN (a->sval), flags2str(a->tval));
-    xfree (a->sval);
-  }
+  dprintf ("freeing %s %s %s\n", NN (a->nval), NN (a->sval), flags2str(a->tval));
+  xfree (a->sval);
   free (a);
 }
 
@@ -1129,31 +1118,13 @@ Cell *arith (Node **a, int n)
   case UPLUS: /* handled by getfval(), above */
     break;
   case POWER:
-    if (j >= 0 && modf (j, &v) == 0.0)  /* pos integer exponent */
-      i = ipow (i, (int)j);
-    else
-      i = errcheck (pow (i, j), "pow");
+    i = errcheck (pow (i, j), "pow");
     break;
   default:  /* can't happen */
     FATAL (AWK_ERR_OTHER, "illegal arithmetic operator %d", n);
   }
   setfval (z, i);
   return z;
-}
-
-//FIXME - Are you kidding? Reccursive function for integer power?
-
-double ipow (double x, int n)  /* x**n.  ought to be done by pow, but isn't always */
-{
-  double v;
-
-  if (n <= 0)
-    return 1;
-  v = ipow (x, n / 2);
-  if (n % 2 == 0)
-    return v * v;
-  else
-    return x * v * v;
 }
 
 /// Increment/decrement operators a[0]++, etc.
@@ -1233,10 +1204,7 @@ Cell *assign (Node **a, int n)
     xf = xf - yf * v;
     break;
   case POWEQ:
-    if (yf >= 0 && modf (yf, &v) == 0.0)  /* pos integer exponent */
-      xf = ipow (xf, (int)yf);
-    else
-      xf = errcheck (pow (xf, yf), "pow");
+    xf = errcheck (pow (xf, yf), "pow");
     break;
   default:
     FATAL (AWK_ERR_OTHER, "illegal assignment operator %d", n);
@@ -1256,16 +1224,16 @@ Cell *cat (Node **a, int q)
 
   x = execute (a[0]);
   y = execute (a[1]);
-  getsval (x);
-  getsval (y);
-  n1 = strlen (x->sval);
-  n2 = strlen (y->sval);
+  const char *sx = getsval (x);
+  const char *sy = getsval (y);
+  n1 = strlen (sx);
+  n2 = strlen (sy);
   s = (char *)malloc (n1 + n2 + 1);
   if (s == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space concatenating %.15s... and %.15s...",
-      x->sval, y->sval);
-  strcpy (s, x->sval);
-  strcpy (s + n1, y->sval);
+      sx, sy);
+  strcpy (s, sx);
+  strcpy (s + n1, sy);
   tempfree (x);
   tempfree (y);
   z = gettemp ();

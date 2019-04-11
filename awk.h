@@ -61,7 +61,6 @@ extern char  **SUBSEP;
 extern Awkfloat *RSTART;
 extern Awkfloat *RLENGTH;
 
-extern char  *record;  /* points to $0 */
 extern int  lineno;    /* line number in awk program */
 extern int  errorflag;  /* 1 if error has occurred */
 extern int  donefld;  /* 1 if record broken into fields */
@@ -104,13 +103,12 @@ typedef struct Cell {
   int   tval;         /* type info: STR|NUM|ARR|FCN|FLD|CON|DONTFREE|CONVC|CONVO */
 #define NUM       0x001   /* number value is valid */
 #define STR       0x002   /* string value is valid */
-#define DONTFREE  0x004   /* string space is not freeable */
-#define ARR       0x008   /* this is an array */
-#define FCN       0x010   /* this is a function name */
-#define FLD       0x020   /* this is a field $1, $2, ... */
-#define REC       0x040   /* this is $0 */
-#define CONVC     0x080   /* string was converted from number via CONVFMT */
-#define EXTFUN    0x100   /* external function */
+#define ARR       0x004   /* this is an array */
+#define FCN       0x008   /* this is a function name */
+#define FLD       0x010   /* this is a field $1, $2, ... */
+#define REC       0x020   /* this is $0 */
+#define CONVC     0x040   /* string was converted from number via CONVFMT */
+#define EXTFUN    0x080   /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
   struct Cell *cnext; /* ptr to next in arrays*/
@@ -125,11 +123,12 @@ typedef struct Array {    /* symbol table array */
 #define  NSYMTAB  50  /* initial size of a symbol table */
 extern Array  *symtab;
 
-extern Cell  *nrloc;      /* NR */
-extern Cell  *fnrloc;     /* FNR */
-extern Cell  *nfloc;      /* NF */
-extern Cell  *rstartloc;  /* RSTART */
-extern Cell  *rlengthloc; /* RLENGTH */
+extern Cell*    nrloc;      /* NR */
+extern Cell*    fnrloc;     /* FNR */
+extern Cell*    nfloc;      /* NF */
+extern Cell*    rstartloc;  /* RSTART */
+extern Cell*    rlengthloc; /* RLENGTH */
+extern Cell**   fldtab; /* $0, $1, ...*/
 
 
 /* function types */
@@ -164,7 +163,6 @@ typedef struct Node {
 
 #define  NIL  ((Node *) 0)
 
-extern Node  *nullstat;
 extern Node  *nullnode;
 
 extern  int  pairstack[], paircnt;
@@ -176,7 +174,6 @@ inline int isstr (const Cell *c) { return (c->tval & STR) != 0; }
 inline int isnum (const Cell* c) { return (c->tval & NUM) != 0; }
 inline int isarr (const Cell *c) { return (c->tval & ARR) != 0; }
 inline int isfcn (const Cell *c) { return (c->tval & (FCN | EXTFUN)) != 0; }
-inline int freeable (const Cell *p) { return (p->tval & (STR | DONTFREE)) == STR; }
 
 /* structures used by regular expression matching machinery, mostly b.c: */
 

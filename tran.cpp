@@ -62,45 +62,38 @@ Cell  *rlengthloc;  /* RLENGTH */
 Node  *nullnode;    /* zero&null, converted into a node for comparisons */
 Cell  *literal0;
 
-extern Cell **fldtab;
 
 static int  hash (const char *, int);
 static void	rehash (Array *);
 
-static void setfree(Cell *vp)
-{
-  if (&vp->sval == FS || &vp->sval == RS
-   || &vp->sval == OFS || &vp->sval == ORS
-   || &vp->sval == OFMT || &vp->sval == CONVFMT
-   || &vp->sval == FILENAME || &vp->sval == SUBSEP)
-    vp->tval |= DONTFREE;
-  else
-    vp->tval &= ~DONTFREE;
-}
-
 /// Initialize symbol table with builtin vars
 void syminit (void)
 {
-  literal0 = setsymtab ("0", "0", 0.0, NUM | STR | DONTFREE, symtab);
-  /* this is used for if(x)... tests: */
-  nullnode = celltonode (setsymtab ("$zero&null", "", 0.0, NUM | STR | DONTFREE, symtab)
+  literal0 = setsymtab ("0", "0", 0.0, NUM | STR, symtab);
+  /*
+    this is used for if(x)... tests:
+  TODO Get rid of nullnode !!
+  How do you ensure there are no other nodes linked to it. Also reusing the
+  same node creates problems when parsing tree has to be freed.
+  */
+  nullnode = celltonode (setsymtab ("$zero&null", "", 0.0, NUM | STR, symtab)
     , CCON);
 
-  fsloc = setsymtab ("FS", " ", 0.0, STR | DONTFREE, symtab);
+  fsloc = setsymtab ("FS", " ", 0.0, STR, symtab);
   FS = &fsloc->sval;
-  RS = &setsymtab ("RS", "\n", 0.0, STR | DONTFREE, symtab)->sval;
-  OFS = &setsymtab ("OFS", " ", 0.0, STR | DONTFREE, symtab)->sval;
-  ORS = &setsymtab ("ORS", "\n", 0.0, STR | DONTFREE, symtab)->sval;
-  OFMT = &setsymtab ("OFMT", "%.6g", 0.0, STR | DONTFREE, symtab)->sval;
-  CONVFMT = &setsymtab ("CONVFMT", "%.6g", 0.0, STR | DONTFREE, symtab)->sval;
-  FILENAME = const_cast <const char **>(&setsymtab ("FILENAME", "", 0.0, STR | DONTFREE, symtab)->sval);
+  RS = &setsymtab ("RS", "\n", 0.0, STR, symtab)->sval;
+  OFS = &setsymtab ("OFS", " ", 0.0, STR, symtab)->sval;
+  ORS = &setsymtab ("ORS", "\n", 0.0, STR, symtab)->sval;
+  OFMT = &setsymtab ("OFMT", "%.6g", 0.0, STR, symtab)->sval;
+  CONVFMT = &setsymtab ("CONVFMT", "%.6g", 0.0, STR, symtab)->sval;
+  FILENAME = const_cast <const char **>(&setsymtab ("FILENAME", "", 0.0, STR, symtab)->sval);
   nfloc = setsymtab ("NF", "", 0.0, NUM, symtab);
   NF = &nfloc->fval;
   nrloc = setsymtab ("NR", "", 0.0, NUM, symtab);
   NR = &nrloc->fval;
   fnrloc = setsymtab ("FNR", "", 0.0, NUM, symtab);
   FNR = &fnrloc->fval;
-  SUBSEP = &setsymtab ("SUBSEP", "\034", 0.0, STR | DONTFREE, symtab)->sval;
+  SUBSEP = &setsymtab ("SUBSEP", "\034", 0.0, STR, symtab)->sval;
   rstartloc = setsymtab ("RSTART", "", 0.0, NUM, symtab);
   RSTART = &rstartloc->fval;
   rlengthloc = setsymtab ("RLENGTH", "", 0.0, NUM, symtab);
@@ -188,7 +181,7 @@ void freecell (Cell* cp)
     freearray ((Array *)cp->sval);
     cp->sval = 0;
   }
-  else if (freeable (cp))
+  else
   {
     dprintf ("freed %s\n", cp->sval);
     xfree (cp->sval);
@@ -210,7 +203,7 @@ void freearray (Array *ap)
     {
       dprintf ("freeing %s...", cp->nval);
       xfree (cp->nval);
-      if (freeable (cp) || interp->status == AWKS_END) //at end we free everything
+      if (interp->status == AWKS_END) //at end we free everything
       {
         if (isarr (cp))
         {
@@ -261,8 +254,7 @@ void freeelem (Cell *ap, const char *s)
         tp->tab[h] = p->cnext;
       else      /* middle somewhere */
         prev->cnext = p->cnext;
-      if (freeable (p))
-        xfree (p->sval);
+      xfree (p->sval);
       free (p->nval);
       free (p);
       tp->nelem--;
@@ -378,8 +370,7 @@ Awkfloat setfval (Cell *vp, Awkfloat f)
     donefld = 0;  /* mark $1... invalid */
     donerec = 1;
   }
-  if (freeable (vp))
-    xfree (vp->sval); /* free any previous string */
+  xfree (vp->sval); /* free any previous string */
   vp->tval &= ~(STR | CONVC); /* mark string invalid */
   vp->fmt = NULL;
   vp->tval |= NUM;  /* mark number ok */
@@ -429,12 +420,10 @@ const char *setsval (Cell *vp, const char *s)
       recbld ();
   }
   t = s ? tostring (s) : tostring ("");  /* in case it's self-assign */
-  if (freeable (vp))
-    xfree (vp->sval);
+  xfree (vp->sval);
   vp->tval &= ~(NUM | CONVC);
   vp->tval |= STR;
   vp->fmt = NULL;
-  setfree (vp);
   dprintf ("setsval %p: %s = \"%s (%p) \", t=%o r,f=%d,%d\n",
     (void*)vp, NN (vp->nval), t, (void *)t, vp->tval, donerec, donefld);
   vp->sval = t;
@@ -460,7 +449,7 @@ Awkfloat getfval (Cell *vp)
     recbld ();
   if (!isnum (vp))  /* not a number */
   {
-    vp->fval = atof (vp->sval);  /* best guess */
+    vp->fval = vp->sval? atof (vp->sval) : 0.;  /* best guess */
     if (is_number (vp->sval) && (vp->csub != CCON))
       vp->tval |= NUM;  /* make NUM only sparingly */
   }
@@ -508,14 +497,12 @@ static const char *get_str_val (Cell *vp, char **fmt)
    /* Don't duplicate the code for actually updating the value */
 #define update_str_val(vp) \
   { \
-    if (freeable(vp)) \
-      xfree(vp->sval); \
+    xfree(vp->sval); \
     if (modf(vp->fval, &dtemp) == 0)  /* it's integral */ \
       sprintf(s, "%.30g", vp->fval); \
     else \
       sprintf(s, *fmt, vp->fval); \
     vp->sval = tostring(s); \
-    vp->tval &= ~DONTFREE; \
     vp->tval |= STR; \
   }
 
@@ -530,7 +517,7 @@ static const char *get_str_val (Cell *vp, char **fmt)
   }
   else
   {
-    if ((vp->tval & DONTFREE) != 0 || !isnum (vp) || isfld (vp))
+    if (!isnum (vp) || isfld (vp))
       goto done;
 
     if (fmt == OFMT && ((vp->tval & CONVC)
@@ -650,7 +637,6 @@ const char *flags2str (int flags)
   } flagtab[] = {
     { "NUM", NUM },
     { "STR", STR },
-    { "DONTFREE", DONTFREE },
     { "ARR", ARR },
     { "FCN", FCN },
     { "FLD", FLD },

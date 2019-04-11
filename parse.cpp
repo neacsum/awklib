@@ -57,17 +57,20 @@ void freenode (Node *p)
   Node *temp;
   while (p)
   {
-    dprintf ("%Deleting node 0x%p %s", p, tokname (p->nobj));
+    if ((int)p < LASTTOKEN)
+      break;
+    dprintf ("%Deleting node 0x%p %s with %d arguments (line %d)", 
+      p, tokname (p->nobj), p->args, p->lineno);
     dprintf (" type %s\n", p->ntype == NVALUE ? "value" : p->ntype == NSTAT ? "statement" : "expression");
     if (p->ntype != NVALUE)
     {
-      int i;
-      for (i = 0; i < p->args; i++)
+      for (int i = 0; i < p->args; i++)
         freenode (p->narg[i]);
     }
     temp = p;
     p = p->nnext;
-    free (temp);
+    if (temp != nullnode)
+      free (temp);
   }
 }
 

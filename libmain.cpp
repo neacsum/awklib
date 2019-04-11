@@ -183,7 +183,7 @@ int awk_compile (AWKINTERP *pinter)
 #endif
       interp->prog_root = winner;
 
-      //things we can/maust initialize now
+      //things we can/must initialize now
       envinit ();
       stdinit ();
     }
@@ -505,7 +505,13 @@ void print_tree (Node *n, int indent)
 {
   int i;
 
-  errprintf ("%*cNode 0x%p %s", indent, ' ', n, tokname (n->nobj));
+  errprintf ("%*cNode 0x%p %s", indent, ' ', n, ((int)n < LASTTOKEN)? tokname((int)n) : tokname (n->nobj));
+  if ((int)n < LASTTOKEN)
+  {
+    errprintf ("- FLAG\n");
+    return;
+  }
+
   do
   {
     errprintf (" type %s", n->ntype == NVALUE ? "value" : n->ntype == NSTAT ? "statement" : "expression");

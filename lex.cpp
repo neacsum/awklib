@@ -590,7 +590,7 @@ int word (char *w)
   }
   else
   {
-    yylval.cp = setsymtab (w, NULL, 0.0, NUM, symtab);
+    yylval.cp = setsymtab (w, NULL, 0.0, STR, symtab);
     if (c == '(')
       RET (CALL)
     else
