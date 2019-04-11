@@ -33,6 +33,9 @@ THIS SOFTWARE.
 extern YYSTYPE  yylval;
 extern int  infunc;
 
+extern char* lexbuf;    /* buffer for lexical analyzer */
+extern int lexbuf_sz;   /* size of lex buffer */
+
 static void unput (int);
 static void unputstr (const char *);
 
@@ -191,10 +194,7 @@ int  reg = 0;  /* 1 => return a REGEXPR now */
 int yylex (void)
 {
   int c;
-  static char *buf = 0;
-  static int bufsize = 5; /* BUG: setting this small causes core dump! */
-
-  if (buf == 0 && (buf = (char *)malloc (bufsize)) == NULL)
+  if (lexbuf == 0) //should have been allocated in yyinit
     FATAL (AWK_ERR_NOMEM, "out of space in yylex");
   if (sc)
   {
@@ -208,14 +208,14 @@ int yylex (void)
   }
   for (;;)
   {
-    c = gettok (&buf, &bufsize);
+    c = gettok (&lexbuf, &lexbuf_sz);
     if (c == 0)
       return 0;
     if (isalpha (c) || c == '_')
-      return word (buf);
+      return word (lexbuf);
     if (isdigit (c))
     {
-      yylval.cp = setsymtab (buf, NULL, atof (buf), NUM, symtab);
+      yylval.cp = setsymtab (lexbuf, lexbuf, atof (lexbuf), NUM | STR, symtab);
       RET (NUMBER)
     }
 
@@ -380,21 +380,21 @@ int yylex (void)
 
     case '$':
       /* BUG: awkward, if not wrong */
-      c = gettok (&buf, &bufsize);
+      c = gettok (&lexbuf, &lexbuf_sz);
       if (isalpha (c))
       {
-        if (strcmp (buf, "NF") == 0)
+        if (strcmp (lexbuf, "NF") == 0)
         {  /* very special */
           unputstr ("(NF)");
           RET (INDIRECT)
         }
         c = peek ();
-        if (c == '(' || c == '[' || (infunc && isarg (buf) >= 0))
+        if (c == '(' || c == '[' || (infunc && isarg (lexbuf) >= 0))
         {
-          unputstr (buf);
+          unputstr (lexbuf);
           RET (INDIRECT)
         }
-        yylval.cp = setsymtab (buf, NULL, 0.0, NUM, symtab);
+        yylval.cp = setsymtab (lexbuf, NULL, 0.0, NUM, symtab);
         RET (IVAR)
       }
       else if (c == 0)
@@ -404,7 +404,7 @@ int yylex (void)
       }
       else
       {
-        unputstr (buf);
+        unputstr (lexbuf);
         RET (INDIRECT)
       }
 
