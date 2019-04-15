@@ -1,8 +1,8 @@
-# A line with just a '#' separates input and output for different sub-tests
+# A line with a '#' separates input and output for different sub-tests
 
 BEGIN {test = 1}
 END {print "Last test ", test >"/dev/stderr"}
-$1 == "#" {test++; print "#"; next}
+$1 == "#" {test++; print $0; next}
 
 test == 1 { print ($1 == 1) ? "yes" : "no"}
 test == 2 && $1 > 0
@@ -134,32 +134,32 @@ yes
 yes
 no
 no
-#
+# test 2
 1
 2
 1e0
 3.1e4
-#
+# test 3
 0
 1
 2
-#
+# test 4
 0 
 1 x
 2 y
 3 zzz
-#
+# test 5
 1
 3
 abc
-#
+# test 6
 2 14
-#
+# test 7
 01
 00
 11
 10
-#
+# test 8
 1
 0
 1
@@ -170,7 +170,7 @@ abc
 0
 1
 1
-#
+# test 9
 0
 1
 0
@@ -178,7 +178,7 @@ abc
 1
 1
 1
-#
+# test 10
 0
 0
 0
@@ -186,39 +186,39 @@ abc
 0
 1
 1
-#
+# test 11
 def
 def
-#
+# test 12
 1 12
-#
+# test 13
 111 111 222 2 2
-#
+# test 14
 1 1 -1 1
 -1 -1 1 -1
 0 0 0 0
 x 0 0 0
-#
+# test 15
 axb
 a xb
 a  xb
-#
+# test 16
 axb
 ax b
 ax  b
-#
+# test 17
 ahb
 a hb
 a  hb
-#
+# test 18
 ahb
 ah b
 ah  b
-#
+# test 19
 1 1
 10 10
 10000 10000
-#
+# test 20
 1 1
 a a
 2710 2710

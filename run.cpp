@@ -61,10 +61,9 @@ Cell  *jret  = &retcell;
 
 
 static Cell*  execute (Node *);
-static void   tfree (Cell *);
 static int    format (char **, int *, const char *, Node *);
 static void   closeall (void);
-static Cell*  gettemp (void);
+static Cell*  gettemp ();
 
 // One-liners
 inline int isnext (const Cell* c) { return c->csub == JNEXT || c->csub == JNEXTFILE; }
@@ -74,9 +73,6 @@ inline int iscont (const Cell* c) { return c->csub == JCONT; }
 inline int isjump (const Cell* c) { return c->ctype == OJUMP; }
 inline int isexit (const Cell* c) { return c->csub == JEXIT; }
 inline int istrue (const Cell *c) { return c->csub == BTRUE; }
-
-static void tempfree (Cell *x);
-
 
 
 /* buffer memory management */
@@ -172,43 +168,34 @@ Cell *execute (Node *u)
 /// Execute an awk program
 Cell *program (Node **a, int n)
 {        /* a[0] = BEGIN, a[1] = body, a[2] = END */
-  Cell *x;
+  Cell* x;
+  int exit_seen = 0;
 
-  try {
-    if (a[0])
-    {    /* BEGIN */
-      x = execute (a[0]);
+  if (a[0])
+  {    /* BEGIN */
+    x = execute (a[0]);
+    if (isexit (x))
+      exit_seen = 1;
+    else if (isjump (x))
+      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
+    tempfree (x);
+  }
+  if (!exit_seen && (a[1] || a[2]))
+  {
+    while (getrec (fldtab[0]) > 0)
+    {
+      x = execute (a[1]);
       if (isexit (x))
-        return True;
-      if (isjump (x))
-        FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from BEGIN");
+        break;
       tempfree (x);
     }
-    if (a[1] || a[2])
-    {
-      while (getrec (&fldtab[0]->sval, &recsize, 1) > 0)
-      {
-        x = execute (a[1]);
-        if (isexit (x))
-          break;
-        tempfree (x);
-      }
-      if (a[2])
-      {    /* END */
-        x = execute (a[2]);
-        if (isbreak (x) || isnext (x) || iscont (x))
-          FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
-        tempfree (x);
-      }
-    }
   }
-  catch (int rc)
-  {
-    if (rc == 0)
-    {
-    }
-    else
-      throw;
+  if (a[2])
+  {    /* END */
+    x = execute (a[2]);
+    if (isbreak (x) || isnext (x) || iscont (x))
+      FATAL (AWK_ERR_SYNTAX, "illegal break, continue, next or nextfile from END");
+    tempfree (x);
   }
   return True;
 }
@@ -224,7 +211,9 @@ Cell *call (Node **a, int n)
   Node *x;
   Cell *y;
   Frame frm;
+  Cell **callpar = NULL;
 
+  memset (&frm, 0, sizeof (frm));
   frm.fcn = execute (a[0]);  /* the function itself */
   if (!isfcn (frm.fcn))
     FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", frm.fcn->nval);
@@ -238,7 +227,10 @@ Cell *call (Node **a, int n)
 
   frm.args = 0;
   if (ndef)
+  {
     frm.args = (Cell**)calloc (ndef, sizeof (Cell*));
+    callpar = (Cell**)calloc (ndef, sizeof(Cell*));
+  }
 
   for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
   {  /* get call args */
@@ -247,22 +239,26 @@ Cell *call (Node **a, int n)
       i, NN (y->nval), y->fval, isarr (y) ? "(array)" : NN (y->sval), flags2str (y->tval));
     if (isfcn (y))
       FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, frm.fcn->nval);
-    if (i < ndef)
-    {
-      /* used arguments are stored in args array the rest are just evaluated
-      (for eventual side effects) */
+    if (i < ndef)  // used arguments are stored in args array the rest are just
+    {              // evaluated (for eventual side effects)
+      callpar[i] = y;
       if (isarr (y))
         frm.args[i] = y;  // arrays by ref
       else
       {
         frm.args[i] = gettemp ();
         frm.args[i]->csub = CARG;
+        frm.args[i]->nval = strdup (y->nval);
         if (isstr (y))
         {
-          frm.args[i]->sval = tostring (y->sval);
-          frm.args[i]->tval |= STR;
+          frm.args[i]->sval = y->sval? tostring (y->sval) : strdup ("");
+          frm.args[i]->tval = STR;
         }
-        frm.args[i]->fval = y->fval;
+        if (isnum (y))
+        {
+          frm.args[i]->fval = y->fval;
+          frm.args[i]->tval |= NUM;
+        }
       }
     }
     tempfree (y);
@@ -271,6 +267,7 @@ Cell *call (Node **a, int n)
   for (; i < ndef; i++)
   {  /* add null args for ones not provided */
     frm.args[i] = gettemp ();
+    frm.args[i]->csub = CARG;
   }
   frm.nargs = ndef;
   frm.ret = gettemp ();
@@ -317,18 +314,36 @@ Cell *call (Node **a, int n)
   interp->fn = prev;    //restore previous function frame
   for (i = 0; i < ndef; i++)
   {
-    Cell *t = frm.args[i];
-    if (t->csub = CARG)
+    Cell* t = frm.args[i];
+    if (t->tval & ARR)
+    {
+      //array coming out of the function
+      if (callpar[i] && (callpar[i]->tval & ARR) == 0)
+      {
+        //scalar coming in
+        xfree (callpar[i]->sval);
+        callpar[i]->sval = t->sval;
+        callpar[i]->tval = ARR;
+        continue;
+      }
+    }
+    else
     {
       t->csub = CTEMP;
       tempfree (t);
     }
   }
   xfree (frm.args);
+  xfree (callpar);
   tempfree (frm.fcn);
   if (isexit (y) || isnext (y))
     return y;
 
+  if ((frm.ret->tval & (NUM | STR)) == 0)
+  {
+    //no return statement
+    frm.ret->tval = NUM | STR;
+  }
   dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval, getfval (frm.ret),
     getsval (frm.ret), flags2str (frm.ret->tval));
   return frm.ret;
@@ -366,18 +381,20 @@ Cell *jump (Node **a, int n)
     {
       Cell *pr = interp->fn.ret;
       y = execute (a[0]);
-      if ((y->tval & (STR | NUM)) == (STR | NUM))
+      if ((y->tval & (NUM | STR)) == 0)
+        funnyvar (y, "return");
+
+      pr->tval = 0;
+      if (y->tval & NUM)
       {
-        setsval (pr, getsval (y));
         pr->fval = getfval (y);
         pr->tval |= NUM;
       }
-      else if (y->tval & STR)
+      if (y->tval & STR)
+      {
         setsval (pr, getsval (y));
-      else if (y->tval & NUM)
-        setfval (pr, getfval (y));
-      else    /* can't happen */
-        FATAL (AWK_ERR_RUNTIME, "bad type variable %d", y->tval);
+        pr->tval |= STR;
+      }
       tempfree (y);
     }
     return jret;
@@ -402,36 +419,18 @@ Cell *jump (Node **a, int n)
 }
 
 /// Get next line from specific input
-Cell *awkgetline (Node **a, int n)
+Cell *awkgetline (Node **a, int)
 {
   /* a[0] is variable, a[1] is operator, a[2] is filename */
   Cell *r, *x;
   FILE *fp;
-  char *buf;
   int bufsize = recsize;
-  int mode;
+  int mode, c;
 
-  char **pline;
-  int *psize;
-  if (a[0])
-  {
-    //getline to var
-    r = execute (a[0]);
-    if ((buf = (char *)malloc (bufsize)) == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of memory in getline");
-    psize = &bufsize;
-    r->sval = buf;
-  }
-  else
-  {
-    //getline to $0
-    psize = &recsize;
-    r = fldtab[0];
-  }
-  pline = &r->sval;
+  r = a[0] ? execute (a[0]) : fldtab[0];
 
   fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
-  if (a[1] != NULL)
+  if (a[2] != NULL)
   {    /* getline < file */
     x = execute (a[2]);    /* filename */
     mode = ptoi (a[1]);
@@ -440,20 +439,20 @@ Cell *awkgetline (Node **a, int n)
     fp = openfile (mode, getsval (x));
     tempfree (x);
     if (fp == NULL)
-      n = -1;
+      c = 0;
     else
-      n = readrec (pline, psize, fp);
+      c = readrec (r, fp);
   }
   else
   {      /* bare getline; use current input */
-    n = getrec (pline, psize, (a[0] != 0));
+    c = getrec (r);
   }
-  if (n > 0 && is_number (r->sval))
+  if (c && is_number (r->sval))
   {
     r->fval = atof (r->sval);
     r->tval |= NUM;
   }
-  if (!a[0])
+  if (isrec(r))
   {
     donerec = 1;
     fldbld ();
@@ -721,21 +720,25 @@ void tempfree (Cell *a)
   if (a->csub != CTEMP)
     return;
 
-  dprintf ("freeing %s %s %s\n", NN (a->nval), NN (a->sval), flags2str(a->tval));
-  xfree (a->sval);
+  dprintf ("freeing %s %s %s\n", NN (a->nval), quote (a->sval), flags2str(a->tval));
+  if (isarr (a))
+    freearray ((Array*)a->sval);
+  else
+    xfree (a->sval);
+  xfree (a->nval);
   free (a);
 }
 
 #define TEMPSCHUNK  100
 
 ///  Get a tempcell
-Cell *gettemp (void)
+Cell *gettemp ()
 {
   Cell *x = (Cell*)calloc (1, sizeof(Cell));
 
   x->ctype = OCELL;
   x->csub = CTEMP;
-  x->tval = NUM;
+  x->tval = 0;
   return x;
 }
 
@@ -745,16 +748,16 @@ Cell *indirect (Node **a, int n)
   Awkfloat val;
   Cell *x;
   int m;
-  const char *s;
 
   x = execute (a[0]);
   val = getfval (x);  /* freebsd: defend against super large field numbers */
   if ((Awkfloat)INT_MAX < val)
     FATAL (AWK_ERR_LIMIT, "trying to access out of range field %s", x->nval);
   m = (int)val;
+#if 0
   if (m == 0 && !is_number (s = getsval (x)))  /* suspicion! */
     FATAL (AWK_ERR_ARG, "illegal field $(%s), name \"%s\"", s, x->nval);
-  /* BUG: can x->nval ever be null??? */
+#endif
   tempfree (x);
   x = fieldadr (m);
   return x;
@@ -1143,6 +1146,7 @@ Cell *incrdecr (Node **a, int n)
     return(x);
   }
   z = gettemp ();
+  z->tval = NUM;
   setfval (z, xf);
   setfval (x, xf + k);
   tempfree (x);
@@ -1162,6 +1166,12 @@ Cell *assign (Node **a, int n)
   if (n == ASSIGN)
   {
     /* ordinary assignment */
+    if (isfld(x))
+    {
+      int n = atoi (x->nval);
+      if (n > *NF)
+        newfld (n);
+    }
     if (x == y && !(x->tval & (FLD | REC)))  /* self-assignment: */
       ;    /* leave alone unless it's a field */
     else if ((y->tval & (STR | NUM)) == (STR | NUM))

@@ -68,7 +68,7 @@ int main (int argc, char **argv)
       args[na++] = argv[i];
   }
 
-  awk_setdebug (3);
+  awk_setdebug (1);
   // initialize interpreter
   AWKINTERP* interp = awk_init (vars);
 

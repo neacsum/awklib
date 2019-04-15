@@ -65,6 +65,7 @@ Cell  *literal0;
 
 static int  hash (const char *, int);
 static void	rehash (Array *);
+static void update_str_val (Cell *vp);
 
 /// Initialize symbol table with builtin vars
 void syminit (void)
@@ -221,7 +222,7 @@ void freearray (Array *ap)
         }
         else
         {
-          dprintf (" (value=%s)\n", cp->sval);
+          dprintf (" (value=\"%s\")\n", quote(cp->sval));
           xfree (cp->sval);
         }
       }
@@ -263,15 +264,15 @@ void freeelem (Cell *ap, const char *s)
   }
 }
 
-Cell *setsymtab (const char *n, const char *s, Awkfloat f, unsigned t, Array *tp)
+Cell *setsymtab (const char *n, const char *s, double f, unsigned int t, Array *tp)
 {
   int h;
   Cell *p;
 
   if (n != NULL && (p = lookup (n, tp)) != NULL)
   {
-    dprintf ("setsymtab found %p: n=%s s=\"%s\" f=%g t=%o\n",
-      (void*)p, NN (p->nval), NN (p->sval), p->fval, p->tval);
+    dprintf ("setsymtab found n=%s s=<%s> f=%g t=%s\n",
+      NN (p->nval), quote (p->sval), p->fval, flags2str (p->tval));
     return p;
   }
   p = (Cell *)malloc (sizeof (Cell));
@@ -290,8 +291,8 @@ Cell *setsymtab (const char *n, const char *s, Awkfloat f, unsigned t, Array *tp
   h = hash (n, tp->size);
   p->cnext = tp->tab[h];
   tp->tab[h] = p;
-  dprintf ("setsymtab set %p: n=%s s=\"%s\" f=%g t=%o\n",
-    (void*)p, p->nval, p->sval, p->fval, p->tval);
+  dprintf ("setsymtab set n=%s s=<%s> f=%g t=%s\n",
+    p->nval, quote(p->sval), p->fval, flags2str (p->tval));
   return p;
 }
 
@@ -344,20 +345,23 @@ Cell *lookup (const char *s, Array *tp)
 }
 
 ///  Set float val of a Cell
-Awkfloat setfval (Cell *vp, Awkfloat f)
+void setfval (Cell *vp, Awkfloat f)
 {
   int fldno;
 
   f += 0.0;    /* normalize negative zero to positive zero */
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "assign to");
+  xfree (vp->sval); /* free any previous string */
+  vp->tval &= ~(STR | CONVC); /* mark string invalid */
+  vp->fmt = NULL;
+  vp->tval |= NUM;  /* mark number ok */
   if (isfld (vp))
   {
     donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
-    dprintf ("setting field %d to %g\n", fldno, f);
   }
   else if (&vp->fval == NF)
   {
@@ -370,14 +374,16 @@ Awkfloat setfval (Cell *vp, Awkfloat f)
     donefld = 0;  /* mark $1... invalid */
     donerec = 1;
   }
-  xfree (vp->sval); /* free any previous string */
-  vp->tval &= ~(STR | CONVC); /* mark string invalid */
-  vp->fmt = NULL;
-  vp->tval |= NUM;  /* mark number ok */
-  if (f == -0)  /* who would have thought this possible? */
-    f = 0;
-  dprintf ("setfval %p: %s = %g, t=%o\n", (void*)vp, NN (vp->nval), f, vp->tval);
-  return vp->fval = f;
+  vp->fval = f;
+  if ((vp->tval & (REC | FLD)) != 0)
+  {
+    //fields have always a string value
+    vp->fmt = *CONVFMT;
+    update_str_val (vp);
+    dprintf ("setfval $%s = %s, t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
+  }
+  else
+    dprintf ("setfval %s = %g, t=%s\n", NN (vp->nval), f, flags2str (vp->tval));
 }
 
 void funnyvar (Cell *vp, const char *rw)
@@ -391,14 +397,14 @@ void funnyvar (Cell *vp, const char *rw)
 }
 
 ///  Set string val of a Cell
-const char *setsval (Cell *vp, const char *s)
+void setsval (Cell *vp, const char *s)
 {
   char *t;
   int fldno;
   Awkfloat f;
 
-  dprintf ("starting setsval %p: %s = \"%s\", t=%o, r,f=%d,%d\n",
-    (void*)vp, NN (vp->nval), s, vp->tval, donerec, donefld);
+  dprintf ("starting setsval %s = <%s>, t=%s, r,f=%d,%d\n",
+    NN (vp->nval), s, flags2str (vp->tval), donerec, donefld);
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "assign to");
   if (isfld (vp))
@@ -407,7 +413,7 @@ const char *setsval (Cell *vp, const char *s)
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
-    dprintf ("setting field %d to %s (%p)\n", fldno, s, (void *)s);
+    dprintf ("setting $%d to %s\n", fldno, s);
   }
   else if (isrec (vp))
   {
@@ -424,8 +430,8 @@ const char *setsval (Cell *vp, const char *s)
   vp->tval &= ~(NUM | CONVC);
   vp->tval |= STR;
   vp->fmt = NULL;
-  dprintf ("setsval %p: %s = \"%s (%p) \", t=%o r,f=%d,%d\n",
-    (void*)vp, NN (vp->nval), t, (void *)t, vp->tval, donerec, donefld);
+  dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
+    NN (vp->nval), t, flags2str (vp->tval), donerec, donefld);
   vp->sval = t;
   if (&vp->fval == NF)
   {
@@ -434,15 +440,13 @@ const char *setsval (Cell *vp, const char *s)
     setlastfld ((int)f);
     dprintf ("setting NF to %g\n", f);
   }
-
-  return vp->sval;
 }
 
 ///  Get float val of a Cell
 Awkfloat getfval (Cell *vp)
 {
   if ((vp->tval & (NUM | STR)) == 0)
-    funnyvar (vp, "read value of");
+    funnyvar (vp, "read float value of");
   if (isfld (vp) && donefld == 0)
     fldbld ();
   else if (isrec (vp) && donerec == 0)
@@ -453,119 +457,111 @@ Awkfloat getfval (Cell *vp)
     if (is_number (vp->sval) && (vp->csub != CCON))
       vp->tval |= NUM;  /* make NUM only sparingly */
   }
-  dprintf ("getfval %p: %s = %g, t=%o\n",
-    (void*)vp, NN (vp->nval), vp->fval, vp->tval);
+  dprintf ("getfval %s = %g, t=%s\n",
+    NN (vp->nval), vp->fval, flags2str (vp->tval));
   return vp->fval;
 }
 
-/// Get string val of a Cell
-static const char *get_str_val (Cell *vp, char **fmt)
+/* Don't duplicate the code for actually updating the value */
+static void update_str_val (Cell *vp)
 {
-  char s[100];  /* BUG: unchecked */
+  char s[100];
   double dtemp;
-
-  if ((vp->tval & (NUM | STR)) == 0)
-    funnyvar (vp, "read value of");
-  if (isfld (vp) && donefld == 0)
-    fldbld ();
-  else if (isrec (vp) && donerec == 0)
-    recbld ();
-
-  /*
-   * ADR: This is complicated and more fragile than is desirable.
-   * Retrieving a string value for a number associates the string
-   * value with the scalar.  Previously, the string value was
-   * sticky, meaning if converted via OFMT that became the value
-   * (even though POSIX wants it to be via CONVFMT). Or if CONVFMT
-   * changed after a string value was retrieved, the original value
-   * was maintained and used.  Also not per POSIX.
-   *
-   * We work around this design by adding two additional flags,
-   * CONVC and CONVO, indicating how the string value was
-   * obtained (via CONVFMT or OFMT) and _also_ maintaining a copy
-   * of the pointer to the xFMT format string used for the
-   * conversion.  This pointer is only read, **never** dereferenced.
-   * The next time we do a conversion, if it's coming from the same
-   * xFMT as last time, and the pointer value is different, we
-   * know that the xFMT format string changed, and we need to
-   * redo the conversion. If it's the same, we don't have to.
-   *
-   * There are also several cases where we don't do a conversion,
-   * such as for a field (see the checks below).
-   */
-
-   /* Don't duplicate the code for actually updating the value */
-#define update_str_val(vp) \
-  { \
-    xfree(vp->sval); \
-    if (modf(vp->fval, &dtemp) == 0)  /* it's integral */ \
-      sprintf(s, "%.30g", vp->fval); \
-    else \
-      sprintf(s, *fmt, vp->fval); \
-    vp->sval = tostring(s); \
-    vp->tval |= STR; \
-  }
-
-  if (isstr (vp) == 0)
-  {
-    update_str_val (vp);
-    if (fmt == OFMT)
-      vp->tval &= ~CONVC;
-    else
-      vp->tval |= CONVC;
-    vp->fmt = *fmt;
-  }
+  if (modf (vp->fval, &dtemp) == 0)  /* it's integral */
+    sprintf (s, "%.30g", vp->fval);
   else
-  {
-    if (!isnum (vp) || isfld (vp))
-      goto done;
-
-    if (fmt == OFMT && ((vp->tval & CONVC)
-       || ( vp->fmt != *fmt)))
-    {
-      update_str_val (vp);
-      vp->tval &= ~CONVC;
-      vp->fmt = *fmt;
-    }
-    else if (fmt == OFMT && ((vp->tval & CONVC) == 0 || vp->fmt != *fmt))
-    {
-      update_str_val (vp);
-      vp->tval |= CONVC;
-      vp->fmt = *fmt;
-    }
-  }
-done:
-  dprintf ("getsval %p: %s = \"%s (%p)\", t=%o\n",
-    (void*)vp, NN (vp->nval), vp->sval, (void *)vp->sval, vp->tval);
-  if (!vp->sval)
-  {
-    dprintf ("NULL sval for %s\n", vp->nval);
-    return "";
-  }
-  return vp->sval;
+    sprintf (s, vp->fmt, vp->fval);
+  xfree (vp->sval);
+  vp->sval = tostring (s);
+  vp->tval |= STR;
 }
 
-/// Get string val of a Cell
+/// Get string value of a Cell
 const char *getsval (Cell *vp)
 {
-  return get_str_val (vp, CONVFMT);
+  if ((vp->tval & (NUM | STR)) == 0)
+    funnyvar (vp, "read string value of");
+
+  if (isfld (vp))
+  {
+    if (!donefld)
+      fldbld ();
+    dprintf ("getsval: $%s: <%s> t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
+    return vp->sval;
+  }
+  else if (isrec (vp))
+  {
+    if (!donerec)
+      recbld ();
+    dprintf ("getsval: $0: <%s>, t=%s\n", vp->sval, flags2str (vp->tval));
+    return vp->sval;
+  }
+
+  //this is not $0, $1,...
+  if (!isstr (vp))
+  {
+    if (!(vp->tval & CONVC) || (vp->fmt != *CONVFMT))
+    {
+      // either don't have a string value or was obtained with a wrong format
+      vp->fmt = *CONVFMT;
+      update_str_val (vp);
+      vp->tval |= CONVC;
+    }
+  }
+
+  dprintf ("getsval %s = <%s>, t=%s\n", NN (vp->nval), NN(vp->sval), flags2str (vp->tval));
+  if (!vp->sval)
+    return "";
+  return vp->sval;
 }
 
 /// Get string val of a Cell for print */
 const char *getpssval (Cell *vp)
 {
-  return get_str_val (vp, OFMT);
+  if ((vp->tval & (NUM | STR)) == 0)
+    funnyvar (vp, "print string value of");
+
+  if (isfld (vp))
+  {
+    if (!donefld)
+      fldbld ();
+    if (!vp->sval)
+    {
+      vp->sval = strdup ("");
+      vp->tval |= STR;
+    }
+
+    dprintf ("getpsval: $%s: <%s> t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
+    return vp->sval;
+  }
+  else if (isrec (vp))
+  {
+    if (!donerec)
+      recbld ();
+    dprintf ("getpsval: $0: <%s> t=%s\n", vp->sval, flags2str(vp->tval));
+    return vp->sval;
+  }
+
+  //this is not $0, $1, ...
+  if (!isstr (vp) && ((vp->tval & CONVC) || (vp->fmt != *OFMT)))
+  {
+    vp->fmt = *OFMT;
+    update_str_val (vp);
+    vp->tval &= ~CONVC;
+  }
+  dprintf ("getpsval %s = <%s>, t=%s\n", 
+    NN (vp->nval), NN(vp->sval), flags2str(vp->tval));
+  if (!vp->sval)
+    return "";
+  return vp->sval;
 }
 
 /// Make a copy of string s
 char *tostring (const char *s)
 {
-  char *p;
-
-  p = (char *)malloc (strlen (s) + 1);
-  if (p == NULL)
+  char *p = strdup (s);
+  if (!p)
     FATAL (AWK_ERR_NOMEM, "out of space in tostring on %s", s);
-  strcpy (p, s);
   return p;
 }
 
@@ -648,13 +644,15 @@ const char *flags2str (int flags)
   int i;
   char *cp = buf;
 
-  for (i = 0; flagtab[i].name != NULL; i++) {
-    if ((flags & flagtab[i].value) != 0) {
+  for (i = 0; flagtab[i].name != NULL; i++)
+  {
+    if ((flags & flagtab[i].value) != 0)
+    {
       if (cp > buf)
         *cp++ = '|';
       strcpy (cp, flagtab[i].name);
       cp += strlen (cp);
-}
+    }
   }
 
   return buf;

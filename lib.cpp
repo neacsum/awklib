@@ -44,7 +44,7 @@ int     nfields = MAXFLD;  /* last allocated slot for $i */
 int     donefld;  /* 1 = implies rec broken into fields */
 int     donerec;  /* 1 = record is valid (no flds have changed) */
 
-int     lastfld = 0;  /* last used field */
+int     lastfld;  /* last used field */
 extern  Awkfloat *ARGC;
 
 static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | STR };
@@ -94,7 +94,7 @@ void freefields (void)
   // 'record' was freed by $0
 }
 
-/// Find first filename argument and open the file
+/// Find first filename argument
 void initgetrec (void)
 {
   int i;
@@ -119,14 +119,17 @@ void initgetrec (void)
 }
 
 /// Quick and dirty character quoting can quote a few short character strings
-char *quote (char* in)
+const char *quote (const char* in)
 {
   static char buf[256];
-  static char *beg = buf;
-  char *out, *ret;
-  if (beg > buf + sizeof (buf)-50)
-    beg = buf;
-  out = beg;
+  char *out = buf;
+
+  if (!in)
+  {
+    strcpy (out, "(null)");
+    return buf;
+  }
+
   while (*in)
   {
     switch (*in)
@@ -147,28 +150,28 @@ char *quote (char* in)
       *out++ = *in;
     }
     in++;
+    if (out - buf > sizeof (buf) - 5)
+    {
+      strcpy (out, "...");
+      return buf;
+    }
   }
   *out++ = 0;
-  ret = beg;
-  beg = out;
-  return ret;
+  return buf;
 }
 
 /// Get next input record
-int getrec (char **pbuf, int *pbufsize, int isrecord)
+int getrec (Cell *cell)
 {
-  /* note: cares whether buf == record */
-  int c;
   const char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
     quote(*RS), quote(*FS), *ARGC, *FILENAME);
-  if (isrecord)
+  if (isrec (cell))
   {
     donefld = 0;
     donerec = 1;
   }
-  *pbuf[0] = 0;
   while (interp->argno < *ARGC || infile == stdin)
   {
     dprintf ("argno=%d, file=|%s|\n", interp->argno, NN(file));
@@ -198,29 +201,26 @@ int getrec (char **pbuf, int *pbufsize, int isrecord)
         FATAL (AWK_ERR_INFILE, "can't open file %s", file);
       setfval (fnrloc, 0.0);
     }
-    c = readrec (pbuf, pbufsize, infile);
-    if (c != 0 || *pbuf[0] != '\0')
+    if (readrec (cell, infile))
     {
       /* normal record */
-      if (isrecord)
+      if (isrec(cell))
       {
         fldtab[0]->tval = REC | STR;
+#if 0
         if (is_number (fldtab[0]->sval))
         {
           fldtab[0]->fval = atof (fldtab[0]->sval);
           fldtab[0]->tval |= NUM;
         }
+#endif
       }
       setfval (nrloc, nrloc->fval + 1);
       setfval (fnrloc, fnrloc->fval + 1);
       return 1;
     }
     /* EOF arrived on this file; set up next */
-    if (infile != stdin)
-      fclose (infile);
-    infile = NULL;
-    *FILENAME = 0;
-    interp->argno++;
+    nextfile ();
   }
   return 0;  /* true end of file */
 }
@@ -249,12 +249,17 @@ int awkputs (const char *str, FILE *fp)
     return fputs (str, fp);
 }
 
-/// Read one record into buf
-int readrec (char **pbuf, int *pbufsize, FILE *inf)
+/// Read one record in cell's string value
+int readrec (Cell *cell, FILE *inf)
 {
   int sep, c;
-  char *rr, *buf = *pbuf;
-  int bufsize = *pbufsize;
+  char *rr, *buf;
+  int bufsize = RECSIZE;
+
+  xfree (cell->sval);
+  buf = (char *)malloc (bufsize);
+  if (!buf)
+    FATAL (AWK_ERR_NOMEM, "Not enough memory for readrec");
 
   if (strlen (*FS) >= sizeof (inputFS))
     FATAL (AWK_ERR_LIMIT, "field separator %.10s... is too long", *FS);
@@ -298,8 +303,12 @@ int readrec (char **pbuf, int *pbufsize, FILE *inf)
 #endif
   *rr = 0;
   dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
-  *pbuf = buf;
-  *pbufsize = bufsize;
+  cell->sval = buf;
+  if (is_number (cell->sval))
+  {
+    cell->fval = atof (cell->sval);
+    cell->tval |= NUM | CONVC;
+  }
   return c == EOF && rr == buf ? 0 : 1;
 }
 
@@ -441,7 +450,7 @@ void fldbld (void)
     if (is_number (p->sval))
     {
       p->fval = atof (p->sval);
-      p->tval |= NUM;
+      p->tval |= (NUM | CONVC);
     }
   }
   setfval (nfloc, (Awkfloat)lastfld);
@@ -470,7 +479,10 @@ void cleanfld (int n1, int n2)
   {
     p = fldtab[i];
     xfree (p->sval);
-    p->tval = FLD | STR;
+    p->sval = strdup ("");
+    p->tval = FLD | STR | NUM;
+    p->fval = 0.;
+    p->fmt = NULL;
   }
 }
 
@@ -503,6 +515,8 @@ Cell *fieldadr (int n)
 {
   if (n < 0)
     FATAL (AWK_ERR_ARG, "trying to access out of range field %d", n);
+  if (!donefld)
+    fldbld ();
   if (n > nfields)  /* fields after NF are empty */
     growfldtab (n);  /* but does not increase NF */
   return(fldtab[n]);
@@ -603,6 +617,7 @@ void recbld (void)
   dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
   dprintf ("recbld = |%s|\n", *prec);
   donerec = 1;
+  fldtab[0]->tval |= STR;
 }
 
 int  errorflag = 0;

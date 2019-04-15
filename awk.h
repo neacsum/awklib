@@ -42,7 +42,7 @@ int errprintf (const char *fmt, ...);
 #else
 extern int  dbg;
 #define  dprintf  if (dbg) errprintf
-#define YYDBGOUT if (dbg>1) errprintf
+#define YYDBGOUT if (dbg>2) errprintf
 #endif
 
 #define  RECSIZE  (8 * 1024)  /* sets limit on records, fields, etc., etc. */

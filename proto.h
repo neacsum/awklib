@@ -67,11 +67,11 @@ Array*  makearray (int);
 void  freearray (Array *);
 void freecell (Cell *);
 void  freeelem (Cell *, const char *);
-Cell* setsymtab (const char *name, const char *sval, Awkfloat nval, unsigned int type, Array *tab);
+Cell* setsymtab (const char *name, const char *sval, double nval, unsigned int type, Array *tab);
 Cell* lookup (const char *name, Array *tab);
-double setfval (Cell *, Awkfloat);
+void setfval (Cell *, Awkfloat);
 void  funnyvar (Cell *, const char *);
-const char* setsval (Cell *, const char *);
+void setsval (Cell *, const char *);
 double getfval (Cell *);
 const char* getsval (Cell *);
 const char* getpssval (Cell *);     /* for print */
@@ -79,15 +79,14 @@ char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
 void  recinit (void);
-void  initgetrec (void);
 void  makefields (int, int);
 void  freefields (void);
 void  growfldtab (int n);
-int   getrec (char **, int *, int);
+int   getrec (Cell *c);
 int   awkputs (const char *str, FILE *fp);
 
 void  nextfile (void);
-int   readrec (char **buf, int *bufsize, FILE *inf);
+int   readrec (Cell* c, FILE *inf);
 const char* getargv (int);
 void  setclvar (const char *);
 void  fldbld (void);
@@ -107,6 +106,8 @@ int  is_number (const char *);
 int  adjbuf (char **pb, int *sz, int min, int q, char **pbp);
 void  run (Node *);
 void  stdinit (void);
+void initgetrec (void);
+void tempfree (Cell *a);
 
 Cell* program (Node **, int);
 Cell* call (Node **, int);
@@ -120,7 +121,6 @@ Cell* intest (Node **, int);
 Cell* matchop (Node **, int);
 Cell* boolop (Node **, int);
 Cell* relop (Node **, int);
-Cell* field (Node **, int);
 Cell* indirect (Node **, int);
 Cell* substr (Node **, int);
 Cell* sindex (Node **, int);
@@ -156,3 +156,4 @@ void  SYNTAX (const char *, ...);
 void  FATAL (int err, const char *, ...);
 
 const char *flags2str (int flags);
+const char *quote (const char *in);

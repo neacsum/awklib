@@ -4,6 +4,7 @@ rem Run one test.
 rem
 
 set AWK="..\x86\debug\awk.exe"
+rem set AWK="c:\tools\gawk.exe"
 
 %awk% --version
 .\echo -n "Running test %~n1... "

@@ -100,7 +100,7 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
 #define  RET(x)  { return x; }
 #else
 char *tokname (int tok);
-#define  RET(x)  { if(dbg) errprintf("lex %s\n", tokname(x)); return x; }
+#define  RET(x)  { if(dbg>1) errprintf("lex %s\n", tokname(x)); return x; }
 #endif
 
 int peek (void)
