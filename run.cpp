@@ -1172,20 +1172,28 @@ Cell *assign (Node **a, int n)
       if (n > *NF)
         newfld (n);
     }
-    if (x == y && !(x->tval & (FLD | REC)))  /* self-assignment: */
-      ;    /* leave alone unless it's a field */
-    else if ((y->tval & (STR | NUM)) == (STR | NUM))
-    {
-      setsval (x, getsval (y));
-      x->fval = getfval (y);
-      x->tval |= NUM;
+    if (x != y || (x->tval & (FLD | REC)))  /* self-assignment: */
+    {                                       /* leave alone unless it's a field */
+      x->tval &= ~(NUM | STR);
+      if ((y->tval & (STR | NUM)) == (STR | NUM))
+      {
+        setsval (x, getsval (y));
+        x->fval = getfval (y);
+        x->tval |= NUM | STR;
+      }
+      else if (isstr (y))
+      {
+        setsval (x, getsval (y));
+        x->tval |= STR;
+      }
+      else if (isnum (y))
+      {
+        setfval (x, getfval (y));
+        x->tval |= NUM;
+      }
+      else
+        funnyvar (y, "read value of");
     }
-    else if (isstr (y))
-      setsval (x, getsval (y));
-    else if (isnum (y))
-      setfval (x, getfval (y));
-    else
-      funnyvar (y, "read value of");
     tempfree (y);
     return(x);
   }

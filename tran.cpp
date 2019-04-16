@@ -350,7 +350,7 @@ void setfval (Cell *vp, Awkfloat f)
   int fldno;
 
   f += 0.0;    /* normalize negative zero to positive zero */
-  if ((vp->tval & (NUM | STR)) == 0)
+  if ((vp->tval & (ARR | FUNC | EXTFUN)) != 0)
     funnyvar (vp, "assign to");
   xfree (vp->sval); /* free any previous string */
   vp->tval &= ~(STR | CONVC); /* mark string invalid */
@@ -392,8 +392,8 @@ void funnyvar (Cell *vp, const char *rw)
     FATAL (AWK_ERR_ARG, "can't %s %s; it's an array name.", rw, vp->nval);
   if (vp->tval & FCN)
     FATAL (AWK_ERR_ARG, "can't %s %s; it's a function.", rw, vp->nval);
-  WARNING ("funny variable %p: n=%s s=\"%s\" f=%g t=%o",
-    vp, vp->nval, vp->sval, vp->fval, vp->tval);
+  WARNING ("funny variable %s %p: n=%s s=\"%s\" f=%g t=0x%x",
+    rw, vp, vp->nval, vp->sval, vp->fval, vp->tval);
 }
 
 ///  Set string val of a Cell
@@ -405,7 +405,7 @@ void setsval (Cell *vp, const char *s)
 
   dprintf ("starting setsval %s = <%s>, t=%s, r,f=%d,%d\n",
     NN (vp->nval), s, flags2str (vp->tval), donerec, donefld);
-  if ((vp->tval & (NUM | STR)) == 0)
+  if ((vp->tval & (ARR | FUNC | EXTFUN)) != 0)
     funnyvar (vp, "assign to");
   if (isfld (vp))
   {
@@ -433,6 +433,11 @@ void setsval (Cell *vp, const char *s)
   dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
     NN (vp->nval), t, flags2str (vp->tval), donerec, donefld);
   vp->sval = t;
+  if (is_number (t))
+  {
+    vp->fval = atof (t);
+    vp->tval |= NUM;
+  }
   if (&vp->fval == NF)
   {
     donerec = 0;  /* mark $0 invalid */

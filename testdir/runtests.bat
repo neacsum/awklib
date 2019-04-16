@@ -4,7 +4,7 @@ rem Run all tests in tests directory.
 rem
 
 set AWK="..\x86\debug\awk.exe"
-
+rem set AWK="..\x86\release\awk.exe"
 %awk% --version
 for %%i in (tests\*.tst) do (
   .\echo -n "Running test %%~ni... "

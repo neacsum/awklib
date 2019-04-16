@@ -22,7 +22,13 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ****************************************************************/
 
-static const char  *version = "version " __DATE__;
+
+static const char  *version = 
+  "version " 
+#ifdef _DEBUG
+  " DEBUG "
+#endif
+  __DATE__;
 
 #include <stdio.h>
 #include <ctype.h>
