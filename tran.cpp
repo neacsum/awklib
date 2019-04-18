@@ -358,21 +358,21 @@ void setfval (Cell *vp, Awkfloat f)
   vp->tval |= NUM;  /* mark number ok */
   if (isfld (vp))
   {
-    donerec = 0;  /* mark $0 invalid */
+    interp->donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
   }
   else if (&vp->fval == NF)
   {
-    donerec = 0;  /* mark $0 invalid */
+    interp->donerec = 0;  /* mark $0 invalid */
     setlastfld ((int)f);
     dprintf ("setting NF to %g\n", f);
   }
   else if (isrec (vp))
   {
-    donefld = 0;  /* mark $1... invalid */
-    donerec = 1;
+    interp->donefld = 0;  /* mark $1... invalid */
+    interp->donerec = 1;
   }
   vp->fval = f;
   if ((vp->tval & (REC | FLD)) != 0)
@@ -404,12 +404,12 @@ void setsval (Cell *vp, const char *s)
   Awkfloat f;
 
   dprintf ("starting setsval %s = <%s>, t=%s, r,f=%d,%d\n",
-    NN (vp->nval), s, flags2str (vp->tval), donerec, donefld);
+    NN (vp->nval), s, flags2str (vp->tval), interp->donerec, interp->donefld);
   if ((vp->tval & (ARR | FCN | EXTFUN)) != 0)
     funnyvar (vp, "assign to");
   if (isfld (vp))
   {
-    donerec = 0;  /* mark $0 invalid */
+    interp->donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
     if (fldno > *NF)
       newfld (fldno);
@@ -417,12 +417,12 @@ void setsval (Cell *vp, const char *s)
   }
   else if (isrec (vp))
   {
-    donefld = 0;  /* mark $1... invalid */
-    donerec = 1;
+    interp->donefld = 0;  /* mark $1... invalid */
+    interp->donerec = 1;
   }
   else if (&vp->sval == OFS)
   {
-    if (donerec == 0)
+    if (interp->donerec == 0)
       recbld ();
   }
   t = s ? tostring (s) : tostring ("");  /* in case it's self-assign */
@@ -431,7 +431,7 @@ void setsval (Cell *vp, const char *s)
   vp->tval |= STR;
   vp->fmt = NULL;
   dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
-    NN (vp->nval), t, flags2str (vp->tval), donerec, donefld);
+    NN (vp->nval), t, flags2str (vp->tval), interp->donerec, interp->donefld);
   vp->sval = t;
   if (is_number (t))
   {
@@ -440,7 +440,7 @@ void setsval (Cell *vp, const char *s)
   }
   if (&vp->fval == NF)
   {
-    donerec = 0;  /* mark $0 invalid */
+    interp->donerec = 0;  /* mark $0 invalid */
     f = getfval (vp);
     setlastfld ((int)f);
     dprintf ("setting NF to %g\n", f);
@@ -452,9 +452,9 @@ Awkfloat getfval (Cell *vp)
 {
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "read float value of");
-  if (isfld (vp) && donefld == 0)
+  if (isfld (vp) && interp->donefld == 0)
     fldbld ();
-  else if (isrec (vp) && donerec == 0)
+  else if (isrec (vp) && interp->donerec == 0)
     recbld ();
   if (!isnum (vp))  /* not a number */
   {
@@ -489,14 +489,14 @@ const char *getsval (Cell *vp)
 
   if (isfld (vp))
   {
-    if (!donefld)
+    if (!interp->donefld)
       fldbld ();
     dprintf ("getsval: $%s: <%s> t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
     return vp->sval;
   }
   else if (isrec (vp))
   {
-    if (!donerec)
+    if (!interp->donerec)
       recbld ();
     dprintf ("getsval: $0: <%s>, t=%s\n", vp->sval, flags2str (vp->tval));
     return vp->sval;
@@ -528,7 +528,7 @@ const char *getpssval (Cell *vp)
 
   if (isfld (vp))
   {
-    if (!donefld)
+    if (!interp->donefld)
       fldbld ();
     if (!vp->sval)
     {
@@ -541,7 +541,7 @@ const char *getpssval (Cell *vp)
   }
   else if (isrec (vp))
   {
-    if (!donerec)
+    if (!interp->donerec)
       recbld ();
     dprintf ("getpsval: $0: <%s> t=%s\n", vp->sval, flags2str(vp->tval));
     return vp->sval;

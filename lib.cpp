@@ -35,16 +35,10 @@ THIS SOFTWARE.
 FILE*   infile = NULL;
 int     recsize = RECSIZE;
 
-Cell**  fldtab;  /* pointers to Cells */
 char    inputFS[100] = " ";
 
 #define  MAXFLD  2
-int     nfields = MAXFLD;  /* last allocated slot for $i */
 
-int     donefld;  /* 1 = implies rec broken into fields */
-int     donerec;  /* 1 = record is valid (no flds have changed) */
-
-int     lastfld;  /* last used field */
 extern  Awkfloat *ARGC;
 
 static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | STR };
@@ -55,14 +49,14 @@ static int	refldbld (const char *, const char *);
 void recinit ()
 {
   recsize = RECSIZE;
-  nfields = MAXFLD;
-  if ((fldtab = (Cell **)malloc ((nfields + 1) * sizeof (Cell *))) == NULL
-   || (fldtab[0] = (Cell *)malloc (sizeof (Cell))) == NULL)
+  interp->nfields = MAXFLD;
+  if ((interp->fldtab = (Cell **)malloc ((interp->nfields + 1) * sizeof (Cell *))) == NULL
+   || (interp->fldtab[0] = (Cell *)malloc (sizeof (Cell))) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space for $0 and fields");
-  *fldtab[0] = dollar0;
-  fldtab[0]->sval = (char *)calloc (recsize, sizeof(char));
-  fldtab[0]->nval = tostring ("0");
-  makefields (1, nfields);
+  *(interp->fldtab[0]) = dollar0;
+  interp->fldtab[0]->sval = (char *)calloc (recsize, sizeof(char));
+  interp->fldtab[0]->nval = tostring ("0");
+  makefields (1, interp->nfields);
 }
 
 /// Create $n1..$n2 inclusive
@@ -73,13 +67,13 @@ void makefields (int n1, int n2)
 
   for (i = n1; i <= n2; i++)
   {
-    fldtab[i] = (Cell *)malloc (sizeof (struct Cell));
-    if (fldtab[i] == NULL)
+    interp->fldtab[i] = (Cell *)malloc (sizeof (struct Cell));
+    if (interp->fldtab[i] == NULL)
       FATAL (AWK_ERR_NOMEM, "out of space in makefields %d", i);
-    *fldtab[i] = dollar1;
-    fldtab[i]->sval = strdup ("");
+    *interp->fldtab[i] = dollar1;
+    interp->fldtab[i]->sval = strdup ("");
     sprintf (temp, "%d", i);
-    fldtab[i]->nval = tostring (temp);
+    interp->fldtab[i]->nval = tostring (temp);
   }
 }
 
@@ -87,10 +81,10 @@ void makefields (int n1, int n2)
 void freefields (void)
 {
   int i;
-  for (i = 0; i < nfields; i++)
-    freecell (fldtab[i]);
-  free (fldtab[0]);
-  xfree (fldtab);
+  for (i = 0; i < interp->nfields; i++)
+    freecell (interp->fldtab[i]);
+  free (interp->fldtab[0]);
+  xfree (interp->fldtab);
   // 'record' was freed by $0
 }
 
@@ -169,8 +163,8 @@ int getrec (Cell *cell)
     quote(*RS), quote(*FS), *ARGC, *FILENAME);
   if (isrec (cell))
   {
-    donefld = 0;
-    donerec = 1;
+    interp->donefld = 0;
+    interp->donerec = 1;
   }
   while (interp->argno < *ARGC || infile == stdin)
   {
@@ -206,7 +200,7 @@ int getrec (Cell *cell)
       /* normal record */
       if (isrec(cell))
       {
-        fldtab[0]->tval = REC | STR;
+        interp->fldtab[0]->tval = REC | STR;
 #if 0
         if (is_number (fldtab[0]->sval))
         {
@@ -361,10 +355,10 @@ void fldbld (void)
   Cell *p;
   int i, j, n;
 
-  if (donefld)
+  if (interp->donefld)
     return;
 
-  fields = strdup (getsval (fldtab[0]));
+  fields = strdup (getsval (interp->fldtab[0]));
   n = strlen (fields);
   i = 0;  /* number of fields accumulated here */
   strcpy (inputFS, *FS);
@@ -388,11 +382,11 @@ void fldbld (void)
         fe++;
       if (*fe)
         *fe++ = 0;
-      if (++i > nfields)
+      if (++i > interp->nfields)
         growfldtab (i);
-      xfree (fldtab[i]->sval);
-      fldtab[i]->sval = strdup(fb);
-      fldtab[i]->tval = FLD | STR;
+      xfree (interp->fldtab[i]->sval);
+      interp->fldtab[i]->sval = strdup(fb);
+      interp->fldtab[i]->tval = FLD | STR;
       fb = fe;
     }
   }
@@ -402,13 +396,13 @@ void fldbld (void)
     for (i = 0; *fb != 0; fb++)
     {
       char buf[2];
-      if (++i > nfields)
+      if (++i > interp->nfields)
         growfldtab (i);
       buf[0] = *fb;
       buf[1] = 0;
-      xfree (fldtab[i]->sval);
-      fldtab[i]->sval = strdup (buf);
-      fldtab[i]->tval = FLD | STR;
+      xfree (interp->fldtab[i]->sval);
+      interp->fldtab[i]->sval = strdup (buf);
+      interp->fldtab[i]->tval = FLD | STR;
     }
   }
   else if (*fb != 0)
@@ -434,34 +428,34 @@ void fldbld (void)
       else
         end_seen = 1;
 
-      if (++i > nfields)
+      if (++i > interp->nfields)
         growfldtab (i);
-      xfree (fldtab[i]->sval);
-      fldtab[i]->sval = strdup(fb);
-      fldtab[i]->tval = FLD | STR;
+      xfree (interp->fldtab[i]->sval);
+      interp->fldtab[i]->sval = strdup(fb);
+      interp->fldtab[i]->tval = FLD | STR;
     }
   }
-  cleanfld (i + 1, lastfld);  /* clean out junk from previous record */
-  lastfld = i;
-  donefld = 1;
-  for (j = 1; j <= lastfld; j++)
+  cleanfld (i + 1, interp->lastfld);  /* clean out junk from previous record */
+  interp->lastfld = i;
+  interp->donefld = 1;
+  for (j = 1; j <= interp->lastfld; j++)
   {
-    p = fldtab[j];
+    p = interp->fldtab[j];
     if (is_number (p->sval))
     {
       p->fval = atof (p->sval);
       p->tval |= (NUM | CONVC);
     }
   }
-  setfval (nfloc, (Awkfloat)lastfld);
-  donerec = 1; /* restore */
+  setfval (nfloc, (Awkfloat)interp->lastfld);
+  interp->donerec = 1; /* restore */
   free (fields);
 #ifndef NDEBUG
   if (dbg)
   {
-    for (j = 0; j <= lastfld; j++)
+    for (j = 0; j <= interp->lastfld; j++)
     {
-      p = fldtab[j];
+      p = interp->fldtab[j];
       dprintf ("field %d (%s): |%s|\n", j, p->nval, p->sval);
     }
   }
@@ -477,7 +471,7 @@ void cleanfld (int n1, int n2)
 
   for (i = n1; i <= n2; i++)
   {
-    p = fldtab[i];
+    p = interp->fldtab[i];
     xfree (p->sval);
     p->sval = strdup ("");
     p->tval = FLD | STR | NUM;
@@ -489,25 +483,25 @@ void cleanfld (int n1, int n2)
 /// Add field n after end of existing lastfld
 void newfld (int n)
 {
-  if (n > nfields)
+  if (n > interp->nfields)
     growfldtab (n);
-  cleanfld (lastfld + 1, n);
-  lastfld = n;
+  cleanfld (interp->lastfld + 1, n);
+  interp->lastfld = n;
   setfval (nfloc, (Awkfloat)n);
 }
 
 /// Set lastfld cleaning fldtab cells if necessary
 void setlastfld (int n)
 {
-  if (n > nfields)
+  if (n > interp->nfields)
     growfldtab (n);
 
-  if (lastfld < n)
-    cleanfld (lastfld + 1, n);
+  if (interp->lastfld < n)
+    cleanfld (interp->lastfld + 1, n);
   else
-    cleanfld (n + 1, lastfld);
+    cleanfld (n + 1, interp->lastfld);
 
-  lastfld = n;
+  interp->lastfld = n;
 }
 
 /// Get nth field
@@ -515,30 +509,30 @@ Cell *fieldadr (int n)
 {
   if (n < 0)
     FATAL (AWK_ERR_ARG, "trying to access out of range field %d", n);
-  if (!donefld)
+  if (!interp->donefld)
     fldbld ();
-  if (n > nfields)  /* fields after NF are empty */
+  if (n > interp->nfields)  /* fields after NF are empty */
     growfldtab (n);  /* but does not increase NF */
-  return(fldtab[n]);
+  return(interp->fldtab[n]);
 }
 
 /// Make new fields up to at least $n
 void growfldtab (int n)
 {
-  int nf = 2 * nfields;
+  int nf = 2 * interp->nfields;
   size_t s;
 
   if (n > nf)
     nf = n;
   s = (nf + 1) * (sizeof (struct Cell *));  /* freebsd: how much do we need? */
   if (s / sizeof (struct Cell *) - 1 == nf) /* didn't overflow */
-    fldtab = (Cell **)realloc (fldtab, s);
+    interp->fldtab = (Cell **)realloc (interp->fldtab, s);
   else          /* overflow sizeof int */
-    xfree (fldtab);  /* make it null */
-  if (fldtab == NULL)
+    xfree (interp->fldtab);  /* make it null */
+  if (interp->fldtab == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space creating %d fields", nf);
-  makefields (nfields + 1, nf);
-  nfields = nf;
+  makefields (interp->nfields + 1, nf);
+  interp->nfields = nf;
 }
 
 /// Build fields from reg expr in FS
@@ -561,11 +555,11 @@ int refldbld (const char *rec, const char *fs)
   tempstat = pfa->initstat;
   for (i = 1; ; i++)
   {
-    if (i > nfields)
+    if (i > interp->nfields)
       growfldtab (i);
-    xfree (fldtab[i]->sval);
-    fldtab[i]->tval = FLD | STR;
-    fldtab[i]->sval = strdup(fr);
+    xfree (interp->fldtab[i]->sval);
+    interp->fldtab[i]->tval = FLD | STR;
+    interp->fldtab[i]->sval = strdup(fr);
     dprintf ("refldbld: i=%d\n", i);
     if (nematch (pfa, rec))
     {
@@ -596,13 +590,13 @@ void recbld (void)
   const char *p;
   char **prec;
 
-  if (donerec == 1)
+  if (interp->donerec == 1)
     return;
-  r = fldtab[0]->sval;
-  prec = &fldtab[0]->sval;
+  r = interp->fldtab[0]->sval;
+  prec = &interp->fldtab[0]->sval;
   for (i = 1; i <= *NF; i++)
   {
-    p = getsval (fldtab[i]);
+    p = getsval (interp->fldtab[i]);
     if (!adjbuf (prec, &recsize, 2 + strlen (p) + strlen (*OFS) + r - *prec, recsize, &r))
       FATAL (AWK_ERR_NOMEM, "created $0 `%.30s...' too long", *prec);
     while ((*r = *p++) != 0)
@@ -614,10 +608,10 @@ void recbld (void)
     }
   }
   *r = '\0';
-  dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)fldtab[0]);
+  dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)interp->fldtab[0]);
   dprintf ("recbld = |%s|\n", *prec);
-  donerec = 1;
-  fldtab[0]->tval |= STR;
+  interp->donerec = 1;
+  interp->fldtab[0]->tval |= STR;
 }
 
 int  errorflag = 0;

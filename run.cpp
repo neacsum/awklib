@@ -140,9 +140,9 @@ Cell *execute (Node *u)
     if (isvalue (a))
     {
       x = (Cell *)(a->narg[0]);
-      if (isfld (x) && !donefld)
+      if (isfld (x) && !interp->donefld)
         fldbld ();
-      else if (isrec (x) && !donerec)
+      else if (isrec (x) && !interp->donerec)
         recbld ();
 
       return x;
@@ -151,9 +151,9 @@ Cell *execute (Node *u)
       FATAL (AWK_ERR_SYNTAX, "illegal statement");
     proc = proctab[a->nobj - FIRSTTOKEN];
     x = (*proc)(a->narg, a->nobj);
-    if (isfld (x) && !donefld)
+    if (isfld (x) && !interp->donefld)
       fldbld ();
-    else if (isrec (x) && !donerec)
+    else if (isrec (x) && !interp->donerec)
       recbld ();
     if (a->ntype == NEXPR)
       return x;
@@ -182,7 +182,7 @@ Cell *program (Node **a, int n)
   }
   if (!exit_seen && (a[1] || a[2]))
   {
-    while (getrec (fldtab[0]) > 0)
+    while (getrec (interp->fldtab[0]) > 0)
     {
       x = execute (a[1]);
       if (isexit (x))
@@ -427,7 +427,7 @@ Cell *awkgetline (Node **a, int)
   int bufsize = recsize;
   int mode, c;
 
-  r = a[0] ? execute (a[0]) : fldtab[0];
+  r = a[0] ? execute (a[0]) : interp->fldtab[0];
 
   fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
   if (a[2] != NULL)
@@ -454,7 +454,7 @@ Cell *awkgetline (Node **a, int)
   }
   if (isrec(r))
   {
-    donerec = 1;
+    interp->donerec = 1;
     fldbld ();
   }
   return r;
@@ -463,7 +463,7 @@ Cell *awkgetline (Node **a, int)
 /// get NF
 Cell *getnf (Node **a, int n)
 {
-  if (donefld == 0)
+  if (interp->donefld == 0)
     fldbld ();
   Cell *pnf = execute (a[0]);
   return pnf;

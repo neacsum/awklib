@@ -63,8 +63,6 @@ extern Awkfloat *RLENGTH;
 
 extern int  lineno;    /* line number in awk program */
 extern int  errorflag;  /* 1 if error has occurred */
-extern int  donefld;  /* 1 if record broken into fields */
-extern int  donerec;  /* 1 if record is valid (no fld has changed */
 extern char  inputFS[];  /* FS at time of input, for field splitting */
 
 extern  char  *patbeg;  /* beginning of pattern matched */
@@ -128,7 +126,6 @@ extern Cell*    fnrloc;     /* FNR */
 extern Cell*    nfloc;      /* NF */
 extern Cell*    rstartloc;  /* RSTART */
 extern Cell*    rlengthloc; /* RLENGTH */
-extern Cell**   fldtab; /* $0, $1, ...*/
 
 
 /* function types */
@@ -247,6 +244,11 @@ typedef struct AWKINTERP {
   inproc inredir;       ///< input redirection function
   outproc outredir;     ///< output redirection function
   struct Frame  fn;     ///< frame data for current function call
+  int donerec;          ///< 1 if record broken into fields
+  int donefld;          ///< 1 if record is valid (no fld has changed)
+  Cell **fldtab;        ///< $0, $1, ...
+  int nfields;          ///< count of fldtab
+  int lastfld;          ///< last used field
 } AWKINTERP;
 
 extern AWKINTERP *interp;

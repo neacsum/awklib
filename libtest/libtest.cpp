@@ -6,10 +6,12 @@
 #include <sys/stat.h>
 
 using namespace std;
-istrstream instr{
+const char *dat{
   "Record 1\n"
   "Record 2\n"
 };
+
+istringstream instr;
 
 ostringstream out;
 
@@ -68,8 +70,7 @@ TEST_FIXTURE (fixt, setvar_newvar)
   awk_infunc (interp, []()->int {return instr.get (); });
   CHECK (awk_setvar (interp, &v));
 
-  instr.clear ();
-  instr.seekg (0);
+  instr.str (dat);
   awk_exec (interp);
   awksymb vo{ "myvar"};
   CHECK (awk_getvar (interp, &vo));
@@ -132,6 +133,34 @@ TEST_FIXTURE (fixt, extfun)
   awksymb n{ "n" };
   awk_getvar (interp, &n);
   CHECK_EQUAL (6, n.fval);
+}
+
+void change_rec (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
+{
+  awksymb rec{ "$0" };
+  
+  if (nargs >= 1)
+  {
+    rec.sval = args[0].sval;
+    rec.flags |= AWKSYMB_STR;
+    awk_setvar (pinter, &rec);
+  }
+}
+
+TEST_FIXTURE (fixt, argvar)
+{
+  awk_setprog (interp, "NR == 1 {change(\"This is \" $0); print}");
+  awk_compile (interp);
+  awk_addfunc (interp, "change", change_rec, 1);
+
+  instr.str (dat);
+  instr.clear ();
+  awk_infunc (interp, []()->int {return instr.get (); });
+
+  out.str(string());
+  awk_outfunc (interp, strout);
+  awk_exec (interp);
+  CHECK_EQUAL ("This is Record 1\n", out.str ());
 }
 
 char *basename (const char *path)

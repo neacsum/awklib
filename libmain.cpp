@@ -51,7 +51,6 @@ static const char  *version =
 
 #define  MAX_PFILE  20  /* max number of -f's */
 
-extern  int  nfields;
 extern  FILE* yyin;     /* lex input file */
 extern char *curfname;  ///<current function name
 
@@ -170,6 +169,7 @@ int awk_addarg (AWKINTERP *pinter, const char *arg)
   return 1;
 }
 
+/// Compile an AWK program
 int awk_compile (AWKINTERP *pinter)
 {
   interp = pinter;
@@ -210,6 +210,7 @@ int awk_compile (AWKINTERP *pinter)
   return 1;
 }
 
+/// Execute an AWK program
 int awk_exec (AWKINTERP *pinter)
 {
   if (interp->status != AWKS_COMPILED)
@@ -234,6 +235,7 @@ int awk_exec (AWKINTERP *pinter)
   return 1;
 }
 
+/// Release all resources claimed by AWK interpreter
 void awk_end (AWKINTERP *pinter)
 {
   interp = pinter;
@@ -333,7 +335,16 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
   symtab = interp->symtab;
   var->flags = 0;
   try {
-    Cell *cp = lookup (var->name, symtab);
+    Cell *cp;
+    if (var->name[0] == '$' && is_number (var->name+1))
+    {
+      int n = (int)atof (var->name);
+      fldbld ();
+      if (n >= 0 && n < interp->nfields)
+        cp = interp->fldtab[n];
+    }
+    else
+      cp = lookup (var->name, symtab);
     if (!cp)
     {
       sprintf (errmsg, "awk_getvar: not found %s", var->name);
@@ -378,7 +389,8 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
   }
   catch (int& x) {
     return (errorflag = x);
-  };
+  }
+
   return 1;
 }
 
@@ -387,7 +399,9 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
 */
 int awk_setvar (AWKINTERP * pinter, awksymb * var)
 {
-  Cell *cp;
+  Cell *cp = NULL;
+  int n;
+  bool is_field = false;
 
   if (interp->status != AWKS_COMPILED)
   {
@@ -398,8 +412,20 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   interp = pinter;
   symtab = interp->symtab;
   try {
-    cp = lookup (var->name, symtab);
-    if (!cp)
+    if (var->name[0] == '$' && is_number (var->name+1))
+    {
+      n = (int)atof (var->name+1);
+      if (n < 0 || n >= interp->nfields)
+      {
+        sprintf (errmsg, "awk_setvar: invalid field %s", var->name);
+        return (errorflag = AWK_ERR_INVVAR);
+      }
+      cp = interp->fldtab[n];
+      is_field = true;
+    }
+    else
+      cp = lookup (var->name, symtab);
+    if (!cp && !is_field)
     {
       //new variable
       if ((var->flags & AWKSYMB_ARR) != 0 && !var->index)
@@ -431,11 +457,19 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
       setsval (cp, var->sval);
     else
       setfval (cp, var->fval);
-    return 1;
+    if (is_field)
+    {
+      if (n == 0)
+        fldbld ();
+      else
+        recbld ();
+    }
   }
   catch (int& x) {
     return (errorflag = x);
-  };
+  }
+
+  return 1;
 }
 
 int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
@@ -456,7 +490,8 @@ int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
   }
   catch (int&) {
     return 0;
-  };
+  }
+
   return 1;
 }
 
