@@ -1,5 +1,12 @@
 #pragma once
 
+/*!
+  \file awklib.h
+  \brief Embedded AWK library API
+
+  (c) Mircea Neacsu 2019
+  See README file for full copyright information.
+*/
 #include <stdio.h>
 #pragma comment (lib, "awk")
 #ifdef __cplusplus
@@ -17,7 +24,6 @@ struct awksymb {
 #define AWKSYMB_NUM   1   //numeric value
 #define AWKSYMB_STR   2   //string value
 #define AWKSYMB_ARR   4   //variable is an array
-#define AWKSYMB_INV   8   //invalid variable type
   double fval;
   char *sval;
 };
@@ -38,7 +44,6 @@ void awk_outfunc (AWKINTERP* pinter, outproc user_output);
 int awk_setoutput (AWKINTERP* pinter, const char *fname);
 int awk_setinput (AWKINTERP* pinter, const char *fname);
 int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs);
-int awk_getvartype (AWKINTERP *pinter, awksymb* var);
 int awk_getvar (AWKINTERP *pinter, awksymb* var);
 int awk_setvar (AWKINTERP *pinter, awksymb* var);
 

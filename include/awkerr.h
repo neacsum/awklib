@@ -1,3 +1,10 @@
+/*!
+  \file awkerr.h
+  \brief Error codes from embedded AWK library
+
+  (c) Mircea Neacsu 2019
+  See README file for full copyright information.
+*/
 #pragma once
 
 //AWK error codes
@@ -16,3 +23,6 @@
 #define AWK_ERR_RUNTIME     -13 //runtime error
 #define AWK_ERR_OUTFILE     -14 //output file error
 #define AWK_ERR_PIPE        -15 //pipe error
+#define AWK_ERR_NOVAR       -16 //variable not found
+#define AWK_ERR_ARRAY       -17 //variable is an array
+#define AWK_ERR_INVTYPE     -18 //invalid variable type

@@ -25,6 +25,21 @@ struct fixt {
   ~fixt () { awk_end (interp); }
 };
 
+int strout (const char *buf, size_t sz)
+{
+  out.write (buf, sz);
+  return out.bad ()? - 1 : 1;
+}
+
+TEST_FIXTURE (fixt, outredir)
+{
+  awk_setprog (interp, "BEGIN {print \"Output redirected\"}");
+  awk_compile (interp);
+  awk_outfunc (interp, strout);
+  awk_exec (interp);
+  CHECK_EQUAL ("Output redirected\n", out.str ());
+}
+
 TEST_FIXTURE (fixt, getvar)
 {
   awk_setprog (interp, "{print NR, $0}\n");

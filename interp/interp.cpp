@@ -1,3 +1,11 @@
+/*!
+  \file interp.cpp
+  \brief Simple AWK interpreter using embedded AWK library
+
+  (c) Mircea Neacsu 2019
+  See README file for full copyright information.
+*/
+
 #include <awklib.h>
 #include <stdlib.h>
 #include <string.h>

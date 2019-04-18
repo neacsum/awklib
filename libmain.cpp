@@ -1,3 +1,11 @@
+/*!
+  \file libmain.cpp
+  \brief API implementation for embedded AWK library
+
+  (c) Mircea Neacsu 2019
+  See README file for full copyright information.
+*/
+
 /****************************************************************
 Copyright (C) Lucent Technologies 1997
 All Rights Reserved
@@ -205,7 +213,11 @@ int awk_compile (AWKINTERP *pinter)
 int awk_exec (AWKINTERP *pinter)
 {
   if (interp->status != AWKS_COMPILED)
+  {
+    strcpy (errmsg, "awk_exec: no compiled program");
+    errorflag = AWK_ERR_NOPROG;
     return 0;
+  }
 
   interp = pinter;
   symtab = interp->symtab;
@@ -312,7 +324,10 @@ int awk_setinput (AWKINTERP* pinter, const char *fname)
 int awk_getvar (AWKINTERP * pinter, awksymb * var)
 {
   if (interp->status != AWKS_COMPILED)
-    return 0;
+  {
+    strcpy (errmsg, "Bad state");
+    return (errorflag = AWK_ERR_BADSTAT);
+  }
 
   interp = pinter;
   symtab = interp->symtab;
@@ -320,36 +335,51 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
   try {
     Cell *cp = lookup (var->name, symtab);
     if (!cp)
-      return 0;//not found
+    {
+      sprintf (errmsg, "awk_getvar: not found %s", var->name);
+      return (errorflag = AWK_ERR_NOVAR); //not found
+    }
+
+    if (cp->tval & (FCN | EXTFUN))
+    {
+      sprintf (errmsg, "awk_getvar: bad variable type %s", var->name);
+      return (errorflag = AWK_ERR_INVVAR); //invalid variable type
+    }
 
     if (cp->tval & ARR)
     {
       var->flags = AWKSYMB_ARR;
       if (!var->index)
-        return 0;
+      {
+        sprintf (errmsg, "awk_getvar: %s is an array", var->name);
+        return AWK_ERR_ARRAY;
+      }
       Array *arr = (Array*)cp->sval;
       cp = lookup (var->index, arr);
       if (!cp)
-        return 0;   //index not found
+      {
+        sprintf (errmsg, "awk_getvar: not found %s[%s]", var->name, var->index);
+        return (errorflag = AWK_ERR_NOVAR); //index not found
+      }
     }
+    var->flags &= ~(AWKSYMB_NUM | AWKSYMB_STR);
+    var->fval = 0.;
+    var->sval = NULL;
     if (cp->tval & NUM)
     {
       var->flags |= AWKSYMB_NUM;
       var->fval = cp->fval;
-      return 1;
     }
     if (cp->tval & STR)
     {
       var->flags |= AWKSYMB_STR;
       var->sval = strdup (cp->sval);
-      return 1;
     }
-    var->flags = AWKSYMB_INV;
-    return 0; //invalid variable type
   }
-  catch (int&) {
-    return 0;
+  catch (int& x) {
+    return (errorflag = x);
   };
+  return 1;
 }
 
 /*! 
@@ -360,7 +390,10 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   Cell *cp;
 
   if (interp->status != AWKS_COMPILED)
-    return 0;
+  {
+    strcpy (errmsg, "Bad state");
+    return (errorflag = AWK_ERR_BADSTAT);
+  }
 
   interp = pinter;
   symtab = interp->symtab;
@@ -370,7 +403,10 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
     {
       //new variable
       if ((var->flags & AWKSYMB_ARR) != 0 && !var->index)
-        return 0;
+      {
+        sprintf (errmsg, "awk_setvar: variable is an array %s", var->name);
+        return (errorflag = AWK_ERR_ARRAY);
+      }
       int t = (var->flags & AWKSYMB_ARR) ? ARR : (STR | NUM);
       cp = setsymtab (var->name, "", 0., t, symtab);
       if (cp->tval & ARR)
@@ -380,13 +416,16 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
     {
       //array
       if (!var->index)
-        return 0;
+      {
+        sprintf (errmsg, "awk_setvar: variable is an array %s", var->name);
+        return (errorflag = AWK_ERR_ARRAY);
+      }
       cp = setsymtab (var->index, "", 0., (STR | NUM), (Array*)cp->sval);
     }
     if ((cp->tval & (STR | NUM)) == 0)
     {
-      var->flags = AWKSYMB_INV;
-      return 0;
+      sprintf (errmsg, "awk_setvar: invalid variable type %s", var->name);
+      return AWK_ERR_INVTYPE;
     }
     if (var->flags & AWKSYMB_STR)
       setsval (cp, var->sval);
@@ -394,8 +433,8 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
       setfval (cp, var->fval);
     return 1;
   }
-  catch (int&) {
-    return 0;
+  catch (int& x) {
+    return (errorflag = x);
   };
 }
 
@@ -412,6 +451,7 @@ int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
       return 0; //symbol not seen in compiled program
     cp->tval = EXTFUN;
     cp->fval = nargs;
+    xfree (cp->sval);
     cp->sval = (char *)fn;
   }
   catch (int&) {

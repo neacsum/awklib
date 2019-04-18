@@ -1,3 +1,11 @@
+/*!
+  \file wc.cpp
+  \brief Sample word counting program using embedded AWK library
+
+  (c) Mircea Neacsu 2019
+  See README file for full copyright information.
+*/
+
 #include <awklib.h>
 
 int main (int argc, char **argv)

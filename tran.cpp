@@ -350,7 +350,7 @@ void setfval (Cell *vp, Awkfloat f)
   int fldno;
 
   f += 0.0;    /* normalize negative zero to positive zero */
-  if ((vp->tval & (ARR | FUNC | EXTFUN)) != 0)
+  if (vp->tval & (ARR | FCN | EXTFUN))
     funnyvar (vp, "assign to");
   xfree (vp->sval); /* free any previous string */
   vp->tval &= ~(STR | CONVC); /* mark string invalid */
@@ -405,7 +405,7 @@ void setsval (Cell *vp, const char *s)
 
   dprintf ("starting setsval %s = <%s>, t=%s, r,f=%d,%d\n",
     NN (vp->nval), s, flags2str (vp->tval), donerec, donefld);
-  if ((vp->tval & (ARR | FUNC | EXTFUN)) != 0)
+  if ((vp->tval & (ARR | FCN | EXTFUN)) != 0)
     funnyvar (vp, "assign to");
   if (isfld (vp))
   {
