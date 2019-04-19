@@ -147,7 +147,7 @@ void change_rec (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
   }
 }
 
-TEST_FIXTURE (fixt, argvar)
+TEST_FIXTURE (fixt, recset)
 {
   awk_setprog (interp, "NR == 1 {change(\"This is \" $0); print}");
   awk_compile (interp);
@@ -161,6 +161,32 @@ TEST_FIXTURE (fixt, argvar)
   awk_outfunc (interp, strout);
   awk_exec (interp);
   CHECK_EQUAL ("This is Record 1\n", out.str ());
+}
+
+
+void add1 (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
+{
+  awksymb fld{ "$2" };
+  awk_getvar (pinter, &fld);
+
+  ret->fval = fld.fval + 1;
+  ret->flags = AWKSYMB_NUM;
+}
+
+TEST_FIXTURE (fixt, fldget)
+{
+  awk_setprog (interp, "{print add1()}");
+  awk_compile (interp);
+  awk_addfunc (interp, "add1", add1, 1);
+
+  instr.str (dat);
+  instr.clear ();
+  awk_infunc (interp, []()->int {return instr.get (); });
+
+  out.str (string ());
+  awk_outfunc (interp, strout);
+  awk_exec (interp);
+  CHECK_EQUAL ("2\n3\n", out.str ());
 }
 
 char *basename (const char *path)

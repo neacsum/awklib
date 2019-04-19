@@ -335,12 +335,12 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
   symtab = interp->symtab;
   var->flags = 0;
   try {
-    Cell *cp;
+    Cell *cp = NULL;
     if (var->name[0] == '$' && is_number (var->name+1))
     {
-      int n = (int)atof (var->name);
+      int n = (int)atof (var->name+1);
       fldbld ();
-      if (n >= 0 && n < interp->nfields)
+      if (n >= 0 && n <= interp->lastfld)
         cp = interp->fldtab[n];
     }
     else

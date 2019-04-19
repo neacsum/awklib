@@ -303,7 +303,7 @@ Cell *call (Node **a, int n)
 
     //call external function
     ((awkfunc)frm.fcn->sval) (interp, &extret, ndef, extargs);
-
+    y = gettemp ();
     free (extargs);
     if (extret.flags & AWKSYMB_STR)
       setsval (frm.ret, extret.sval);
