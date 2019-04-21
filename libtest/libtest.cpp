@@ -189,6 +189,21 @@ TEST_FIXTURE (fixt, fldget)
   CHECK_EQUAL ("2\n3\n", out.str ());
 }
 
+TEST_FIXTURE (fixt, do_run)
+{
+  awk_addfunc (interp, "add1", add1, 1);
+
+  instr.str (dat);
+  instr.clear ();
+  awk_infunc (interp, []()->int {return instr.get (); });
+
+  out.str (string ());
+  awk_outfunc (interp, strout);
+
+  CHECK_EQUAL (0, awk_run (interp, "{print add1()}"));
+  CHECK_EQUAL ("2\n3\n", out.str ());
+}
+
 char *basename (const char *path)
 {
   static char buf[FILENAME_MAX];
@@ -265,7 +280,7 @@ void awk_tester::setup (const char *testfile)
   CHECK (awk_compile (interp));
   CHECK (awk_addarg (interp, inname.c_str()));
   CHECK (awk_setoutput (interp, outname.c_str()));
-  CHECK (awk_exec (interp));
+  CHECK (awk_exec (interp) >= 0);
 }
 
 void awk_tester::makefiles ()

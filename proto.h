@@ -61,7 +61,7 @@ int   ptoi (void *);
 Node* itonp (int);
 void  freenode (Node* n);
 void  syminit (void);
-void  arginit (int, char **);
+void  arginit (void);
 void  envinit (void);
 Array*  makearray (int);
 void  freearray (Array *);

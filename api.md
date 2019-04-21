@@ -120,7 +120,12 @@ Execute a compiled program.
 `pi` - pointer to an interpreter object
 
 #### Return:
-1 if successful, 0 otherwise.
+The value returned by exit statement or a negative error code if something went
+wrong.
+
+If a program terminates without an exit statement, the returned value is 0. 
+Otherwise the function returns the value specified in the exit statement.
+Small negative values should be considered reserved for error conditions.
 
 #### Example:
 ````C
@@ -129,6 +134,33 @@ Execute a compiled program.
     awk_compile (pi);
     awk_addarg (pi, "infile.txt");
     awk_exec (pi);
+````
+
+### awk_run
+Compile and execute a program.
+
+#### Prototype:
+`int awk_run (AWKINTERP* pi, const char *progfile);`
+
+#### Parameters:
+`pi` - pointer to an interpreter object
+`prog` - pointer AWK program
+
+#### Return
+The value returned by exit statement or a negative error code if something went
+wrong.
+
+This function combines in one call the calls to `awk_setprog`, `awk_compile`
+and `awk_exec` functions.
+
+If a program terminates without an exit statement, the returned value is 0. 
+Otherwise the function returns the value specified in the exit statement.
+Small negative values should be considered reserved for error conditions.
+
+#### Example:
+````C
+    AWKINTERP *pi = awk_init (NULL);
+    awk_run (pi, "{print NR, $0}");
 ````
 
 ### awk_end
@@ -240,7 +272,7 @@ Change the output function with a user-defined function.
     awk_outfunc (pi, strout);
 ````
 
-### awk_getval
+### awk_getvar
 Retrieves the value of an AWK variable.
 
 #### Prototype:
@@ -274,7 +306,7 @@ the memory by calling `free`.
     awk_getvar (pi, &var);
 ````
 
-### awk_setval
+### awk_setvar
 Changes the value of an AWK variable.
 
 #### Prototype:
@@ -375,6 +407,7 @@ struct awksymb {
 `fval` - numerical value  
 `sval` - string value
 
+The current record and fields are accessed with variables named $0, $1, etc.
 
 ### inproc
 This is a pointer to a user-defined function returning an input character.

@@ -46,20 +46,6 @@ extern int  dbg;
 #endif
 
 #define  RECSIZE  (8 * 1024)  /* sets limit on records, fields, etc., etc. */
-extern int  recsize;  /* size of current record, orig RECSIZE */
-
-extern char  **FS;
-extern char  **RS;
-extern char  **ORS;
-extern char  **OFS;
-extern char  **OFMT;
-extern Awkfloat *NR;
-extern Awkfloat *FNR;
-extern Awkfloat *NF;
-extern const char** FILENAME;
-extern char  **SUBSEP;
-extern Awkfloat *RSTART;
-extern Awkfloat *RLENGTH;
 
 extern int  lineno;    /* line number in awk program */
 extern int  errorflag;  /* 1 if error has occurred */
@@ -121,12 +107,6 @@ typedef struct Array {    /* symbol table array */
 #define  NSYMTAB  50  /* initial size of a symbol table */
 extern Array  *symtab;
 
-extern Cell*    nrloc;      /* NR */
-extern Cell*    fnrloc;     /* FNR */
-extern Cell*    nfloc;      /* NF */
-extern Cell*    rstartloc;  /* RSTART */
-extern Cell*    rlengthloc; /* RLENGTH */
-
 
 /* function types */
 #define FLENGTH   1
@@ -167,8 +147,6 @@ extern  int  pairstack[], paircnt;
 inline int isvalue (const Node* n) { return n->ntype == NVALUE; }
 inline int isrec (const Cell* c) { return (c->tval & REC) != 0; }
 inline int isfld (const Cell *c) {return (c->tval & FLD) != 0;}
-inline int isstr (const Cell *c) { return (c->tval & STR) != 0; }
-inline int isnum (const Cell* c) { return (c->tval & NUM) != 0; }
 inline int isarr (const Cell *c) { return (c->tval & ARR) != 0; }
 inline int isfcn (const Cell *c) { return (c->tval & (FCN | EXTFUN)) != 0; }
 
@@ -225,8 +203,8 @@ typedef struct AWKINTERP {
 #define AWKS_COMPILING  2   ///< compilation started
 #define AWKS_COMPILED   3   ///< Program compiled
 #define AWKS_RUN        4   ///< Program running
-#define AWKS_END        5   ///< Program finished 
-#define AWKS_FATAL      -1  ///< fatal error occurred
+#define AWKS_DONE       5   ///< Program finished 
+
   int err;              ///< Last error or warning
   Array *symtab;        ///< symbol table
   Node *prog_root;      ///< root of parsing tree
@@ -234,6 +212,7 @@ typedef struct AWKINTERP {
   char **argv;          ///< arguments array
   int argno;            ///< current input argument number */
   Array *envir;         ///< environment variables
+  Array* argvtab;       ///< ARGV[n] array
   Awkfloat srand_seed;  ///< seed for random number generator
   char *lexprog;        ///< AWK script
   char *lexptr;         ///< pointer in AWK script
@@ -249,7 +228,39 @@ typedef struct AWKINTERP {
   Cell **fldtab;        ///< $0, $1, ...
   int nfields;          ///< count of fldtab
   int lastfld;          ///< last used field
+  int recsize;          ///< allocated size for $0
+  Cell **predefs;       ///< Predefined variables
+#define CELL_FS       interp->predefs[0]
+#define CELL_RS       interp->predefs[1]
+#define CELL_OFS      interp->predefs[2]
+#define CELL_ORS      interp->predefs[3]
+#define CELL_OFMT     interp->predefs[4]
+#define CELL_CONVFMT  interp->predefs[5]
+#define CELL_NF       interp->predefs[6]
+#define CELL_FILENAME interp->predefs[7]
+#define CELL_NR       interp->predefs[8]
+#define CELL_FNR      interp->predefs[9]
+#define CELL_SUBSEP   interp->predefs[10]
+#define CELL_RSTART   interp->predefs[11]
+#define CELL_RLENGTH  interp->predefs[12]
+
+#define NPREDEF 13
+
 } AWKINTERP;
+
+#define FS        (CELL_FS->sval)
+#define RS        (CELL_RS->sval)
+#define OFS       (CELL_OFS->sval)
+#define ORS       (CELL_ORS->sval)
+#define OFMT      (CELL_OFMT->sval)
+#define CONVFMT   (CELL_CONVFMT->sval)
+#define NF        (CELL_NF->fval)
+#define FILENAME  (CELL_FILENAME->sval)
+#define NR        (CELL_NR->fval)
+#define FNR       (CELL_FNR->fval)
+#define SUBSEP    (CELL_SUBSEP->sval)
+#define RSTART    (CELL_RSTART->fval)
+#define RLENGTH   (CELL_RLENGTH->fval)
 
 extern AWKINTERP *interp;
 

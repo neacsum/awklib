@@ -36,27 +36,8 @@ THIS SOFTWARE.
 
 Array  *symtab;     /* main symbol table */
 
-char  **FS;         /* initial field sep */
-char  **RS;         /* initial record sep */
-char  **OFS;        /* output field sep */
-char  **ORS;        /* output record sep */
-char  **OFMT;       /* output format for numbers */
-char  **CONVFMT;    /* format for conversions in getsval */
-Awkfloat *NF;       /* number of fields in current record */
-Awkfloat *NR;       /* number of current record */
-Awkfloat *FNR;      /* number of current record in current file */
-const char  **FILENAME;   /* current filename argument */
 Awkfloat *ARGC;     /* number of arguments from command line */
-char  **SUBSEP;     /* subscript separator for a[i,j,k]; default \034 */
-Awkfloat *RSTART;   /* start of re matched with ~; origin 1 (!) */
-Awkfloat *RLENGTH;  /* length of same */
 
-Cell  *fsloc;       /* FS */
-Cell  *nrloc;       /* NR */
-Cell  *nfloc;       /* NF */
-Cell  *fnrloc;      /* FNR */
-Array  *ARGVtab;    /* symbol table containing ARGV[...] */
-Cell  *rstartloc;   /* RSTART */
 Cell  *rlengthloc;  /* RLENGTH */
 
 Node  *nullnode;    /* zero&null, converted into a node for comparisons */
@@ -80,48 +61,42 @@ void syminit (void)
   nullnode = celltonode (setsymtab ("$zero&null", "", 0.0, NUM | STR, symtab)
     , CCON);
 
-  fsloc = setsymtab ("FS", " ", 0.0, STR, symtab);
-  FS = &fsloc->sval;
-  RS = &setsymtab ("RS", "\n", 0.0, STR, symtab)->sval;
-  OFS = &setsymtab ("OFS", " ", 0.0, STR, symtab)->sval;
-  ORS = &setsymtab ("ORS", "\n", 0.0, STR, symtab)->sval;
-  OFMT = &setsymtab ("OFMT", "%.6g", 0.0, STR, symtab)->sval;
-  CONVFMT = &setsymtab ("CONVFMT", "%.6g", 0.0, STR, symtab)->sval;
-  FILENAME = const_cast <const char **>(&setsymtab ("FILENAME", "", 0.0, STR, symtab)->sval);
-  nfloc = setsymtab ("NF", "", 0.0, NUM, symtab);
-  NF = &nfloc->fval;
-  nrloc = setsymtab ("NR", "", 0.0, NUM, symtab);
-  NR = &nrloc->fval;
-  fnrloc = setsymtab ("FNR", "", 0.0, NUM, symtab);
-  FNR = &fnrloc->fval;
-  SUBSEP = &setsymtab ("SUBSEP", "\034", 0.0, STR, symtab)->sval;
-  rstartloc = setsymtab ("RSTART", "", 0.0, NUM, symtab);
-  RSTART = &rstartloc->fval;
-  rlengthloc = setsymtab ("RLENGTH", "", 0.0, NUM, symtab);
-  RLENGTH = &rlengthloc->fval;
+  CELL_FS = setsymtab ("FS", " ", 0.0, STR, symtab);
+  CELL_RS = setsymtab ("RS", "\n", 0.0, STR, symtab);
+  CELL_OFS = setsymtab ("OFS", " ", 0.0, STR, symtab);
+  CELL_ORS = setsymtab ("ORS", "\n", 0.0, STR, symtab);
+  CELL_OFMT = setsymtab ("OFMT", "%.6g", 0.0, STR, symtab);
+  CELL_CONVFMT = setsymtab ("CONVFMT", "%.6g", 0.0, STR, symtab);
+  CELL_FILENAME = setsymtab ("FILENAME", "", 0.0, STR, symtab);
+  CELL_NF = setsymtab ("NF", "", 0.0, NUM, symtab);
+  CELL_NR = setsymtab ("NR", "", 0.0, NUM, symtab);
+  CELL_FNR = setsymtab ("FNR", "", 0.0, NUM, symtab);
+  CELL_SUBSEP = setsymtab ("SUBSEP", "\034", 0.0, STR, symtab);
+  CELL_RSTART = setsymtab ("RSTART", "", 0.0, NUM, symtab);
+  CELL_RLENGTH = setsymtab ("RLENGTH", "", 0.0, NUM, symtab);
   
   setsymtab ("SYMTAB", "", 0.0, ARR, symtab)->sval = (char*)symtab;
 }
 
 /// Set up ARGV and ARGC
-void arginit (int ac, char **av)
+void arginit ()
 {
   Cell *cp;
   int i;
   char temp[50];
 
-  ARGC = &setsymtab ("ARGC", "", (Awkfloat)ac, NUM, symtab)->fval;
+  ARGC = &setsymtab ("ARGC", "", (Awkfloat)interp->argc, NUM, symtab)->fval;
   cp = setsymtab ("ARGV", "", 0.0, ARR, symtab);
-  ARGVtab = makearray (NSYMTAB);  /* could be (int) ARGC as well */
-  cp->sval = (char *)ARGVtab;
-  for (i = 0; i < ac; i++)
+  interp->argvtab = makearray (interp->argc);
+  cp->sval = (char *)interp->argvtab;
+  for (i = 0; i < interp->argc; i++)
   {
+    char *av = interp->argv[i];
     sprintf (temp, "%d", i);
-    if (is_number (*av))
-      setsymtab (temp, *av, atof (*av), STR | NUM, ARGVtab);
+    if (is_number (av))
+      setsymtab (temp, av, atof (av), STR | NUM, interp->argvtab);
     else
-      setsymtab (temp, *av, 0.0, STR, ARGVtab);
-    av++;
+      setsymtab (temp, av, 0.0, STR, interp->argvtab);
   }
 }
 
@@ -204,7 +179,7 @@ void freearray (Array *ap)
     {
       dprintf ("freeing %s...", cp->nval);
       xfree (cp->nval);
-      if (interp->status == AWKS_END) //at end we free everything
+      if (interp->status == AWKS_DONE) //at end we free everything
       {
         if (isarr (cp))
         {
@@ -360,10 +335,10 @@ void setfval (Cell *vp, Awkfloat f)
   {
     interp->donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
-    if (fldno > *NF)
+    if (fldno > NF)
       newfld (fldno);
   }
-  else if (&vp->fval == NF)
+  else if (vp == CELL_NF)
   {
     interp->donerec = 0;  /* mark $0 invalid */
     setlastfld ((int)f);
@@ -378,7 +353,7 @@ void setfval (Cell *vp, Awkfloat f)
   if ((vp->tval & (REC | FLD)) != 0)
   {
     //fields have always a string value
-    vp->fmt = *CONVFMT;
+    vp->fmt = CONVFMT;
     update_str_val (vp);
     dprintf ("setfval $%s = %s, t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
   }
@@ -411,7 +386,7 @@ void setsval (Cell *vp, const char *s)
   {
     interp->donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
-    if (fldno > *NF)
+    if (fldno > NF)
       newfld (fldno);
     dprintf ("setting $%d to %s\n", fldno, s);
   }
@@ -420,31 +395,37 @@ void setsval (Cell *vp, const char *s)
     interp->donefld = 0;  /* mark $1... invalid */
     interp->donerec = 1;
   }
-  else if (&vp->sval == OFS)
+  else if (vp == CELL_OFS)
   {
     if (interp->donerec == 0)
       recbld ();
   }
-  t = s ? tostring (s) : tostring ("");  /* in case it's self-assign */
+  t = tostring (s);  /* in case it's self-assign */
   xfree (vp->sval);
   vp->tval &= ~(NUM | CONVC);
   vp->tval |= STR;
   vp->fmt = NULL;
-  dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
-    NN (vp->nval), t, flags2str (vp->tval), interp->donerec, interp->donefld);
   vp->sval = t;
   if (is_number (t))
   {
     vp->fval = atof (t);
     vp->tval |= NUM;
   }
-  if (&vp->fval == NF)
+  else
+  {
+    vp->fval = 0.;
+    vp->tval &= ~NUM;
+  }
+  if (vp == CELL_NF)
   {
     interp->donerec = 0;  /* mark $0 invalid */
     f = getfval (vp);
     setlastfld ((int)f);
     dprintf ("setting NF to %g\n", f);
   }
+
+  dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
+    NN (vp->nval), t, flags2str (vp->tval), interp->donerec, interp->donefld);
 }
 
 ///  Get float val of a Cell
@@ -452,16 +433,13 @@ Awkfloat getfval (Cell *vp)
 {
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "read float value of");
-  if (isfld (vp) && interp->donefld == 0)
+  if (isfld (vp) && !interp->donefld)
     fldbld ();
-  else if (isrec (vp) && interp->donerec == 0)
+  else if (isrec (vp) && !interp->donerec)
     recbld ();
-  if (!isnum (vp))  /* not a number */
-  {
+  if (!(vp->tval & NUM))  /* not a number */
     vp->fval = vp->sval? atof (vp->sval) : 0.;  /* best guess */
-    if (is_number (vp->sval) && (vp->csub != CCON))
-      vp->tval |= NUM;  /* make NUM only sparingly */
-  }
+
   dprintf ("getfval %s = %g, t=%s\n",
     NN (vp->nval), vp->fval, flags2str (vp->tval));
   return vp->fval;
@@ -478,7 +456,7 @@ static void update_str_val (Cell *vp)
     sprintf (s, vp->fmt, vp->fval);
   xfree (vp->sval);
   vp->sval = tostring (s);
-  vp->tval |= STR;
+//  vp->tval |= STR;
 }
 
 /// Get string value of a Cell
@@ -503,20 +481,17 @@ const char *getsval (Cell *vp)
   }
 
   //this is not $0, $1,...
-  if (!isstr (vp))
+  if ((vp->tval & STR) == 0)
   {
-    if (!(vp->tval & CONVC) || (vp->fmt != *CONVFMT))
-    {
-      // either don't have a string value or was obtained with a wrong format
-      vp->fmt = *CONVFMT;
-      update_str_val (vp);
-      vp->tval |= CONVC;
-    }
+    // don't have a string value but can make one
+    vp->fmt = CONVFMT;
+    update_str_val (vp);
+    vp->tval |= CONVC;
   }
+  if (!vp->sval)
+    vp->sval = strdup ("");
 
   dprintf ("getsval %s = <%s>, t=%s\n", NN (vp->nval), NN(vp->sval), flags2str (vp->tval));
-  if (!vp->sval)
-    return "";
   return vp->sval;
 }
 
@@ -548,23 +523,24 @@ const char *getpssval (Cell *vp)
   }
 
   //this is not $0, $1, ...
-  if (!isstr (vp) && ((vp->tval & CONVC) || (vp->fmt != *OFMT)))
+  if ((vp->tval & STR) == 0)
   {
-    vp->fmt = *OFMT;
+    vp->fmt = OFMT;
     update_str_val (vp);
     vp->tval &= ~CONVC;
   }
+  if (!vp->sval)
+    vp->sval = strdup ("");
+
   dprintf ("getpsval %s = <%s>, t=%s\n", 
     NN (vp->nval), NN(vp->sval), flags2str(vp->tval));
-  if (!vp->sval)
-    return "";
   return vp->sval;
 }
 
 /// Make a copy of string s
 char *tostring (const char *s)
 {
-  char *p = strdup (s);
+  char *p = s? strdup (s) : strdup ("");
   if (!p)
     FATAL (AWK_ERR_NOMEM, "out of space in tostring on %s", s);
   return p;

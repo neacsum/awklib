@@ -21,6 +21,7 @@ int main (int argc, char **argv)
   int np = 0;
   int na = 0;
   char *fs = 0;
+  int ret;
 
   //parse command line
   for (int i = 1; i < argc; i++)
@@ -98,12 +99,12 @@ int main (int argc, char **argv)
   }
 
   // run program
-  if (!awk_exec (interp))
+  if ((ret = awk_exec (interp)) < 0 )
   {
     const char *msg;
     int err = awk_err (&msg);
     fprintf (stderr, "Error %d - %s\n", err, msg);
-    exit (1);
+    exit (ret);
   }
 
   // cleanup

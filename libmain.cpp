@@ -87,6 +87,7 @@ AWKINTERP* awk_init (const char **vars)
     interp->argno = 1;
     srand ((unsigned int)interp->srand_seed);
     interp->symtab = symtab = makearray (NSYMTAB);
+    interp->predefs = (Cell**)calloc (NPREDEF, sizeof (Cell*));
     syminit ();
 
     //add all user set variables
@@ -159,7 +160,7 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 int awk_addarg (AWKINTERP *pinter, const char *arg)
 {
   interp = pinter;
-  if (interp->status == AWKS_FATAL)
+  if (interp->status == AWKS_DONE)
     return 0;
   if (interp->argc)
     interp->argv = (char**)realloc (interp->argv, (interp->argc + 1) * sizeof (char*));
@@ -201,10 +202,11 @@ int awk_compile (AWKINTERP *pinter)
       envinit ();
       stdinit ();
     }
+
   }
   catch (int) {
     freenode (interp->prog_root);
-    interp->status = AWKS_FATAL;
+    interp->status = AWKS_DONE;
     return 0;
   }
   return 1;
@@ -224,22 +226,63 @@ int awk_exec (AWKINTERP *pinter)
   symtab = interp->symtab;
   try {
     recinit ();
-    arginit (interp->argc, interp->argv);
+    arginit ();
     initgetrec ();
     run (interp->prog_root);
   }
-  catch (int) {
-    interp->status = AWKS_FATAL;
-    return 0;
+  catch (int& x) {
+    interp->status = AWKS_DONE;
+    errorflag = x;
   }
-  return 1;
+  return errorflag;
+}
+
+int awk_run (AWKINTERP* pinter, const char *progfile)
+{
+  interp = pinter;
+  symtab = interp->symtab;
+  try {
+    if (interp->status != AWKS_INIT)
+      FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
+    interp->lexptr = interp->lexprog = strdup (progfile);
+    setlocale (LC_CTYPE, "");
+    setlocale (LC_NUMERIC, "C"); /* for parsing cmdline & prog */
+
+    // (Re)init all parsing variables
+    yyinit ();
+    yyin = NULL;
+    interp->status = AWKS_COMPILING;
+    yyparse ();
+
+    setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
+    if (errorflag == 0)
+    {
+#ifndef NDEBUG
+      if (dbg > 2)
+        print_tree (winner, 1);
+#endif
+      interp->prog_root = winner;
+
+      envinit ();
+      stdinit ();
+      recinit ();
+      arginit ();
+      initgetrec ();
+      run (interp->prog_root);
+    }
+  }
+  catch (int& x)
+  {
+    interp->status = AWKS_DONE;
+    errorflag = x;
+  }
+  return errorflag;
 }
 
 /// Release all resources claimed by AWK interpreter
 void awk_end (AWKINTERP *pinter)
 {
   interp = pinter;
-  interp->status = AWKS_END;
   for (int i = 0; i < interp->argc; i++)
     free (interp->argv[i]);
   xfree (interp->argv);
@@ -251,6 +294,7 @@ void awk_end (AWKINTERP *pinter)
   xfree (interp->progs);
   xfree (interp->lexprog);
   xfree (interp->files);
+  xfree (interp->predefs);
   free (interp);
 }
 
@@ -325,18 +369,13 @@ int awk_setinput (AWKINTERP* pinter, const char *fname)
 /// Retrieve a variable from symbol table
 int awk_getvar (AWKINTERP * pinter, awksymb * var)
 {
-  if (interp->status != AWKS_COMPILED)
-  {
-    strcpy (errmsg, "Bad state");
-    return (errorflag = AWK_ERR_BADSTAT);
-  }
-
   interp = pinter;
   symtab = interp->symtab;
   var->flags = 0;
   try {
     Cell *cp = NULL;
-    if (var->name[0] == '$' && is_number (var->name+1))
+    if (var->name[0] == '$' && is_number (var->name+1) 
+     && interp->status == AWKS_RUN)
     {
       int n = (int)atof (var->name+1);
       fldbld ();
@@ -403,16 +442,11 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   int n;
   bool is_field = false;
 
-  if (interp->status != AWKS_COMPILED)
-  {
-    strcpy (errmsg, "Bad state");
-    return (errorflag = AWK_ERR_BADSTAT);
-  }
-
   interp = pinter;
   symtab = interp->symtab;
   try {
-    if (var->name[0] == '$' && is_number (var->name+1))
+    if (var->name[0] == '$' && is_number (var->name+1)
+     && interp->status == AWKS_RUN)
     {
       n = (int)atof (var->name+1);
       if (n < 0 || n >= interp->nfields)
@@ -474,15 +508,10 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
 
 int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
 {
-  if (interp->status != AWKS_COMPILED)
-    return 0;
-
   interp = pinter;
   symtab = interp->symtab;
   try {
-    Cell *cp = lookup (fname, symtab);
-    if (!cp)
-      return 0; //symbol not seen in compiled program
+    Cell *cp = setsymtab (fname, NULL, nargs, EXTFUN, symtab);
     cp->tval = EXTFUN;
     cp->fval = nargs;
     xfree (cp->sval);
@@ -697,11 +726,11 @@ void eprint (void)  /* try to print context around error */
 void error ()
 {
   errprintf ("\n");
-  if (interp->status == AWKS_RUN && NR && *NR > 0)
+  if (interp->status == AWKS_RUN && NR > 0)
   {
-    errprintf (" input record number %d", (int)(*FNR));
-    if (strcmp (*FILENAME, "-") != 0)
-      errprintf (", file %s", *FILENAME);
+    errprintf (" input record number %d", (int)(FNR));
+    if (strcmp (FILENAME, "-") != 0)
+      errprintf (", file %s", FILENAME);
     errprintf ("\n");
   }
   if (interp->status == AWKS_COMPILING)

@@ -33,7 +33,6 @@ THIS SOFTWARE.
 #include <awkerr.h>
 
 FILE*   infile = NULL;
-int     recsize = RECSIZE;
 
 char    inputFS[100] = " ";
 
@@ -41,20 +40,20 @@ char    inputFS[100] = " ";
 
 extern  Awkfloat *ARGC;
 
-static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | STR };
-static Cell dollar1 = { OCELL, CFLD, NULL, NULL, 0.0, FLD | STR };
+static Cell dollar0 = { OCELL, CFLD, NULL, NULL, 0.0, REC | NUM | STR };
+static Cell dollar1 = { OCELL, CFLD, NULL, NULL, 0.0, FLD | NUM | STR };
 
 static int	refldbld (const char *, const char *);
 
 void recinit ()
 {
-  recsize = RECSIZE;
+  interp->recsize = RECSIZE;
   interp->nfields = MAXFLD;
   if ((interp->fldtab = (Cell **)malloc ((interp->nfields + 1) * sizeof (Cell *))) == NULL
    || (interp->fldtab[0] = (Cell *)malloc (sizeof (Cell))) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space for $0 and fields");
   *(interp->fldtab[0]) = dollar0;
-  interp->fldtab[0]->sval = (char *)calloc (recsize, sizeof(char));
+  interp->fldtab[0]->sval = (char *)calloc (RECSIZE, sizeof(char));
   interp->fldtab[0]->nval = tostring ("0");
   makefields (1, interp->nfields);
 }
@@ -160,7 +159,7 @@ int getrec (Cell *cell)
   const char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%g, FILENAME=%s\n",
-    quote(*RS), quote(*FS), *ARGC, *FILENAME);
+    quote(RS), quote(FS), *ARGC, FILENAME);
   if (isrec (cell))
   {
     interp->donefld = 0;
@@ -187,13 +186,13 @@ int getrec (Cell *cell)
         continue;
       }
       xfree (*FILENAME);
-      *FILENAME = strdup(file);
+      FILENAME = strdup(file);
       dprintf ("opening file %s\n", file);
       if (*file == '-' && *(file + 1) == '\0')
         infile = stdin;
       else if ((infile = fopen (file, "r")) == NULL)
         FATAL (AWK_ERR_INFILE, "can't open file %s", file);
-      setfval (fnrloc, 0.0);
+      FNR = 0;
     }
     if (readrec (cell, infile))
     {
@@ -209,8 +208,8 @@ int getrec (Cell *cell)
         }
 #endif
       }
-      setfval (nrloc, nrloc->fval + 1);
-      setfval (fnrloc, fnrloc->fval + 1);
+      NR = NR + 1;
+      FNR = FNR + 1;
       return 1;
     }
     /* EOF arrived on this file; set up next */
@@ -255,10 +254,10 @@ int readrec (Cell *cell, FILE *inf)
   if (!buf)
     FATAL (AWK_ERR_NOMEM, "Not enough memory for readrec");
 
-  if (strlen (*FS) >= sizeof (inputFS))
+  if (strlen (FS) >= sizeof (inputFS))
     FATAL (AWK_ERR_LIMIT, "field separator %.10s... is too long", *FS);
-  strcpy (inputFS, *FS);  /* for subsequent field splitting */
-  if ((sep = **RS) == 0)
+  strcpy (inputFS, FS);  /* for subsequent field splitting */
+  if ((sep = *RS) == 0)
   {
     sep = '\n';
     while ((c = awkgetc (inf)) == '\n' && c != EOF)  /* skip leading \n's */
@@ -271,11 +270,11 @@ int readrec (Cell *cell, FILE *inf)
     for (; (c = awkgetc (inf)) != sep && c != EOF; )
     {
       if (rr - buf + 1 > bufsize)
-        if (!adjbuf (&buf, &bufsize, 1 + rr - buf, recsize, &rr))
+        if (!adjbuf (&buf, &bufsize, 1 + rr - buf, RECSIZE, &rr))
           FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
       *rr++ = c;
     }
-    if (**RS == sep || c == EOF)
+    if (*RS == sep || c == EOF)
       break;
 
     /*
@@ -285,7 +284,7 @@ int readrec (Cell *cell, FILE *inf)
     */
     if ((c = awkgetc (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
-    if (!adjbuf (&buf, &bufsize, 2 + rr - buf, recsize, &rr))
+    if (!adjbuf (&buf, &bufsize, 2 + rr - buf, RECSIZE, &rr))
       FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
     *rr++ = '\n';
     *rr++ = c;
@@ -312,12 +311,11 @@ const char *getargv (int n)
   Cell *x;
   const char *s;
   char temp[50];
-  extern Array *ARGVtab;
 
   sprintf (temp, "%d", n);
-  if (lookup (temp, ARGVtab) == NULL)
+  if (lookup (temp, interp->argvtab) == NULL)
     return NULL;
-  x = setsymtab (temp, "", 0.0, STR, ARGVtab);
+  x = setsymtab (temp, "", 0.0, STR, interp->argvtab);
   s = getsval (x);
   dprintf ("getargv(%d) returns |%s|\n", n, s);
   return s;
@@ -361,7 +359,7 @@ void fldbld (void)
   fields = strdup (getsval (interp->fldtab[0]));
   n = strlen (fields);
   i = 0;  /* number of fields accumulated here */
-  strcpy (inputFS, *FS);
+  strcpy (inputFS, FS);
   fb = fields;        //beginning of field
   if (strlen (inputFS) > 1)
   {
@@ -415,7 +413,7 @@ void fldbld (void)
   */
     int rtest = '\n';  /* normal case */
     int end_seen = 0;
-    if (strlen (*RS) > 0)
+    if (strlen (RS) > 0)
       rtest = '\0';
     fe = fb;
     for (i = 0; !end_seen; )
@@ -447,7 +445,7 @@ void fldbld (void)
       p->tval |= (NUM | CONVC);
     }
   }
-  setfval (nfloc, (Awkfloat)interp->lastfld);
+  NF = interp->lastfld;
   interp->donerec = 1; /* restore */
   free (fields);
 #ifndef NDEBUG
@@ -486,8 +484,7 @@ void newfld (int n)
   if (n > interp->nfields)
     growfldtab (n);
   cleanfld (interp->lastfld + 1, n);
-  interp->lastfld = n;
-  setfval (nfloc, (Awkfloat)n);
+  NF = interp->lastfld = n;
 }
 
 /// Set lastfld cleaning fldtab cells if necessary
@@ -588,30 +585,36 @@ void recbld (void)
   int i;
   char *r;
   const char *p;
-  char **prec;
+  Cell *fld0;
 
   if (interp->donerec == 1)
     return;
-  r = interp->fldtab[0]->sval;
-  prec = &interp->fldtab[0]->sval;
-  for (i = 1; i <= *NF; i++)
+
+  fld0 = interp->fldtab[0];
+  r = fld0->sval;
+  for (i = 1; i <= NF; i++)
   {
     p = getsval (interp->fldtab[i]);
-    if (!adjbuf (prec, &recsize, 2 + strlen (p) + strlen (*OFS) + r - *prec, recsize, &r))
-      FATAL (AWK_ERR_NOMEM, "created $0 `%.30s...' too long", *prec);
+    if (!adjbuf (&fld0->sval, &interp->recsize, 2 + strlen (p) + strlen (OFS) + r - fld0->sval,
+         RECSIZE, &r))
+      FATAL (AWK_ERR_NOMEM, "created $0 `%.30s...' too long", fld0->sval);
     while ((*r = *p++) != 0)
       r++;
-    if (i < *NF)
+    if (i < NF)
     {
-      for (p = *OFS; (*r = *p++) != 0; )
+      for (p = OFS; (*r = *p++) != 0; )
         r++;
     }
   }
   *r = '\0';
-  dprintf ("in recbld inputFS=%s, fldtab[0]=%p\n", inputFS, (void*)interp->fldtab[0]);
-  dprintf ("recbld = |%s|\n", *prec);
+  dprintf ("in recbld inputFS=%s $0=|%s|\n", inputFS, fld0->sval);
   interp->donerec = 1;
-  interp->fldtab[0]->tval |= STR;
+  fld0->tval |= STR;
+  if (is_number (fld0->sval))
+  {
+    fld0->tval |= NUM;
+    fld0->fval = atof (fld0->sval);
+  }
 }
 
 int  errorflag = 0;
