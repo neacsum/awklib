@@ -80,7 +80,7 @@ AWKINTERP* awk_init (const char **vars)
 {
   signal (SIGFPE, fpecatch);
   try {
-    interp = (AWKINTERP *)calloc (1, sizeof AWKINTERP);
+    interp = (AWKINTERP *)calloc (1, sizeof (AWKINTERP));
     if (!interp)
       FATAL (AWK_ERR_NOMEM, "Out of memory");
     interp->srand_seed = 1;
@@ -312,8 +312,10 @@ int awk_setdebug (int level)
 #ifndef NDEBUG
   int prev = dbg;
   dbg = level;
+#ifdef YYDEBUG
   if (dbg > 1)
     yydebug = 1;
+#endif
   errprintf ("Debug level is %d\n", dbg);
   return prev;
 #endif
@@ -585,7 +587,7 @@ int errprintf (const char *fmt, ...)
   ret = vsnprintf (buffer, sizeof(buffer)-1, fmt, args);
   OutputDebugStringA (buffer);
 #else
-  int ret = vfprintf (stderr, fmt, args);
+  ret = vfprintf (stderr, fmt, args);
 #endif
   va_end (args);
   return ret;
@@ -615,8 +617,8 @@ void print_tree (Node *n, int indent)
 {
   int i;
 
-  errprintf ("%*cNode 0x%p %s", indent, ' ', n, ((int)n < LASTTOKEN)? tokname((int)n) : tokname (n->nobj));
-  if ((int)n < LASTTOKEN)
+  errprintf ("%*cNode 0x%p %s", indent, ' ', n, ((long)n < LASTTOKEN)? tokname((long)n) : tokname (n->nobj));
+  if ((long)n < LASTTOKEN)
   {
     errprintf ("- FLAG\n");
     return;
@@ -638,7 +640,7 @@ void print_tree (Node *n, int indent)
         errprintf ("%*cNull arg\n", indent + 1, ' ');
     }
     indent--;
-    if (n = n->nnext)
+    if ((n = n->nnext) != NULL)
       errprintf ("%*cNext node 0x%p %s", indent, ' ', n, tokname (n->nobj));
   } while (n);
 }

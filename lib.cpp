@@ -143,7 +143,7 @@ const char *quote (const char* in)
       *out++ = *in;
     }
     in++;
-    if (out - buf > sizeof (buf) - 5)
+    if ((size_t)(out - buf) > sizeof (buf) - 5)
     {
       strcpy (out, "...");
       return buf;
@@ -185,7 +185,7 @@ int getrec (Cell *cell)
         interp->argno++;
         continue;
       }
-      xfree (*FILENAME);
+      xfree (FILENAME);
       FILENAME = strdup(file);
       dprintf ("opening file %s\n", file);
       if (*file == '-' && *(file + 1) == '\0')
@@ -351,13 +351,12 @@ void fldbld (void)
 {
   char *fields, *fb, *fe, sep;
   Cell *p;
-  int i, j, n;
+  int i, j;
 
   if (interp->donefld)
     return;
 
   fields = strdup (getsval (interp->fldtab[0]));
-  n = strlen (fields);
   i = 0;  /* number of fields accumulated here */
   strcpy (inputFS, FS);
   fb = fields;        //beginning of field
@@ -514,9 +513,9 @@ Cell *fieldadr (int n)
 }
 
 /// Make new fields up to at least $n
-void growfldtab (int n)
+void growfldtab (size_t n)
 {
-  int nf = 2 * interp->nfields;
+  size_t nf = 2 * interp->nfields;
   size_t s;
 
   if (n > nf)
@@ -535,13 +534,10 @@ void growfldtab (int n)
 /// Build fields from reg expr in FS
 int refldbld (const char *rec, const char *fs)
 {
-  /* this relies on having fields[] the same length as $0 */
-  /* the fields are all stored in this one array with \0's */
   char *fr, *fields;
-  int i, tempstat, n;
+  int i, tempstat;
   fa *pfa;
 
-  n = strlen (rec);
   fields = strdup (rec);
   fr = fields;
   *fr = '\0';

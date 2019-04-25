@@ -31,6 +31,11 @@ THIS SOFTWARE.
 #include "ytab.h"
 #include <awkerr.h>
 
+#ifndef _MSC_VER
+#include <unistd.h>
+#endif
+
+
 #define  FULLTAB  2 /* rehash when table gets this x full */
 #define  GROWTAB  4 /* grow table by this factor */
 

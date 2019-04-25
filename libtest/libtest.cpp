@@ -1,6 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <awklib.h>
-#include <strstream>
 #include <sstream>
 #include <utpp/utpp.h>
 #include <sys/stat.h>
@@ -56,7 +55,7 @@ TEST_FIXTURE (fixt, getvar_array)
 {
   awk_setprog (interp, "{print NR, $0}\n");
   awk_compile (interp);
-  awksymb v{ "ENVIRON", "Path" };
+  awksymb v{ "ENVIRON", "PATH" };
   CHECK (awk_getvar (interp, &v));
   CHECK (v.flags & AWKSYMB_STR);
   free (v.sval);
@@ -138,7 +137,8 @@ TEST_FIXTURE (fixt, extfun)
 void change_rec (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
 {
   awksymb rec{ "$0" };
-  
+  printf ("change_rec called\n");
+
   if (nargs >= 1)
   {
     rec.sval = args[0].sval;
@@ -147,17 +147,16 @@ void change_rec (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
   }
 }
 
+istringstream instr1 (dat);
+
 TEST_FIXTURE (fixt, recset)
 {
   awk_setprog (interp, "NR == 1 {change(\"This is \" $0); print}");
   awk_compile (interp);
   awk_addfunc (interp, "change", change_rec, 1);
 
-  instr.str (dat);
-  instr.clear ();
-  awk_infunc (interp, []()->int {return instr.get (); });
+  awk_infunc (interp, []()->int {return instr1.get (); });
 
-  out.str(string());
   awk_outfunc (interp, strout);
   awk_exec (interp);
   CHECK_EQUAL ("This is Record 1\n", out.str ());
@@ -204,7 +203,8 @@ TEST_FIXTURE (fixt, do_run)
   CHECK_EQUAL ("2\n3\n", out.str ());
 }
 
-char *basename (const char *path)
+#ifdef _MSC_VER
+const char *basename (const char *path)
 {
   static char buf[FILENAME_MAX];
   char *ptr;
@@ -220,6 +220,7 @@ char *basename (const char *path)
   }
   return ptr;
 }
+#endif
 
 
 #define xclose(f) { if (f) {fclose (f); f = 0;} }
@@ -254,19 +255,19 @@ public:
 
 void awk_tester::setup (const char *testfile)
 {
-  char *testname;
+  const char *testname;
 
-  CHECK (tst = fopen (testfile, "r"));
+  ABORT (tst = fopen (testfile, "r"));
 
   testname = basename (testfile);
   progname = testname + string(".awk");
-  CHECK (prog = fopen (progname.c_str(), "w"));
+  ABORT (prog = fopen (progname.c_str(), "w"));
 
   inname = testname + string (".in");
-  CHECK (in = fopen (inname.c_str(), "w"));
+  ABORT (in = fopen (inname.c_str(), "w"));
 
   refname = testname + string (".ref");
-  CHECK (ref = fopen (refname.c_str(), "w"));
+  ABORT (ref = fopen (refname.c_str(), "w"));
 
   outname = testname + string (".out");
 
@@ -371,7 +372,7 @@ int main (int argc, char **argv)
   awk_end (interp);
 
 #endif
-
+  UnitTest::GetDefaultReporter ().SetTrace (true);
   ret = UnitTest::RunAllTests ();
 
   return ret;

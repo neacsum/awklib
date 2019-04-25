@@ -57,7 +57,7 @@ void freenode (Node *p)
   Node *temp;
   while (p)
   {
-    if ((int)p < LASTTOKEN)
+    if ((long)p < LASTTOKEN)
       break;
     dprintf ("%Deleting node 0x%p %s with %d arguments (line %d)", 
       p, tokname (p->nobj), p->args, p->lineno);

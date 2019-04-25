@@ -56,7 +56,6 @@ Node* pa2stat (Node *, Node *, Node *);
 Node* linkum (Node *, Node *);
 void  defn (Cell *, Node *, Node *);
 int   isarg (const char *);
-Cell* (*proctab[])(Node **, int);
 int   ptoi (void *);
 Node* itonp (int);
 void  freenode (Node* n);
@@ -81,7 +80,7 @@ char* qstring (const char *str, int delim);
 void  recinit (void);
 void  makefields (int, int);
 void  freefields (void);
-void  growfldtab (int n);
+void  growfldtab (size_t n);
 int   getrec (Cell *c);
 int   awkputs (const char *str, FILE *fp);
 

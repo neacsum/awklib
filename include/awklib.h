@@ -8,7 +8,6 @@
   See README file for full copyright information.
 */
 #include <stdio.h>
-#pragma comment (lib, "awk")
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -50,4 +49,8 @@ int awk_setvar (AWKINTERP *pinter, awksymb* var);
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef _MSC_VER
+#pragma comment (lib, "awk")
 #endif

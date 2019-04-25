@@ -22,15 +22,17 @@
 # THIS SOFTWARE.
 # ****************************************************************/
 
-CFLAGS = -g
-CFLAGS =
-CFLAGS = -O2
+# default architecture
+ifndef ARCH
+ARCH = x64
+endif
 
-# compiler options
-#CC = gcc -Wall -g -Wwrite-strings
-#CC = gcc -O4 -Wall -pedantic -fno-strict-aliasing
-#CC = gcc -fprofile-arcs -ftest-coverage # then gcov f1.c; cat f1.c.gcov
-CC = gcc -g -Wall -pedantic 
+# compiler(s)
+CXX := g++
+CPPFLAGS := -I include/ -Wall -pedantic
+
+CC := gcc 
+CFLAGS := -I include/ -Wall -pedantic
 
 # yacc options.  pick one; this varies a lot by system.
 #YFLAGS = -d -S
@@ -38,64 +40,74 @@ YACC = bison -d -y
 #YACC = yacc -d
 #		-S uses sprintf in yacc parser instead of sprint
 
-OFILES = b.o main.o parse.o proctab.o tran.o lib.o run.o lex.o
+# output folders
+OBJDIR := o/awk
+LIBDIR := lib
 
-SOURCE = awk.h ytab.c ytab.h proto.h awkgram.y lex.c b.c main.c \
-	maketab.c parse.c lib.c run.c tran.c proctab.c 
+ifeq ($(ARCH), x64)
+OBJDIR := $(OBJDIR)/x64
+LIBDIR := $(LIBDIR)/x64
+else
+OBJDIR := $(OBJDIR)/x86
+LIBDIR := $(LIBDIR)/x86
+CPPFLAGS += -m32
+CFLAGS += -m32
+endif
 
-LISTING = awk.h proto.h awkgram.y lex.c b.c main.c maketab.c parse.c \
-	lib.c run.c tran.c 
+ifdef _DEBUG
+OBJDIR := $(OBJDIR)/Debug
+LIBDIR := $(LIBDIR)/Debug
+CPPFLAGS += -g -D_DEBUG
+CFLAGS += -g -D_DEBUG
+else
+CPPFLAGS += -O3 -DNDEBUG
+CFLAGS += -O3 -DNDEBUG
+OBJDIR := $(OBJDIR)/Release
+LIBDIR := $(LIBDIR)/Release
+endif
 
-SHIP = README LICENSE FIXES $(SOURCE) ytab[ch].bak makefile  \
-	 awk.1
+# name of output library
+LIB = $(LIBDIR)/libawk.a
 
-a.out:	ytab.o $(OFILES)
-	$(CC) $(CFLAGS) ytab.o $(OFILES) $(ALLOC)  -lm
+OFILES = b.o lex.o lib.o libmain.o parse.o proctab.o run.o tran.o ytab.o
 
-$(OFILES):	awk.h ytab.h proto.h
+OBJS = $(addprefix $(OBJDIR)/,$(OFILES))
 
-ytab.c:	awk.h proto.h awkgram.y
-	$(YACC) $(YFLAGS) awkgram.y
-	mv y.tab.c ytab.c
-	mv y.tab.h ytab.h
+all: $(LIB)
 
-ytab.h:	ytab.c
+# AWK library target
+$(LIB): | $(LIBDIR)
 
-proctab.c:	maketab
-	./maketab >proctab.c
+$(LIB): $(OBJS)
+	ar rcs  $@ $^
 
-maketab:	ytab.h maketab.c
-	$(CC) $(CFLAGS) maketab.c -o maketab
+# Object modules
+$(OBJS) : | $(OBJDIR)
 
-bundle:
-	@cp ytab.h ytabh.bak
-	@cp ytab.c ytabc.bak
-	@bundle $(SHIP)
+$(LIBDIR) $(OBJDIR):
+	mkdir -p $@
 
-tar:
-	@cp ytab.h ytabh.bak
-	@cp ytab.c ytabc.bak
-	@bundle $(SHIP) >awk.shar
-	@tar cf awk.tar $(SHIP)
-	gzip awk.tar
-	ls -l awk.tar.gz
-	@zip awk.zip $(SHIP)
-	ls -l awk.zip
+# Grammar files
+ytab.h ytab.cpp: awkgram.y awk.h proto.h
+	$(YACC) $(YFLAGS) -o ytab.cpp $<
 
-gitadd:
-	git add README LICENSE FIXES \
-           awk.h proto.h awkgram.y lex.c b.c main.c maketab.c parse.c \
-	   lib.c run.c tran.c \
-	   makefile awk.1 awktest.tar
+# Jump table
+proctab.cpp: maketab
+	./maketab >$@
 
-gitpush:
-	# only do this once: 
-	# git remote add origin https://github.com/onetrueawk/awk.git
-	git push -u origin master
+# Jump table generator
+maketab: maketab.c ytab.h awk.h ytab.h
+	$(CC) $(CFLAGS) -o $@ $<
 
-names:
-	@echo $(LISTING)
+$(OBJDIR)/%.o: %.cpp
+	$(CXX) $(CPPFLAGS) -c -o $@ $<
 
+# test program
+test1: libtest/libtest.cpp $(LIB)
+	$(CXX) $(CPPFLAGS) -o $@ -L $(LIBDIR)/ $< -lutpp -lawk
+	
+
+# Other stuff
 clean:
 	rm -f a.out *.o *.obj maketab maketab.exe *.bb *.bbg *.da *.gcov *.gcno *.gcda # proctab.c
 

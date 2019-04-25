@@ -41,6 +41,7 @@ THIS SOFTWARE.
 
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
+extern Cell* (*proctab[LASTTOKEN-FIRSTTOKEN+1])(Node **, int);
 
 static Cell  truecell  ={ OBOOL, BTRUE, 0, 0, 1.0, NUM, NULL };
 Cell  *True  = &truecell;
@@ -436,7 +437,6 @@ Cell *awkgetline (Node **a, int)
   /* a[0] is variable, a[1] is operator, a[2] is filename */
   Cell *r, *x;
   FILE *fp;
-  int bufsize = interp->recsize;
   int mode, c;
 
   r = a[0] ? execute (a[0]) : interp->fldtab[0];
