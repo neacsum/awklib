@@ -31,7 +31,6 @@ typedef double  Awkfloat;
 //typedef  unsigned char uschar;
 
 #define  xfree(a)  { if ((a) != NULL) { free((void *) (a)); (a) = NULL; } }
-
 #define  NN(p)  ((p) ? (p) : "(null)")  /* guaranteed non-null for dprintf 
 */
 
@@ -66,7 +65,8 @@ typedef struct Cell {
 #define CARG    6     //Cell is function call argument
 #define CCON    5     //Cell is constant (number or string)
 #define CTEMP   4
-#define CVAR    2
+#define CVAR    3
+#define CREC    2
 #define CFLD    1
 
 /* bool subtypes */
@@ -84,15 +84,13 @@ typedef struct Cell {
   char  *nval;        /* name, for variables only */
   char  *sval;        /* string value */
   Awkfloat fval;      /* value as number */
-  int   tval;         /* type info: STR|NUM|ARR|FCN|FLD|CON|DONTFREE|CONVC|CONVO */
+  int   tval;         /* type info: STR|NUM|ARR|FCN|CONVC */
 #define NUM       0x001   /* number value is valid */
 #define STR       0x002   /* string value is valid */
 #define ARR       0x004   /* this is an array */
 #define FCN       0x008   /* this is a function name */
-#define FLD       0x010   /* this is a field $1, $2, ... */
-#define REC       0x020   /* this is $0 */
-#define CONVC     0x040   /* string was converted from number via CONVFMT */
-#define EXTFUN    0x080   /* external function */
+#define CONVC     0x010   /* string was converted from number via CONVFMT */
+#define EXTFUN    0x020   /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
   struct Cell *cnext; /* ptr to next in arrays*/
@@ -145,10 +143,10 @@ extern Node  *nullnode;
 extern  int  pairstack[], paircnt;
 
 inline int isvalue (const Node* n) { return n->ntype == NVALUE; }
-inline int isrec (const Cell* c) { return (c->tval & REC) != 0; }
-inline int isfld (const Cell *c) {return (c->tval & FLD) != 0;}
-inline int isarr (const Cell *c) { return (c->tval & ARR) != 0; }
-inline int isfcn (const Cell *c) { return (c->tval & (FCN | EXTFUN)) != 0; }
+inline int isarr (const Cell* c) { return (c->tval & ARR) != 0; }
+inline int isfcn (const Cell* c) { return (c->tval & (FCN | EXTFUN)) != 0; }
+inline int isfld (const Cell* c) { return c->csub == CFLD; }
+inline int isrec (const Cell* c) { return c->csub == CREC; }
 
 /* structures used by regular expression matching machinery, mostly b.c: */
 
@@ -225,10 +223,9 @@ typedef struct AWKINTERP {
   struct Frame  fn;     ///< frame data for current function call
   int donerec;          ///< 1 if record broken into fields
   int donefld;          ///< 1 if record is valid (no fld has changed)
-  Cell **fldtab;        ///< $0, $1, ...
-  int nfields;          ///< count of fldtab
+  Cell *fldtab;        ///< $0, $1, ...
+  int nfields;          ///< last allocated field in fldtab
   int lastfld;          ///< last used field
-  int recsize;          ///< allocated size for $0
   Cell **predefs;       ///< Predefined variables
 #define CELL_FS       interp->predefs[0]
 #define CELL_RS       interp->predefs[1]

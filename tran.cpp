@@ -41,19 +41,14 @@ THIS SOFTWARE.
 
 Array  *symtab;     /* main symbol table */
 
-Awkfloat *ARGC;     /* number of arguments from command line */
-
-Cell  *rlengthloc;  /* RLENGTH */
-
 Node  *nullnode;    /* zero&null, converted into a node for comparisons */
 Cell  *literal0;
-
 
 static int  hash (const char *, int);
 static void	rehash (Array *);
 static void update_str_val (Cell *vp);
 
-/// Initialize symbol table with builtin vars
+/// Initialize symbol table with built-in vars
 void syminit (void)
 {
   literal0 = setsymtab ("0", "0", 0.0, NUM | STR, symtab);
@@ -90,7 +85,7 @@ void arginit ()
   int i;
   char temp[50];
 
-  ARGC = &setsymtab ("ARGC", "", (Awkfloat)interp->argc, NUM, symtab)->fval;
+  setsymtab ("ARGC", "", (Awkfloat)interp->argc, NUM, symtab);
   cp = setsymtab ("ARGV", "", 0.0, ARR, symtab);
   interp->argvtab = makearray (interp->argc);
   cp->sval = (char *)interp->argvtab;
@@ -355,7 +350,7 @@ void setfval (Cell *vp, Awkfloat f)
     interp->donerec = 1;
   }
   vp->fval = f;
-  if ((vp->tval & (REC | FLD)) != 0)
+  if (isrec(vp) || isfld(vp))
   {
     //fields have always a string value
     vp->fmt = CONVFMT;
@@ -387,7 +382,7 @@ void setsval (Cell *vp, const char *s)
     NN (vp->nval), s, flags2str (vp->tval), interp->donerec, interp->donefld);
   if ((vp->tval & (ARR | FCN | EXTFUN)) != 0)
     funnyvar (vp, "assign to");
-  if (isfld (vp))
+  if (vp->csub == CFLD)
   {
     interp->donerec = 0;  /* mark $0 invalid */
     fldno = atoi (vp->nval);
@@ -395,7 +390,7 @@ void setsval (Cell *vp, const char *s)
       newfld (fldno);
     dprintf ("setting $%d to %s\n", fldno, s);
   }
-  else if (isrec (vp))
+  else if (vp->csub == CREC)
   {
     interp->donefld = 0;  /* mark $1... invalid */
     interp->donerec = 1;
@@ -470,33 +465,33 @@ const char *getsval (Cell *vp)
   if ((vp->tval & (NUM | STR)) == 0)
     funnyvar (vp, "read string value of");
 
-  if (isfld (vp))
+  if (isfld(vp))
   {
     if (!interp->donefld)
       fldbld ();
     dprintf ("getsval: $%s: <%s> t=%s\n", vp->nval, vp->sval, flags2str (vp->tval));
-    return vp->sval;
   }
   else if (isrec (vp))
   {
     if (!interp->donerec)
       recbld ();
     dprintf ("getsval: $0: <%s>, t=%s\n", vp->sval, flags2str (vp->tval));
-    return vp->sval;
   }
-
-  //this is not $0, $1,...
-  if ((vp->tval & STR) == 0)
+  else
   {
-    // don't have a string value but can make one
-    vp->fmt = CONVFMT;
-    update_str_val (vp);
-    vp->tval |= CONVC;
+    //this is not $0, $1,...
+    if ((vp->tval & STR) == 0)
+    {
+      // don't have a string value but can make one
+      vp->fmt = CONVFMT;
+      update_str_val (vp);
+      vp->tval |= CONVC;
+    }
+    dprintf ("getsval %s = <%s>, t=%s\n", NN (vp->nval), NN (vp->sval), flags2str (vp->tval));
   }
   if (!vp->sval)
     vp->sval = strdup ("");
 
-  dprintf ("getsval %s = <%s>, t=%s\n", NN (vp->nval), NN(vp->sval), flags2str (vp->tval));
   return vp->sval;
 }
 
@@ -621,8 +616,6 @@ const char *flags2str (int flags)
     { "STR", STR },
     { "ARR", ARR },
     { "FCN", FCN },
-    { "FLD", FLD },
-    { "REC", REC },
     { "CONVC", CONVC },
     { NULL, 0 }
   };

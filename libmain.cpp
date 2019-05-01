@@ -382,7 +382,7 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
       int n = (int)atof (var->name+1);
       fldbld ();
       if (n >= 0 && n <= interp->lastfld)
-        cp = interp->fldtab[n];
+        cp = &interp->fldtab[n];
     }
     else
       cp = lookup (var->name, symtab);
@@ -456,7 +456,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
         sprintf (errmsg, "awk_setvar: invalid field %s", var->name);
         return (errorflag = AWK_ERR_INVVAR);
       }
-      cp = interp->fldtab[n];
+      cp = &interp->fldtab[n];
       is_field = true;
     }
     else

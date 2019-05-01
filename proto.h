@@ -78,7 +78,6 @@ char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
 void  recinit (void);
-void  makefields (int, int);
 void  freefields (void);
 void  growfldtab (size_t n);
 int   getrec (Cell *c);

@@ -76,16 +76,17 @@ inline int isexit (const Cell* c) { return c->csub == JEXIT; }
 inline int istrue (const Cell *c) { return c->csub == BTRUE; }
 
 
-/* buffer memory management */
+/*! 
+  Buffer memory management
+  \par pbuf    - address of pointer to buffer being managed
+  \par psiz    - address of buffer size variable
+  \par minlen  - minimum length of buffer needed
+  \par quantum - buffer size quantum
+  \par pbptr   - address of movable pointer into buffer (can be NULL)
+
+  \return   0 for realloc failure, !=0 for success
+*/
 int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
-/* pbuf:    address of pointer to buffer being managed
- * psiz:    address of buffer size variable
- * minlen:  minimum length of buffer needed
- * quantum: buffer size quantum
- * pbptr:   address of movable pointer into buffer, or 0 if none
- *
- * return   0 for realloc failure, !=0 for success
- */
 {
   if (minlen > *psiz)
   {
@@ -96,7 +97,6 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
     if (rminlen)
       minlen += quantum - rminlen;
     tbuf = (char *)realloc (*pbuf, minlen);
-    dprintf ("adjbuf: %d %d (pbuf=%p, tbuf=%p)\n", *psiz, minlen, (void *)*pbuf, (void *)tbuf);
     if (tbuf == NULL)
       return 0;
     *pbuf = tbuf;
@@ -105,10 +105,6 @@ int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
       *pbptr = tbuf + boff;
   }
   return 1;
-}
-
-void cells_init ()
-{
 }
 
 /// Execution of parse tree starts here
@@ -185,7 +181,7 @@ Cell *program (Node **a, int n)
   }
   if (!exit_seen && (a[1] || a[2]))
   {
-    while (getrec (interp->fldtab[0]) > 0)
+    while (getrec (&interp->fldtab[0]) > 0)
     {
       x = execute (a[1]);
       if (isexit (x))
@@ -439,7 +435,7 @@ Cell *awkgetline (Node **a, int)
   FILE *fp;
   int mode, c;
 
-  r = a[0] ? execute (a[0]) : interp->fldtab[0];
+  r = a[0] ? execute (a[0]) : &interp->fldtab[0];
 
   fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
   if (a[2] != NULL)
@@ -1764,7 +1760,12 @@ Cell *bltin (Node **a, int n)
   return x;
 }
 
-/// print a[0]
+/*!
+  print 
+    a[0] - print argument(s) (linked list)
+    a[1] - redirection operator (FFLUSH, GT, APPEND, PIPE) or NULL
+    a[2] - file or NULL
+*/
 Cell *printstat (Node **a, int n)
 {
   Node *x;
