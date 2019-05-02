@@ -40,7 +40,7 @@ int     inloop;         /* = 1 if in while, for, do */
 char    *curfname;      /* current function name */
 Node    *arglist;       /* list of args for current function */
 char*   lexbuf;         /* buffer for lexical analyzer */
-int     lexbuf_sz;      /* size of lex buffer */
+size_t  lexbuf_sz;      /* size of lex buffer */
 
 %}
 
@@ -103,7 +103,7 @@ int     lexbuf_sz;      /* size of lex buffer */
 program:
       pas
         { if (errorflag==0)
-            winner = (Node *)stat3(PROGRAM, beginloc, $1, endloc);
+            winner = (Node *)stat3(PROGRAM, program, beginloc, $1, endloc);
           yyend (); }
     | error
         { yyclearin; SYNTAX("bailing out"); }
@@ -131,11 +131,11 @@ else:
 
 for:
       FOR '(' opt_simple_stmt ';' opt_nl pattern ';' opt_nl opt_simple_stmt rparen {inloop++;} stmt
-        { --inloop; $$ = stat4(FOR, $3, notnull($6), $9, $12); }
+        { --inloop; $$ = stat4(FOR, forstat, $3, notnull($6), $9, $12); }
     | FOR '(' opt_simple_stmt ';'  ';' opt_nl opt_simple_stmt rparen {inloop++;} stmt
-        { --inloop; $$ = stat4(FOR, $3, NIL, $7, $10); }
+        { --inloop; $$ = stat4(FOR, forstat, $3, NIL, $7, $10); }
     | FOR '(' varname IN varname rparen {inloop++;} stmt
-        { --inloop; $$ = stat3(IN, $3, makearr($5), $8); }
+        { --inloop; $$ = stat3(IN, instat, $3, makearr($5), $8); }
     ;
 
 funcname:
@@ -186,15 +186,15 @@ pa_pat:
 
 pa_stat:
       pa_pat
-        { $$ = stat2(PASTAT, $1, stat2(PRINT, rectonode(), NIL)); }
+        { $$ = stat2(PASTAT, pastat, $1, stat2(PRINT, printstat, rectonode(), NIL)); }
     | pa_pat lbrace stmtlist '}'
-        { $$ = stat2(PASTAT, $1, $3); }
+        { $$ = stat2(PASTAT, pastat, $1, $3); }
     | pa_pat ',' opt_nl pa_pat
-        { $$ = pa2stat($1, $4, stat2(PRINT, rectonode(), NIL)); }
+        { $$ = pa2stat($1, $4, stat2(PRINT, printstat, rectonode(), NIL)); }
     | pa_pat ',' opt_nl pa_pat lbrace stmtlist '}'
         { $$ = pa2stat($1, $4, $6); }
     | lbrace stmtlist '}'
-        { $$ = stat2(PASTAT, NIL, $2); }
+        { $$ = stat2(PASTAT, pastat, NIL, $2); }
     | XBEGIN lbrace stmtlist '}'
         { beginloc = linkum(beginloc, $3); $$ = 0; }
     | XEND lbrace stmtlist '}'
@@ -217,68 +217,68 @@ patlist:
 
 ppattern:
       var ASGNOP ppattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, assign, $1, $3); }
     | ppattern '?' ppattern ':' ppattern %prec '?'
-        { $$ = op3(CONDEXPR, notnull($1), $3, $5); }
+        { $$ = op3(CONDEXPR, condexpr, notnull($1), $3, $5); }
     | ppattern bor ppattern %prec BOR
-        { $$ = op2(BOR, notnull($1), notnull($3)); }
+        { $$ = op2(BOR, boolop, notnull($1), notnull($3)); }
     | ppattern and ppattern %prec AND
-        { $$ = op2(AND, notnull($1), notnull($3)); }
+        { $$ = op2(AND, boolop, notnull($1), notnull($3)); }
     | ppattern MATCHOP reg_expr
-        { $$ = op3($2, NIL, $1, (Node*)makedfa($3, 0)); }
+        { $$ = op3($2, matchop, NIL, $1, (Node*)makedfa($3, 0)); }
     | ppattern MATCHOP ppattern
         { if (constnode($3))
-            $$ = op3($2, NIL, $1, (Node*)makedfa(strnode($3), 0));
+            $$ = op3($2, matchop, NIL, $1, (Node*)makedfa(strnode($3), 0));
           else
-            $$ = op3($2, (Node *)1, $1, $3); }
+            $$ = op3($2, matchop, (Node *)1, $1, $3); }
     | ppattern IN varname
-        { $$ = op2(INTEST, $1, makearr($3)); }
+        { $$ = op2(INTEST, intest, $1, makearr($3)); }
     | '(' plist ')' IN varname
-        { $$ = op2(INTEST, $2, makearr($5)); }
+        { $$ = op2(INTEST, intest, $2, makearr($5)); }
     | ppattern term %prec CAT
-        { $$ = op2(CAT, $1, $2); }
+        { $$ = op2(CAT, cat, $1, $2); }
     | re
     | term
     ;
 
 pattern:
       var ASGNOP pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, assign, $1, $3); }
     | pattern '?' pattern ':' pattern %prec '?'
-        { $$ = op3(CONDEXPR, notnull($1), $3, $5); }
+        { $$ = op3(CONDEXPR, condexpr, notnull($1), $3, $5); }
     | pattern bor pattern %prec BOR
-        { $$ = op2(BOR, notnull($1), notnull($3)); }
+        { $$ = op2(BOR, boolop, notnull($1), notnull($3)); }
     | pattern and pattern %prec AND
-        { $$ = op2(AND, notnull($1), notnull($3)); }
+        { $$ = op2(AND, boolop, notnull($1), notnull($3)); }
     | pattern EQ pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern GE pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern GT pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern LE pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern LT pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern NE pattern
-        { $$ = op2($2, $1, $3); }
+        { $$ = op2($2, relop, $1, $3); }
     | pattern MATCHOP reg_expr
-        { $$ = op3($2, NIL, $1, (Node*)makedfa($3, 0)); }
+        { $$ = op3($2, matchop, NIL, $1, (Node*)makedfa($3, 0)); }
     | pattern MATCHOP pattern
         { if (constnode($3))
-            $$ = op3($2, NIL, $1, (Node*)makedfa(strnode($3), 0));
+            $$ = op3($2, matchop, NIL, $1, (Node*)makedfa(strnode($3), 0));
           else
-            $$ = op3($2, (Node *)1, $1, $3); }
+            $$ = op3($2, matchop, (Node *)1, $1, $3); }
     | pattern IN varname
-        { $$ = op2(INTEST, $1, makearr($3)); }
+        { $$ = op2(INTEST, intest, $1, makearr($3)); }
     | '(' plist ')' IN varname
-        { $$ = op2(INTEST, $2, makearr($5)); }
+        { $$ = op2(INTEST, intest, $2, makearr($5)); }
     | pattern '|' GETLINE var
-        { $$ = op3(GETLINE, $4, itonp($2), $1); }
+        { $$ = op3(GETLINE, awkgetline, $4, itonp($2), $1); }
     | pattern '|' GETLINE
-        { $$ = op3(GETLINE, (Node*)0, itonp($2), $1); }
+        { $$ = op3(GETLINE, awkgetline, (Node*)0, itonp($2), $1); }
     | pattern term %prec CAT
-        { $$ = op2(CAT, $1, $2); }
+        { $$ = op2(CAT, cat, $1, $2); }
     | re
     | term
     ;
@@ -317,9 +317,9 @@ rbrace:
 
 re:
        reg_expr
-        { $$ = op3(MATCH, NIL, rectonode(), (Node*)makedfa($1, 0)); }
+        { $$ = op3(MATCH, matchop, NIL, rectonode(), (Node*)makedfa($1, 0)); }
     | NOT re
-        { $$ = op1(NOT, notnull($2)); }
+        { $$ = op1(NOT, boolop, notnull($2)); }
     ;
 
 reg_expr:
@@ -333,17 +333,17 @@ rparen:
 
 simple_stmt:
       print prarg '|' term
-        { $$ = stat3($1, $2, itonp($3), $4); }
+        { $$ = stat3($1, ($1==PRINT)?printstat : awkprintf, $2, itonp($3), $4); }
     | print prarg APPEND term
-        { $$ = stat3($1, $2, itonp($3), $4); }
+        { $$ = stat3($1, ($1==PRINT)?printstat : awkprintf, $2, itonp($3), $4); }
     | print prarg GT term
-        { $$ = stat3($1, $2, itonp($3), $4); }
+        { $$ = stat3($1, ($1==PRINT)?printstat : awkprintf, $2, itonp($3), $4); }
     | print prarg
-        { $$ = stat3($1, $2, NIL, NIL); }
+        { $$ = stat3($1, ($1==PRINT)?printstat : awkprintf, $2, NIL, NIL); }
     | DELETE varname '[' patlist ']'
-        { $$ = stat2(DELETE, makearr($2), $4); }
+        { $$ = stat2(DELETE, awkdelete, makearr($2), $4); }
     | DELETE varname
-        { $$ = stat2(DELETE, makearr($2), 0); }
+        { $$ = stat2(DELETE, awkdelete, makearr($2), 0); }
     | pattern
         { $$ = exptostat($1); }
     | error
@@ -359,39 +359,39 @@ stmt:
       BREAK st
         { if (!inloop)
             SYNTAX("break illegal outside of loops");
-          $$ = stat1(BREAK, NIL); }
+          $$ = stat1(BREAK, jump, NIL); }
     | CONTINUE st
         {  if (!inloop)
             SYNTAX("continue illegal outside of loops");
-           $$ = stat1(CONTINUE, NIL); }
+           $$ = stat1(CONTINUE, jump, NIL); }
     | do {inloop++;} stmt {--inloop;} WHILE '(' pattern ')' st
-        { $$ = stat2(DO, $3, notnull($7)); }
+        { $$ = stat2(DO, dostat, $3, notnull($7)); }
     | EXIT pattern st
-        { $$ = stat1(EXIT, $2); }
+        { $$ = stat1(EXIT, jump, $2); }
     | EXIT st
-        { $$ = stat1(EXIT, NIL); }
+        { $$ = stat1(EXIT, jump, NIL); }
     | for
     | if stmt else stmt
-        { $$ = stat3(IF, $1, $2, $4); }
+        { $$ = stat3(IF, ifstat, $1, $2, $4); }
     | if stmt
-        { $$ = stat3(IF, $1, $2, NIL); }
+        { $$ = stat3(IF, ifstat, $1, $2, NIL); }
     | lbrace stmtlist rbrace
         { $$ = $2; }
     | NEXT st
         { if (infunc)
             SYNTAX("next is illegal inside a function");
-          $$ = stat1(NEXT, NIL); }
+          $$ = stat1(NEXT, jump, NIL); }
     | NEXTFILE st
         { if (infunc)
             SYNTAX("nextfile is illegal inside a function");
-          $$ = stat1(NEXTFILE, NIL); }
+          $$ = stat1(NEXTFILE, jump, NIL); }
     | RETURN pattern st
-        { $$ = stat1(RETURN, $2); }
+        { $$ = stat1(RETURN, jump, $2); }
     | RETURN st
-        { $$ = stat1(RETURN, NIL); }
+        { $$ = stat1(RETURN, jump, NIL); }
     | simple_stmt st
     | while {inloop++;} stmt
-        { --inloop; $$ = stat2(WHILE, $1, $3); }
+        { --inloop; $$ = stat2(WHILE, whilestat, $1, $3); }
     | ';' opt_nl
         { $$ = 0; }
     ;
@@ -408,108 +408,108 @@ subop:
 
 term:
        term '/' ASGNOP term
-        { $$ = op2(DIVEQ, $1, $4); }
+        { $$ = op2(DIVEQ, assign, $1, $4); }
     | term '+' term
-        { $$ = op2(ADD, $1, $3); }
+        { $$ = op2(ADD, arith, $1, $3); }
     | term '-' term
-        { $$ = op2(MINUS, $1, $3); }
+        { $$ = op2(MINUS, arith, $1, $3); }
     | term '*' term
-        { $$ = op2(MULT, $1, $3); }
+        { $$ = op2(MULT, arith, $1, $3); }
     | term '/' term
-        { $$ = op2(DIVIDE, $1, $3); }
+        { $$ = op2(DIVIDE, arith, $1, $3); }
     | term '%' term
-        { $$ = op2(MOD, $1, $3); }
+        { $$ = op2(MOD, arith, $1, $3); }
     | term POWER term
-        { $$ = op2(POWER, $1, $3); }
+        { $$ = op2(POWER, arith, $1, $3); }
     | '-' term %prec UMINUS
-        { $$ = op1(UMINUS, $2); }
+        { $$ = op1(UMINUS, arith, $2); }
     | '+' term %prec UMINUS
-        { $$ = op1(UPLUS, $2); }
+        { $$ = op1(UPLUS, arith, $2); }
     | NOT term %prec UMINUS
-        { $$ = op1(NOT, notnull($2)); }
+        { $$ = op1(NOT, boolop, notnull($2)); }
     | BLTIN '(' ')'
-        { $$ = op2(BLTIN, itonp($1), rectonode()); }
+        { $$ = op2(BLTIN, bltin, itonp($1), rectonode()); }
     | BLTIN '(' patlist ')'
-        { $$ = op2(BLTIN, itonp($1), $3); }
+        { $$ = op2(BLTIN, bltin, itonp($1), $3); }
     | BLTIN
-        { $$ = op2(BLTIN, itonp($1), rectonode()); }
+        { $$ = op2(BLTIN, bltin, itonp($1), rectonode()); }
     | CALL '(' ')'
-        { $$ = op2(CALL, celltonode($1,CVAR), NIL); }
+        { $$ = op2(CALL, call, celltonode($1,CVAR), NIL); }
     | CALL '(' patlist ')'
-        { $$ = op2(CALL, celltonode($1,CVAR), $3); }
+        { $$ = op2(CALL, call, celltonode($1,CVAR), $3); }
     | CLOSE term
-        { $$ = op1(CLOSE, $2); }
+        { $$ = op1(CLOSE, closefile, $2); }
     | DECR var
-        { $$ = op1(PREDECR, $2); }
+        { $$ = op1(PREDECR, incrdecr, $2); }
     | INCR var
-        { $$ = op1(PREINCR, $2); }
+        { $$ = op1(PREINCR, incrdecr, $2); }
     | var DECR
-        { $$ = op1(POSTDECR, $1); }
+        { $$ = op1(POSTDECR, incrdecr, $1); }
     | var INCR
-        { $$ = op1(POSTINCR, $1); }
+        { $$ = op1(POSTINCR, incrdecr, $1); }
     | GETLINE var LT term
-        { $$ = op3(GETLINE, $2, itonp($3), $4); }
+        { $$ = op3(GETLINE, awkgetline, $2, itonp($3), $4); }
     | GETLINE LT term
-        { $$ = op3(GETLINE, NIL, itonp($2), $3); }
+        { $$ = op3(GETLINE, awkgetline, NIL, itonp($2), $3); }
     | GETLINE var
-        { $$ = op3(GETLINE, $2, NIL, NIL); }
+        { $$ = op3(GETLINE, awkgetline, $2, NIL, NIL); }
     | GETLINE
-        { $$ = op3(GETLINE, NIL, NIL, NIL); }
+        { $$ = op3(GETLINE, awkgetline, NIL, NIL, NIL); }
     | INDEX '(' pattern comma pattern ')'
-        { $$ = op2(INDEX, $3, $5); }
+        { $$ = op2(INDEX, sindex, $3, $5); }
     | INDEX '(' pattern comma reg_expr ')'
         { SYNTAX("index() doesn't permit regular expressions");
-          $$ = op2(INDEX, $3, (Node*)$5); }
+          $$ = op2(INDEX, sindex, $3, (Node*)$5); }
     | '(' pattern ')'
         { $$ = $2; }
     | MATCHFCN '(' pattern comma reg_expr ')'
-        { $$ = op3(MATCHFCN, NIL, $3, (Node*)makedfa($5, 1)); }
+        { $$ = op3(MATCHFCN, matchop, NIL, $3, (Node*)makedfa($5, 1)); }
     | MATCHFCN '(' pattern comma pattern ')'
         { if (constnode($5))
-            $$ = op3(MATCHFCN, NIL, $3, (Node*)makedfa(strnode($5), 1));
+            $$ = op3(MATCHFCN, matchop, NIL, $3, (Node*)makedfa(strnode($5), 1));
           else
-            $$ = op3(MATCHFCN, (Node *)1, $3, $5); }
+            $$ = op3(MATCHFCN, matchop, (Node *)1, $3, $5); }
     | NUMBER
         { $$ = celltonode($1, CCON); }
     | SPLIT '(' pattern comma varname comma pattern ')'     /* string */
-        { $$ = op4(SPLIT, $3, makearr($5), $7, (Node*)STRING); }
+        { $$ = op4(SPLIT, split, $3, makearr($5), $7, (Node*)STRING); }
     | SPLIT '(' pattern comma varname comma reg_expr ')'    /* const /regexp/ */
-        { $$ = op4(SPLIT, $3, makearr($5), (Node*)makedfa($7, 1), (Node *)REGEXPR); }
+        { $$ = op4(SPLIT, split, $3, makearr($5), (Node*)makedfa($7, 1), (Node *)REGEXPR); }
     | SPLIT '(' pattern comma varname ')'
-        { $$ = op4(SPLIT, $3, makearr($5), NIL, (Node*)STRING); }  /* default */
+        { $$ = op4(SPLIT, split, $3, makearr($5), NIL, (Node*)STRING); }  /* default */
     | SPRINTF '(' patlist ')'
-        { $$ = op1($1, $3); }
+        { $$ = op1($1, awksprintf, $3); }
     | STRING
         { $$ = celltonode($1, CCON); }
     | subop '(' reg_expr comma pattern ')'
-        { $$ = op4($1, NIL, (Node*)makedfa($3, 1), $5, rectonode()); }
+        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, (Node*)makedfa($3, 1), $5, rectonode()); }
     | subop '(' pattern comma pattern ')'
         { if (constnode($3))
-            $$ = op4($1, NIL, (Node*)makedfa(strnode($3), 1), $5, rectonode());
+            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, (Node*)makedfa(strnode($3), 1), $5, rectonode());
           else
-            $$ = op4($1, (Node *)1, $3, $5, rectonode()); }
+            $$ = op4($1, ($1==SUB)?sub:gsub, (Node *)1, $3, $5, rectonode()); }
     | subop '(' reg_expr comma pattern comma var ')'
-        { $$ = op4($1, NIL, (Node*)makedfa($3, 1), $5, $7); }
+        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, (Node*)makedfa($3, 1), $5, $7); }
     | subop '(' pattern comma pattern comma var ')'
         { if (constnode($3))
-            $$ = op4($1, NIL, (Node*)makedfa(strnode($3), 1), $5, $7);
+            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, (Node*)makedfa(strnode($3), 1), $5, $7);
           else
-            $$ = op4($1, (Node *)1, $3, $5, $7); }
+            $$ = op4($1, ($1==SUB)?sub:gsub, (Node *)1, $3, $5, $7); }
     | SUBSTR '(' pattern comma pattern comma pattern ')'
-        { $$ = op3(SUBSTR, $3, $5, $7); }
+        { $$ = op3(SUBSTR, substr, $3, $5, $7); }
     | SUBSTR '(' pattern comma pattern ')'
-        { $$ = op3(SUBSTR, $3, $5, NIL); }
+        { $$ = op3(SUBSTR, substr, $3, $5, NIL); }
     | var
     ;
 
 var:
       varname
     | varname '[' patlist ']'
-        { $$ = op2(ARRAY, makearr($1), $3); }
+        { $$ = op2(ARRAY, array, makearr($1), $3); }
     | IVAR
-        { $$ = op1(INDIRECT, celltonode($1, CVAR)); }
+        { $$ = op1(INDIRECT, indirect, celltonode($1, CVAR)); }
     | INDIRECT term
-        { $$ = op1(INDIRECT, $2); }
+        { $$ = op1(INDIRECT, indirect, $2); }
     ;    
 
 varlist:
@@ -525,9 +525,9 @@ varname:
       VAR
         { $$ = celltonode($1, CVAR); }
     | ARG
-        { $$ = op1(ARG, itonp($1)); }
+        { $$ = op1(ARG, arg, itonp($1)); }
     | VARNF
-        { $$ = op1(VARNF, celltonode($1, CVAR)); }
+        { $$ = op1(VARNF, getnf, celltonode($1, CVAR)); }
     ;
 
 
@@ -564,7 +564,7 @@ Node *notnull(Node *n)
     case BOR: case AND: case NOT:
       return n;
     default:
-      return op2(NE, n, nullnode);
+      return op2(NE, relop, n, nullnode);
   }
 }
 

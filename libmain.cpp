@@ -63,7 +63,7 @@ extern Node *winner;    // parser stores root of program tree here
 #ifndef NDEBUG
 int dbg  = 0;
 void print_tree (Node *n, int indent);
-char *tokname (int tok);
+const char *tokname (int tok);
 #if YYDEBUG
 extern int yydebug;
 #endif
@@ -285,6 +285,7 @@ void awk_end (AWKINTERP *pinter)
   interp = pinter;
   for (int i = 0; i < interp->argc; i++)
     free (interp->argv[i]);
+  dprintf ("freed argv[0] to argv[%d]\n", interp->argc);
   xfree (interp->argv);
   freenode (interp->prog_root);
   dprintf ("freeing symbol table\n");
@@ -616,9 +617,9 @@ void print_cell (Cell *c, int indent)
 void print_tree (Node *n, int indent)
 {
   int i;
-
-  errprintf ("%*cNode 0x%p %s", indent, ' ', n, ((long)n < LASTTOKEN)? tokname((long)n) : tokname (n->nobj));
-  if ((long)n < LASTTOKEN)
+  ptrdiff_t nn = (ptrdiff_t)n;
+  errprintf ("%*cNode 0x%p %s", indent, ' ', n, (nn < LASTTOKEN)? tokname((int)nn) : tokname (n->nobj));
+  if (nn < LASTTOKEN)
   {
     errprintf ("- FLAG\n");
     return;

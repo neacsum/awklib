@@ -48,10 +48,9 @@ extern int  dbg;
 
 extern int  lineno;    /* line number in awk program */
 extern int  errorflag;  /* 1 if error has occurred */
-extern char  inputFS[];  /* FS at time of input, for field splitting */
 
 extern  char  *patbeg;  /* beginning of pattern matched */
-extern  int  patlen;    /* length of pattern matched.  set in b.c */
+extern  size_t  patlen;    /* length of pattern matched.  set in b.c */
 
 /* Cell:  all information about a variable or constant */
 
@@ -129,6 +128,7 @@ typedef struct Node {
 #define NVALUE  1         //value node -  has only one argument that is a Cell
 #define NSTAT   2         //statement node
 #define NEXPR   3
+  Cell* (*proc) (struct Node** a, int tok);
   struct  Node *nnext;
   int  lineno;
   int  nobj;              ///<token id

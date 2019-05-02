@@ -4,11 +4,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 15.0.28307.168
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "awk", "awk.vcxproj", "{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}"
-	ProjectSection(ProjectDependencies) = postProject
-		{A80057F7-D521-44BD-B5E9-C9C26B905061} = {A80057F7-D521-44BD-B5E9-C9C26B905061}
-	EndProjectSection
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "maketab", "maketab.vcxproj", "{A80057F7-D521-44BD-B5E9-C9C26B905061}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libtest", "libtest\libtest.vcxproj", "{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -37,18 +32,10 @@ Global
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Debug|x64.Build.0 = Debug|x64
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Debug|x86.ActiveCfg = Debug|Win32
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Debug|x86.Build.0 = Debug|Win32
-		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x64.ActiveCfg = Release|Win32
-		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x64.Build.0 = Release|Win32
+		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x64.ActiveCfg = Release|x64
+		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x64.Build.0 = Release|x64
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x86.ActiveCfg = Release|Win32
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}.Release|x86.Build.0 = Release|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Debug|x64.ActiveCfg = Debug|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Debug|x64.Build.0 = Debug|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Debug|x86.ActiveCfg = Debug|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Debug|x86.Build.0 = Debug|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Release|x64.ActiveCfg = Release|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Release|x64.Build.0 = Release|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Release|x86.ActiveCfg = Release|Win32
-		{A80057F7-D521-44BD-B5E9-C9C26B905061}.Release|x86.Build.0 = Release|Win32
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Debug|x64.ActiveCfg = Debug|x64
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Debug|x64.Build.0 = Debug|x64
 		{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}.Debug|x86.ActiveCfg = Debug|Win32

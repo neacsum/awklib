@@ -41,7 +41,6 @@ THIS SOFTWARE.
 
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
-extern Cell* (*proctab[LASTTOKEN-FIRSTTOKEN+1])(Node **, int);
 
 static Cell  truecell  ={ OBOOL, BTRUE, 0, 0, 1.0, NUM, NULL };
 Cell  *True  = &truecell;
@@ -62,7 +61,7 @@ Cell  *jret  = &retcell;
 
 
 static Cell*  execute (Node *);
-static int    format (char **, int *, const char *, Node *);
+static int    format (char **, size_t *, const char *, Node *);
 static void   closeall (void);
 static Cell*  gettemp ();
 
@@ -86,13 +85,13 @@ inline int istrue (const Cell *c) { return c->csub == BTRUE; }
 
   \return   0 for realloc failure, !=0 for success
 */
-int adjbuf (char **pbuf, int *psiz, int minlen, int quantum, char **pbptr)
+int adjbuf (char **pbuf, size_t *psiz, size_t minlen, int quantum, char **pbptr)
 {
   if (minlen > *psiz)
   {
     char *tbuf;
     int rminlen = quantum ? minlen % quantum : 0;
-    int boff = pbptr ? *pbptr - *pbuf : 0;
+    size_t boff = pbptr ? *pbptr - *pbuf : 0;
     /* round up to next multiple of quantum */
     if (rminlen)
       minlen += quantum - rminlen;
@@ -117,17 +116,16 @@ void run (Node *a)
   freefields ();
 }
 
-inline int notlegal (int n)
+inline int notlegal (Node* n)
 {
-  return n <= FIRSTTOKEN
-      || n >= LASTTOKEN
-      || proctab[n - FIRSTTOKEN] == nullproc;
+  return n->nobj <= FIRSTTOKEN
+      || n->nobj >= LASTTOKEN
+      || n->proc == nullproc;
 }
 
 /// Execute a node of the parse tree
 Cell *execute (Node *u)
 {
-  Cell *(*proc)(Node **, int);
   Cell *x;
   Node *a;
 
@@ -146,10 +144,10 @@ Cell *execute (Node *u)
 
       return x;
     }
-    if (notlegal (a->nobj))  /* probably a Cell* but too risky to print */
+    if (notlegal (a))  /* probably a Cell* but too risky to print */
       FATAL (AWK_ERR_SYNTAX, "illegal statement");
-    proc = proctab[a->nobj - FIRSTTOKEN];
-    x = (*proc)(a->narg, a->nobj);
+   
+    x = (*a->proc)(a->narg, a->nobj);
     if (isfld (x) && !interp->donefld)
       fldbld ();
     else if (isrec (x) && !interp->donerec)
@@ -247,10 +245,11 @@ Cell *call (Node **a, int n)
       {
         frm.args[i] = gettemp ();
         frm.args[i]->csub = CARG;
-        frm.args[i]->nval = strdup (y->nval);
+        frm.args[i]->nval = y->nval?strdup (y->nval) : 0;
         switch (y->tval & (NUM | STR))
         {
         case STR:
+          dprintf ("STR arg\n");
           frm.args[i]->sval = tostring (y->sval);
           frm.args[i]->tval = STR;
           break;
@@ -278,6 +277,7 @@ Cell *call (Node **a, int n)
     frm.args[i] = gettemp ();
     frm.args[i]->csub = CARG;
   }
+
   frm.nargs = ndef;
   frm.ret = gettemp ();
 
@@ -484,8 +484,8 @@ Cell *array (Node **a, int n)
   const char *s;
   Node *np;
   char *buf;
-  int bufsz = RECSIZE;
-  int nsub = strlen (SUBSEP);
+  size_t bufsz = RECSIZE;
+  size_t nsub = strlen (SUBSEP);
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in array");
@@ -526,7 +526,7 @@ Cell *awkdelete (Node **a, int n)
   Cell *x, *y;
   Node *np;
   const char *s;
-  int nsub = strlen (SUBSEP);
+  size_t nsub = strlen (SUBSEP);
 
   x = execute (a[0]);  /* Cell* for symbol table */
   if (!isarr (x))
@@ -540,7 +540,7 @@ Cell *awkdelete (Node **a, int n)
   }
   else
   {
-    int bufsz = RECSIZE;
+    size_t bufsz = RECSIZE;
     char *buf;
     if ((buf = (char *)malloc (bufsz)) == NULL)
       FATAL (AWK_ERR_NOMEM, "out of memory in awkdelete");
@@ -571,8 +571,8 @@ Cell *intest (Node **a, int n)
   Node *p;
   char *buf;
   const char *s;
-  int bufsz = RECSIZE;
-  int nsub = strlen (SUBSEP);
+  size_t bufsz = RECSIZE;
+  size_t nsub = strlen (SUBSEP);
 
   ap = execute (a[1]);  /* array name */
   if (!isarr (ap))
@@ -637,14 +637,14 @@ Cell *matchop (Node **a, int n)
   tempfree (x);
   if (n == MATCHFCN)
   {
-    int start = patbeg - s + 1;
+    size_t start = patbeg - s + 1;
     if (patlen < 0)
       start = 0;
-    RSTART = start;
-    RLENGTH = patlen;
+    RSTART = (Awkfloat)start;
+    RLENGTH = (Awkfloat)patlen;
     x = gettemp ();
     x->tval = NUM;
-    x->fval = start;
+    x->fval = (Awkfloat)start;
     return x;
   }
   else if ((n == MATCH && i == 1) || (n == NOTMATCH && i == 0))
@@ -774,9 +774,9 @@ Cell *indirect (Node **a, int n)
 /// substr(a[0], a[1], a[2])
 Cell *substr (Node **a, int nnn)
 {
-  int k, m, n;
   const char *s;
   char *ss;
+  size_t n, m, k;
   Cell *x, *y, *z = 0;
 
   x = execute (a[0]);
@@ -795,24 +795,29 @@ Cell *substr (Node **a, int nnn)
     setsval (x, "");
     return x;
   }
-  m = (int)getfval (y);
-  if (m <= 0)
+  int iy = (int)getfval (y);
+  if (iy <= 0)
     m = 1;
-  else if (m > k)
+  else if (iy > k)
     m = k;
+  else
+    m = iy;
   tempfree (y);
+
   if (a[2] != 0)
   {
-    n = (int)getfval (z);
+    int iz = (int)getfval (z);
+    if (iz < 0)
+      n = 0;
+    else
+      n = iz;
     tempfree (z);
   }
   else
     n = k - 1;
-  if (n < 0)
-    n = 0;
-  else if (n > k - m)
+  if (n > k - m)
     n = k - m;
-  dprintf ("substr: m=%d, n=%d, s=%s\n", m, n, s);
+  dprintf ("substr: m=%zd, n=%zd, s=%s\n", m, n, s);
   y = gettemp ();
   ss = strdup (s);
   ss[n + m - 1] = '\0';
@@ -854,17 +859,18 @@ Cell *sindex (Node **a, int nnn)
 #define  MAXNUMSIZE  50
 
 /// printf-like conversions
-int format (char **pbuf, int *pbufsize, const char *s, Node *a)
+int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
 {
   char *fmt;
   char *p, *t;
   const char *os;
   Cell *x;
-  int flag = 0, n;
+  int flag = 0;
+  size_t n;
   int fmtwd; /* format width */
-  int fmtsz = RECSIZE;
+  size_t fmtsz = RECSIZE;
   char *buf = *pbuf;
-  int bufsize = *pbufsize;
+  size_t bufsize = *pbufsize;
 
   static int first = 1;
   static int have_a_format = 0;
@@ -1018,7 +1024,7 @@ int format (char **pbuf, int *pbufsize, const char *s, Node *a)
     execute (a);
   *pbuf = buf;
   *pbufsize = bufsize;
-  return p - buf;
+  return (int)(p - buf);
 }
 
 /// sprintf(a[0])
@@ -1027,7 +1033,7 @@ Cell *awksprintf (Node **a, int n)
   Cell *x;
   Node *y;
   char *buf;
-  int bufsz = RECSIZE;
+  size_t bufsz = RECSIZE;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in awksprintf");
@@ -1053,7 +1059,7 @@ Cell *awkprintf (Node **a, int n)
   Node *y;
   char *buf;
   int len;
-  int bufsz = RECSIZE;
+  size_t bufsz = RECSIZE;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in awkprintf");
@@ -1249,7 +1255,7 @@ Cell *assign (Node **a, int n)
 Cell *cat (Node **a, int q)
 {
   Cell *x, *y, *z;
-  int n1, n2;
+  size_t n1, n2;
   char *s;
 
   x = execute (a[0]);
@@ -1647,7 +1653,7 @@ Cell *bltin (Node **a, int n)
     if (isarr (x))
       u = ((Array *)x->sval)->nelem;  /* GROT.  should be function*/
     else
-      u = strlen (getsval (x));
+      u = (Awkfloat)strlen (getsval (x));
     break;
   case FLOG:
     u = errcheck (log (getfval (x)), "log"); break;
@@ -2004,7 +2010,7 @@ Cell *sub (Node **a, int nnn)
   const char *t, *sptr;
   char *buf;
   fa *pfa;
-  int bufsz = RECSIZE;
+  size_t bufsz = RECSIZE;
 
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
@@ -2076,7 +2082,7 @@ Cell *gsub (Node **a, int nnn)
   char *buf;
   fa *pfa;
   int mflag, tempstat, num;
-  int bufsz = RECSIZE;
+  size_t bufsz = RECSIZE;
 
   if ((buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of memory in gsub");

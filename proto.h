@@ -40,15 +40,17 @@ void  freefa (fa *);
 int   pgetc (void);
 char* cursource (void);
 
+typedef Cell* (*pfun)(Node** a, int);
+
 Node* exptostat (Node *);
-Node* stat3 (int, Node *, Node *, Node *);
-Node* op2 (int, Node *, Node *);
-Node* op1 (int, Node *);
-Node* stat1 (int, Node *);
-Node* op3 (int, Node *, Node *, Node *);
-Node* op4 (int, Node *, Node *, Node *, Node *);
-Node* stat2 (int, Node *, Node *);
-Node* stat4 (int, Node *, Node *, Node *, Node *);
+Node* stat1 (int tok, pfun fn, Node *a0);
+Node* stat2 (int tok, pfun fn, Node *a0, Node *a1);
+Node* stat3 (int tok, pfun fn, Node *a0, Node *a1, Node *a2);
+Node* stat4 (int tok, pfun fn, Node *a0, Node *a1, Node *a2, Node *a3);
+Node* op1 (int tok, pfun fn, Node *);
+Node* op2 (int tok, pfun fn, Node *, Node *);
+Node* op3 (int tok, pfun fn, Node *, Node *, Node *);
+Node* op4 (int tok, pfun fn, Node *, Node *, Node *, Node *);
 Node* celltonode (Cell *c, int csub);
 Node* rectonode (void);
 Node* makearr (Node *);
@@ -101,7 +103,7 @@ double errcheck (double, const char *);
 int  isclvar (const char *);
 int  is_number (const char *);
 
-int  adjbuf (char **pb, int *sz, int min, int q, char **pbp);
+int  adjbuf (char **pb, size_t *sz, size_t min, int q, char **pbp);
 void  run (Node *);
 void  stdinit (void);
 void initgetrec (void);

@@ -55,7 +55,13 @@ TEST_FIXTURE (fixt, getvar_array)
 {
   awk_setprog (interp, "{print NR, $0}\n");
   awk_compile (interp);
-  awksymb v{ "ENVIRON", "PATH" };
+  awksymb v{ "ENVIRON", 
+#ifdef _WIN32
+    "Path"
+#else
+    "PATH" 
+#endif
+  };
   CHECK (awk_getvar (interp, &v));
   CHECK (v.flags & AWKSYMB_STR);
   free (v.sval);
@@ -156,12 +162,12 @@ TEST_FIXTURE (fixt, recset)
   awk_addfunc (interp, "change", change_rec, 1);
 
   awk_infunc (interp, []()->int {return instr1.get (); });
+  out.str (std::string ());
 
   awk_outfunc (interp, strout);
   awk_exec (interp);
   CHECK_EQUAL ("This is Record 1\n", out.str ());
 }
-
 
 void add1 (AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args)
 {
@@ -255,11 +261,14 @@ public:
 
 void awk_tester::setup (const char *testfile)
 {
-  const char *testname;
-
+  char testname[256];
   ABORT (tst = fopen (testfile, "r"));
 
-  testname = basename (testfile);
+  strcpy (testname, basename (testfile));
+  char *p = strchr (testname, '.');
+  if (p)
+    *p = 0;
+
   progname = testname + string(".awk");
   ABORT (prog = fopen (progname.c_str(), "w"));
 
@@ -325,19 +334,19 @@ void awk_tester::cleanup ()
 
 TEST_FIXTURE (awk_tester, T1)
 {
-  setup ("..\\testdir\\tests\\1_printall.tst");
+  setup ("../testdir/tests/1_printall.tst");
   CHECK_FILE_EQUAL ("1_printall.out", "1_printall.ref");
 }
 
 TEST_FIXTURE (awk_tester, T63)
 {
-  setup ("..\\testdir\\tests\\63_fun.tst");
+  setup ("../testdir/tests/63_fun.tst");
   CHECK_FILE_EQUAL ("63_fun.out", "63_fun.ref");
 }
 
 TEST_FIXTURE (awk_tester, T64)
 {
-  setup ("..\\testdir\\tests\\64_funarg.tst");
+  setup ("../testdir/tests/64_funarg.tst");
   CHECK_FILE_EQUAL ("64_funarg.out", "64_funarg.ref");
 }
 
@@ -346,7 +355,7 @@ TEST_FIXTURE (awk_tester, T65)
   int lvl = awk_setdebug (0);
   UnitTest::Timer t;
   t.Start ();
-  setup ("..\\testdir\\tests\\65_funackermann.tst");
+  setup ("../testdir/tests/65_funackermann.tst");
   int ms = t.GetTimeInMs ();
   printf ("Ackermann test done in %d msec\n", ms);
   CHECK_FILE_EQUAL ("65_funackermann.out", "65_funackermann.ref");

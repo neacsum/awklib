@@ -34,7 +34,6 @@ THIS SOFTWARE.
 
 FILE*   infile = NULL;
 
-char    inputFS[100] = " ";
 int  errorflag = 0;
 
 #define  MAXFLD  2        // Initial number of fields
@@ -234,16 +233,13 @@ int readrec (Cell *cell, FILE *inf)
 {
   int sep, c;
   char *rr, *buf;
-  int bufsize = RECSIZE;
+  size_t bufsize = RECSIZE;
 
   xfree (cell->sval);
   buf = (char *)malloc (bufsize);
   if (!buf)
     FATAL (AWK_ERR_NOMEM, "Not enough memory for readrec");
 
-  if (strlen (FS) >= sizeof (inputFS))
-    FATAL (AWK_ERR_LIMIT, "field separator %.10s... is too long", *FS);
-  strcpy (inputFS, FS);  /* for subsequent field splitting */
   if ((sep = *RS) == 0)
   {
     sep = '\n';
@@ -256,7 +252,7 @@ int readrec (Cell *cell, FILE *inf)
   {
     for (; (c = awkgetc (inf)) != sep && c != EOF; )
     {
-      if (rr - buf + 1 > bufsize)
+      if ((size_t)(rr - buf + 1) > bufsize)
         if (!adjbuf (&buf, &bufsize, 1 + rr - buf, RECSIZE, &rr))
           FATAL (AWK_ERR_NOMEM, "input record `%.30s...' too long", buf);
       *rr++ = c;
@@ -346,14 +342,13 @@ void fldbld (void)
 
   fields = strdup (getsval (&interp->fldtab[0]));
   i = 0;  /* number of fields accumulated here */
-  strcpy (inputFS, FS);
   fb = fields;        //beginning of field
-  if (strlen (inputFS) > 1)
+  if (strlen (FS) > 1)
   {
     /* it's a regular expression */
-    i = refldbld (fields, inputFS);
+    i = refldbld (fields, FS);
   }
-  else if ((sep = *inputFS) == ' ')
+  else if ((sep = *FS) == ' ')
   {
     /* default whitespace */
     for (i = 0; ; )
@@ -374,7 +369,7 @@ void fldbld (void)
       fb = fe;
     }
   }
-  else if ((sep = *inputFS) == 0)
+  else if ((sep = *FS) == 0)
   {
     /* new: FS="" => 1 char/field */
     for (i = 0; *fb != 0; fb++)
@@ -500,7 +495,7 @@ void growfldtab (size_t n)
 
   if (n > nf)
     nf = n;
-  makefields (nf);
+  makefields ((int)nf);
 }
 
 /// Build fields from reg expr in FS
@@ -556,8 +551,9 @@ void recbld ()
 
   if (interp->donerec)
     return;
+
   char *buf = (char *)malloc (RECSIZE);
-  int sz = RECSIZE;
+  size_t sz = RECSIZE;
 
   r = buf;
   for (i = 1; i <= NF; i++)

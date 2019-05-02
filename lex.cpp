@@ -34,7 +34,7 @@ extern YYSTYPE  yylval;
 extern int  infunc;
 
 extern char* lexbuf;    /* buffer for lexical analyzer */
-extern int lexbuf_sz;   /* size of lex buffer */
+extern size_t lexbuf_sz;   /* size of lex buffer */
 
 static void unput (int);
 static void unputstr (const char *);
@@ -99,7 +99,7 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
 #ifdef NDEBUG
 #define  RET(x)  { return x; }
 #else
-char *tokname (int tok);
+const char *tokname (int tok);
 #define  RET(x)  { if(dbg>1) errprintf("lex %s\n", tokname(x)); return x; }
 #endif
 
@@ -111,11 +111,11 @@ int peek (void)
 }
 
 /// Get next input token
-int gettok (char **pbuf, int *psz)
+int gettok (char **pbuf, size_t *psz)
 {
   int c, retc;
   char *buf = *pbuf;
-  int sz = *psz;
+  size_t sz = *psz;
   char *bp = buf;
 
   c = input ();
@@ -131,7 +131,7 @@ int gettok (char **pbuf, int *psz)
   {  /* it's a varname */
     for (; (c = input ()) != 0; )
     {
-      if (bp - buf >= sz)
+      if ((size_t)(bp - buf) >= sz)
         if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
           FATAL (AWK_ERR_NOMEM, "out of space for name %.10s...", buf);
       if (isalnum (c) || c == '_')
@@ -152,7 +152,7 @@ int gettok (char **pbuf, int *psz)
     /* read input until can't be a number */
     for (; (c = input ()) != 0; )
     {
-      if (bp - buf >= sz)
+      if ((size_t)(bp - buf) >= sz)
         if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
           FATAL (AWK_ERR_NOMEM, "out of space for number %.10s...", buf);
       if (isdigit (c) || c == 'e' || c == 'E'
@@ -450,7 +450,7 @@ int string (void)
   int c, n;
   char *s, *bp;
   static char *buf = 0;
-  static int bufsz = 500;
+  static size_t bufsz = 500;
 
   if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space for strings");
@@ -608,7 +608,7 @@ int regexpr (void)
 {
   int c;
   static char *buf = 0;
-  static int bufsz = 500;
+  static size_t bufsz = 500;
   char *bp;
 
   if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
@@ -687,6 +687,101 @@ void unputstr (const char *s)
 {
   int i;
 
-  for (i = strlen (s) - 1; i >= 0; i--)
+  for (i = (int)strlen (s) - 1; i >= 0; i--)
     unput (s[i]);
 }
+
+#ifndef NDEBUG
+
+// print a token's name
+const char *tokname (int n)
+{
+  static struct
+  {
+    int token;
+    const char *pname;
+  } names[] = {
+    { PROGRAM,   "program" },
+    { BOR,       " || " },
+    { AND,       " && " },
+    { NOT,       " !" },
+    { NE,        " != " },
+    { EQ,        " == " },
+    { LE,        " <= " },
+    { LT,        " < " },
+    { GE,        " >= " },
+    { GT,        " > " },
+    { ARRAY,     "array" },
+    { INDIRECT,  "$(" },
+    { SUBSTR,    "substr" },
+    { SUB,       "sub" },
+    { GSUB,      "gsub" },
+    { INDEX,     "sindex" },
+    { SPRINTF,   "sprintf " },
+    { ADD,       " + " },
+    { MINUS,     " - " },
+    { MULT,      " * " },
+    { DIVIDE,    " / " },
+    { MOD,       " % " },
+    { UMINUS,    " -" },
+    { UPLUS,     " +" },
+    { POWER,     " **" },
+    { PREINCR,   "++" },
+    { POSTINCR,  "++" },
+    { PREDECR,   "--" },
+    { POSTDECR,  "--" },
+    { CAT,       "cat" },
+    { PASTAT,    "pastat" },
+    { PASTAT2,   "pastat2" },
+    { MATCH,     " ~ " },
+    { NOTMATCH,  " !~ " },
+    { MATCHFCN,  "matchop" },
+    { INTEST,    "intest" },
+    { PRINTF,    "printf" },
+    { PRINT,     "print" },
+    { CLOSE,     "closefile" },
+    { DELETE,    "awkdelete" },
+    { SPLIT,     "split" },
+    { ASSIGN,    " = " },
+    { ADDEQ,     " += " },
+    { SUBEQ,     " -= " },
+    { MULTEQ,    " *= " },
+    { DIVEQ,     " /= " },
+    { MODEQ,     " %= " },
+    { POWEQ,     " ^= " },
+    { CONDEXPR,  " ?: " },
+    { IF,        "if(" },
+    { WHILE,     "while(" },
+    { FOR,       "for(" },
+    { DO,        "do" },
+    { IN,        "instat" },
+    { NEXT,      "next" },
+    { NEXTFILE,  "nextfile" },
+    { EXIT,      "exit" },
+    { BREAK,     "break" },
+    { CONTINUE,  "continue" },
+    { RETURN,    "ret" },
+    { BLTIN,     "bltin" },
+    { CALL,      "call" },
+    { ARG,       "arg" },
+    { VARNF,     "NF" },
+    { GETLINE,   "getline" },
+    { 0,         "" },
+  };
+
+  static char buf[100];
+  if (n < FIRSTTOKEN || n > LASTTOKEN)
+  {
+    sprintf (buf, "token %d", n);
+    return buf;
+  }
+
+  for (int i = 0; names[i].token; i++)
+  {
+    if (names[i].token == n)
+      return names[i].pname;
+  }
+
+  return "(unknown)";
+}
+#endif

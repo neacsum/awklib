@@ -57,8 +57,8 @@ endif
 ifdef _DEBUG
 OBJDIR := $(OBJDIR)/Debug
 LIBDIR := $(LIBDIR)/Debug
-CPPFLAGS += -g -D_DEBUG
-CFLAGS += -g -D_DEBUG
+CPPFLAGS += -g -D_DEBUG=$(_DEBUG) -DYYDEBUG
+CFLAGS += -g -D_DEBUG=$(_DEBUG) -DYYDEBUG
 else
 CPPFLAGS += -O3 -DNDEBUG
 CFLAGS += -O3 -DNDEBUG
@@ -69,7 +69,7 @@ endif
 # name of output library
 LIB = $(LIBDIR)/libawk.a
 
-OFILES = b.o lex.o lib.o libmain.o parse.o proctab.o run.o tran.o ytab.o
+OFILES = b.o lex.o lib.o libmain.o parse.o run.o tran.o ytab.o
 
 OBJS = $(addprefix $(OBJDIR)/,$(OFILES))
 
@@ -90,26 +90,18 @@ $(LIBDIR) $(OBJDIR):
 # Grammar files
 ytab.h ytab.cpp: awkgram.y awk.h proto.h
 	$(YACC) $(YFLAGS) -o ytab.cpp $<
+	mv ytab.hpp ytab.h
 
-# Jump table
-proctab.cpp: maketab
-	./maketab >$@
-
-# Jump table generator
-maketab: maketab.c ytab.h awk.h ytab.h
-	$(CC) $(CFLAGS) -o $@ $<
-
-$(OBJDIR)/%.o: %.cpp
+$(OBJDIR)/%.o: %.cpp proto.h ytab.h awk.h
 	$(CXX) $(CPPFLAGS) -c -o $@ $<
 
 # test program
-test1: libtest/libtest.cpp $(LIB)
+libtest/test1: libtest/libtest.cpp $(LIB)
 	$(CXX) $(CPPFLAGS) -o $@ -L $(LIBDIR)/ $< -lutpp -lawk
-	
 
 # Other stuff
 clean:
-	rm -f a.out *.o *.obj maketab maketab.exe *.bb *.bbg *.da *.gcov *.gcno *.gcda # proctab.c
+	rm -f *.o *.obj maketab maketab.exe *.bb *.bbg *.da *.gcov *.gcno *.gcda ytab.*
 
 cleaner:
-	rm -f a.out *.o *.obj maketab maketab.exe *.bb *.bbg *.da *.gcov *.gcno *.gcda proctab.c ytab*
+	rm -f a.out *.o *.obj maketab maketab.exe *.bb *.bbg *.da *.gcov *.gcno *.gcda

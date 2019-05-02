@@ -70,7 +70,7 @@ static  int setcnt;
 static  int poscnt;
 
 char  *patbeg;
-int  patlen;
+size_t  patlen;
 
 #define  NFA  20  /* cache this many dynamic fa's */
 fa  *fatab[NFA];
@@ -160,9 +160,9 @@ fa* mkdfa (const char *s, int anchor)
   fa *f;
 
   p = reparse (s);
-  p1 = op2 (CAT, op2 (STAR, op2 (ALL, NIL, NIL), NIL), p);
+  p1 = op2 (CAT, cat, op2 (STAR, nullproc, op2 (ALL, nullproc, NIL, NIL), NIL), p);
   /* put ALL STAR in front of reg.  exp. */
-  p1 = op2 (CAT, p1, op2 (FINAL, NIL, NIL));
+  p1 = op2 (CAT, cat, p1, op2 (FINAL, nullproc, NIL, NIL));
   /* put FINAL after reg.  exp. */
 
   poscnt = 0;
@@ -340,7 +340,7 @@ char* cclenter (const char *argp)
   unsigned char *p = (unsigned char *)argp;
   unsigned char *op, *bp;
   static unsigned char *buf = 0;
-  static int bufsz = 100;
+  static size_t bufsz = 100;
 
   op = p;
   if (buf == 0 && (buf = (unsigned char *)malloc (bufsz)) == NULL)
@@ -705,7 +705,7 @@ Node *reparse (const char *p)
   if (rtok == '\0')
   {
     /* FATAL("empty regular expression"); previous */
-    return(op2 (EMPTYRE, NIL, NIL));
+    return(op2 (EMPTYRE, nullproc, NIL, NIL));
   }
   np = regexp ();
   if (rtok != '\0')
@@ -726,46 +726,46 @@ Node *primary (void)
   switch (rtok)
   {
   case CHAR:
-    np = op2 (CHAR, NIL, itonp (rlxval));
+    np = op2 (CHAR, nullproc, NIL, itonp (rlxval));
     rtok = relex ();
     return unary (np);
 
   case ALL:
     rtok = relex ();
-    return unary (op2 (ALL, NIL, NIL));
+    return unary (op2 (ALL, nullproc, NIL, NIL));
 
   case EMPTYRE:
     rtok = relex ();
-    return unary (op2 (ALL, NIL, NIL));
+    return unary (op2 (ALL, nullproc, NIL, NIL));
 
   case DOT:
     rtok = relex ();
-    return unary (op2 (DOT, NIL, NIL));
+    return unary (op2 (DOT, nullproc, NIL, NIL));
 
   case CCL:
-    np = op2 (CCL, NIL, (Node*)cclenter ((char *)rlxstr));
+    np = op2 (CCL, nullproc, NIL, (Node*)cclenter ((char *)rlxstr));
     rtok = relex ();
     return unary (np);
 
   case NCCL:
-    np = op2 (NCCL, NIL, (Node *)cclenter ((char *)rlxstr));
+    np = op2 (NCCL, nullproc, NIL, (Node *)cclenter ((char *)rlxstr));
     rtok = relex ();
     return unary (np);
 
   case '^':
     rtok = relex ();
-    return unary (op2 (CHAR, NIL, itonp (HAT)));
+    return unary (op2 (CHAR, nullproc, NIL, itonp (HAT)));
 
   case '$':
     rtok = relex ();
-    return unary (op2 (CHAR, NIL, NIL));
+    return unary (op2 (CHAR, nullproc, NIL, NIL));
 
   case '(':
     rtok = relex ();
     if (rtok == ')')
     {  /* special pleading for () */
       rtok = relex ();
-      return unary (op2 (CCL, NIL, (Node *)tostring ("")));
+      return unary (op2 (CCL, nullproc, NIL, (Node *)tostring ("")));
     }
     np = regexp ();
     if (rtok == ')')
@@ -786,7 +786,7 @@ Node *concat (Node *np)
   switch (rtok)
   {
   case CHAR: case DOT: case ALL: case EMPTYRE: case CCL: case NCCL: case '$': case '(':
-    return concat (op2 (CAT, np, primary ()));
+    return concat (op2 (CAT, cat, np, primary ()));
   }
   return np;
 }
@@ -796,7 +796,7 @@ Node *alt (Node *np)
   if (rtok == OR)
   {
     rtok = relex ();
-    return alt (op2 (OR, np, concat (primary ())));
+    return alt (op2 (OR, nullproc, np, concat (primary ())));
   }
   return np;
 }
@@ -807,15 +807,15 @@ Node *unary (Node *np)
   {
   case STAR:
     rtok = relex ();
-    return unary (op2 (STAR, np, NIL));
+    return unary (op2 (STAR, nullproc, np, NIL));
 
   case PLUS:
     rtok = relex ();
-    return unary (op2 (PLUS, np, NIL));
+    return unary (op2 (PLUS, nullproc, np, NIL));
 
   case QUEST:
     rtok = relex ();
-    return unary (op2 (QUEST, np, NIL));
+    return unary (op2 (QUEST, nullproc, np, NIL));
 
   default:
     return np;
@@ -879,10 +879,11 @@ struct charclass {
 /// Lexical analyzer for reparse
 int relex (void)
 {
-  int c, n;
+  int c;
+  size_t n;
   int cflag;
   static unsigned char *buf = 0;
-  static int bufsz = 100;
+  static size_t bufsz = 100;
   unsigned char *bp;
   struct charclass *cc;
   int i;
@@ -918,7 +919,7 @@ int relex (void)
     else
       cflag = 0;
     n = 2 * strlen ((const char *)prestr) + 1;
-    if (!adjbuf ((char **)&buf, &bufsz, n, n, (char **)&bp))
+    if (!adjbuf ((char **)&buf, &bufsz, n, 0, (char **)&bp))
       FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", lastre);
     for (; ; )
     {

@@ -156,7 +156,6 @@
     <ClCompile Include="lib.cpp" />
     <ClCompile Include="libmain.cpp" />
     <ClCompile Include="parse.cpp" />
-    <ClCompile Include="proctab.cpp" />
     <ClCompile Include="run.cpp" />
     <ClCompile Include="tran.cpp" />
     <ClCompile Include="ytab.cpp" />
@@ -170,6 +169,25 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="api.md" />
+    <CustomBuild Include="awkgram.y">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc -d -o ytab.cpp awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">yacc -d -o ytab.cpp awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yacc -d -o ytab.cpp awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">yacc -d -o ytab.cpp awkgram.y</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling grammar</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling grammar</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling grammar</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ytab.h;ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ytab.h;ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">ytab.h;ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ytab.h;ytab.cpp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
