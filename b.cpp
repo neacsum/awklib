@@ -576,7 +576,7 @@ int pmatch (fa *f, const char *p0)
   else
     s = f->initstat;
   patbeg = (char *)p;
-  patlen = -1;
+  patlen = (size_t)(-1);
   do {
     q = p;
     do {
@@ -589,7 +589,7 @@ int pmatch (fa *f, const char *p0)
         s = cgoto (f, s, *q);
       if (s == 1)
       {  /* no transition */
-        if (patlen >= 0)
+        if (patlen != (size_t)(-1))
         {
           patbeg = (char *)p;
           return 1;
@@ -600,7 +600,7 @@ int pmatch (fa *f, const char *p0)
     } while (*q++ != 0);
     if (f->out[s])
       patlen = q - p - 1;  /* don't count $ */
-    if (patlen >= 0)
+    if (patlen != (size_t)(-1))
     {
       patbeg = (char *)p;
       return 1;
@@ -638,7 +638,7 @@ int nematch (fa *f, const char *p0)
     f->initstat = s = makeinit (f, 1);
   else
     s = f->initstat;
-  patlen = -1;
+  patlen = (size_t)(-1);
   while (*p)
   {
     q = p;
@@ -653,7 +653,7 @@ int nematch (fa *f, const char *p0)
         s = cgoto (f, s, *q);
       if (s == 1)
       {  /* no transition */
-        if (patlen > 0)
+        if (patlen != 0 && patlen != (size_t)(-1))
         {
           patbeg = (char *)p;
           return 1;
@@ -664,7 +664,7 @@ int nematch (fa *f, const char *p0)
     } while (*q++ != 0);
     if (f->out[s])
       patlen = q - p - 1;  /* don't count $ */
-    if (patlen > 0) 
+    if (patlen != 0 && patlen != (size_t)(-1))
     {
       patbeg = (char *)p;
       return 1;

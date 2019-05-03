@@ -638,7 +638,7 @@ Cell *matchop (Node **a, int n)
   if (n == MATCHFCN)
   {
     size_t start = patbeg - s + 1;
-    if (patlen < 0)
+    if (patlen == (size_t)(-1))
       start = 0;
     RSTART = (Awkfloat)start;
     RLENGTH = (Awkfloat)patlen;
@@ -798,7 +798,7 @@ Cell *substr (Node **a, int nnn)
   int iy = (int)getfval (y);
   if (iy <= 0)
     m = 1;
-  else if (iy > k)
+  else if ((size_t)iy > k)
     m = k;
   else
     m = iy;
@@ -968,7 +968,7 @@ int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
     x = execute (a);
     a = a->nnext;
     n = MAXNUMSIZE;
-    if (fmtwd > n)
+    if ((size_t)fmtwd > n)
       n = fmtwd;
     adjbuf (&buf, &bufsize, 1 + n + p - buf, RECSIZE, &p);
     switch (flag)
@@ -977,7 +977,7 @@ int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
       sprintf (p, "%s", fmt);  /* unknown, so dump it too */
       os = getsval (x);
       n = strlen (os);
-      if (fmtwd > n)
+      if ((size_t)fmtwd > n)
         n = fmtwd;
       adjbuf (&buf, &bufsize, 1 + strlen (p) + n + p - buf, RECSIZE, &p);
       p += strlen (p);
@@ -991,7 +991,7 @@ int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
     case 's':
       os = getsval (x);
       n = strlen (os);
-      if (fmtwd > n)
+      if ((size_t)fmtwd > n)
         n = fmtwd;
       if (!adjbuf (&buf, &bufsize, 1 + n + p - buf, RECSIZE, &p))
         FATAL (AWK_ERR_NOMEM, "huge string/format (%d chars) in printf %.30s... ran format() out of memory", n, os);
