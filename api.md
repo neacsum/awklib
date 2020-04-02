@@ -299,7 +299,7 @@ the memory by calling `free`.
 #### Example
 ````C
     AWKINTERP *pi = awk_init (NULL);
-    awksymb v{ "NR" };
+    awksymb var{ "NR" };
 
     awk_setprog (pi, "{print NR, $0}\n");
     awk_compile (pi);
@@ -326,6 +326,16 @@ the user has to specify the index and set the `AWKSYMB_ARR flag.
 If the variable does not exist, it is created.
 
 #### Example
+````C
+    AWKINTERP *pi = awk_init (NULL);
+    awksymb v{ "myvar", NULL, AWKSYMB_NUM, 25.0 };
+    awk_setprog (pi, "{myvar++; print myvar}\n");
+    awk_compile (interp);
+
+    awk_compile (pi);
+    awk_setvar (pi, &v);
+    awk_exec (pi);  //output is "26"
+````
 
 ### awk_addfunc
 Add a user defined function to the interpreter.
@@ -402,7 +412,8 @@ struct awksymb {
 `flags` - combination of flags indicating data type:
   * AWKSYMB_NUM - `fval` member of the data structure is valid
   * AWKSYMB_STR - `sval` member of the data structure is valid
-  * AWKSYMB_ARR - `index` the variable is an array
+  * AWKSYMB_ARR - the variable is an array and `index` member of the data structure
+                  is the array index.
 
 `fval` - numerical value  
 `sval` - string value
