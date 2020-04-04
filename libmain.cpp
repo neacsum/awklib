@@ -160,7 +160,7 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 int awk_addarg (AWKINTERP *pinter, const char *arg)
 {
   interp = pinter;
-  if (interp->status == AWKS_DONE)
+  if (interp->status >= AWKS_RUN)
     return 0;
   if (interp->argc)
     interp->argv = (char**)realloc (interp->argv, (interp->argc + 1) * sizeof (char*));
