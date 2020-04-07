@@ -29,7 +29,7 @@ endif
 
 # compiler(s)
 CXX := g++
-CPPFLAGS := -I include/ -Wall -pedantic
+CPPFLAGS := -std=c++11 -I include/ -Wall -pedantic
 
 CC := gcc 
 CFLAGS := -I include/ -Wall -pedantic

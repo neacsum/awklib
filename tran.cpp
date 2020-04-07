@@ -100,6 +100,8 @@ void arginit ()
   }
 }
 
+extern char **environ;
+
 /// Set up ENVIRON variable
 void envinit ()
 {
