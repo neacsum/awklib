@@ -48,6 +48,10 @@ static int  hash (const char *, int);
 static void	rehash (Array *);
 static void update_str_val (Cell *vp);
 
+#ifdef __APPLE__
+extern char **environ;
+#endif
+
 /// Initialize symbol table with built-in vars
 void syminit (void)
 {
@@ -99,8 +103,6 @@ void arginit ()
       setsymtab (temp, av, 0.0, STR, interp->argvtab);
   }
 }
-
-extern char **environ;
 
 /// Set up ENVIRON variable
 void envinit ()
