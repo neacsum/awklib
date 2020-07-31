@@ -49,7 +49,7 @@ The library test suite requires the
 [UTPP test framework](https://bitbucket.org/neacsum/utpp) 
 
 ## Installation ##
-All projects have been tested under Visual Studio 2017.
+All projects have been tested under Visual Studio 2019.
 
 ## Development Notes ##
 When doing this project I had the definite sensation of touching a piece of
