@@ -31,7 +31,7 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 #include "ytab.h"
-#include <awkerr.h>
+#include <awklib/err.h>
 
 #define  HAT  (NCHARS+2)  /* matches ^ in regular expr */
                           /* NCHARS is 2**n */

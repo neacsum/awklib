@@ -1,10 +1,10 @@
 #pragma once
 
 /*!
-  \file awklib.h
+  \file awk.h
   \brief Embedded AWK library API
 
-  (c) Mircea Neacsu 2019
+  (c) Mircea Neacsu 2019-2021
   See README file for full copyright information.
 */
 #include <stdio.h>
@@ -52,5 +52,5 @@ int awk_setvar (AWKINTERP *pinter, awksymb* var);
 #endif
 
 #ifdef _MSC_VER
-#pragma comment (lib, "awk")
+#pragma comment (lib, "awklib")
 #endif

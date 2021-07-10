@@ -29,7 +29,7 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 #include "ytab.h"
-#include <awkerr.h>
+#include <awklib/err.h>
 
 #ifndef _MSC_VER
 #include <unistd.h>

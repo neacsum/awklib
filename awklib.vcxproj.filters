@@ -50,10 +50,10 @@
     <ClInclude Include="proto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\awkerr.h">
+    <ClInclude Include="include\awklib\awk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\awklib.h">
+    <ClInclude Include="include\awklib\err.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

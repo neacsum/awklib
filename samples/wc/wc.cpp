@@ -6,7 +6,7 @@
   See README file for full copyright information.
 */
 
-#include <awklib.h>
+#include <awklib/awk.h>
 
 int main (int argc, char **argv)
 {

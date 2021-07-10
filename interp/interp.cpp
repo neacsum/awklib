@@ -6,7 +6,7 @@
   See README file for full copyright information.
 */
 
-#include <awklib.h>
+#include <awklib/awk.h>
 #include <stdlib.h>
 #include <string.h>
 

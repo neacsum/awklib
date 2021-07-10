@@ -36,8 +36,8 @@ THIS SOFTWARE.
 
 #include "awk.h"
 #include "ytab.h"
-#include <awkerr.h>
-#include <awklib.h>
+#include <awklib/err.h>
+#include <awklib/awk.h>
 
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;

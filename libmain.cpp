@@ -46,8 +46,8 @@ static const char  *version =
 #include <signal.h>
 #include "awk.h"
 #include "ytab.h"
-#include <awklib.h>
-#include <awkerr.h>
+#include <awklib/awk.h>
+#include <awklib/err.h>
 
 #define  MAX_PFILE  20  /* max number of -f's */
 

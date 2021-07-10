@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.168
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "awk", "awk.vcxproj", "{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "awklib", "awklib.vcxproj", "{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libtest", "libtest\libtest.vcxproj", "{12F8205B-15C0-4E0E-B9A4-3EBDEBC750B3}"
 	ProjectSection(ProjectDependencies) = postProject

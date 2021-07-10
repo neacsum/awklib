@@ -28,7 +28,7 @@ THIS SOFTWARE.
 #include <stddef.h>
 #include "awk.h"
 #include "ytab.h"
-#include <awkerr.h>
+#include <awklib/err.h>
 
 
 /// Allocate a node with n descendants

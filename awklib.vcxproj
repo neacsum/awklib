@@ -22,7 +22,7 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>awk</RootNamespace>
+    <RootNamespace>awklib</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -162,8 +162,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="awk.h" />
-    <ClInclude Include="include\awkerr.h" />
-    <ClInclude Include="include\awklib.h" />
+    <ClInclude Include="include\awklib\awk.h" />
+    <ClInclude Include="include\awklib\err.h" />
     <ClInclude Include="proto.h" />
     <ClInclude Include="ytab.h" />
   </ItemGroup>
@@ -171,10 +171,10 @@
     <None Include="api.md" />
     <CustomBuild Include="awkgram.y">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc -d -o ytab.cpp awkgram.y</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">yacc -d -o ytab.cpp awkgram.y</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">yacc -d -o ytab.cpp awkgram.y</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">yacc -d -o ytab.cpp awkgram.y</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>

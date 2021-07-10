@@ -1,5 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <awklib.h>
+#include <awklib/awk.h>
 #include <sstream>
 #include <utpp/utpp.h>
 #include <sys/stat.h>
