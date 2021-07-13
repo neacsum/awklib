@@ -54,7 +54,7 @@ static const char  *version =
 extern  FILE* yyin;     /* lex input file */
 extern char *curfname;  ///<current function name
 
-AWKINTERP *interp;      ///< current interpreter status block
+Interpreter *interp;      ///< current interpreter status block
 
 char errmsg[1024];      ///< last error message
 extern  int errorflag;  ///< non-zero if any syntax errors; set by yyerror
@@ -80,7 +80,7 @@ AWKINTERP* awk_init (const char **vars)
 {
   signal (SIGFPE, fpecatch);
   try {
-    interp = (AWKINTERP *)calloc (1, sizeof (AWKINTERP));
+    interp = (Interpreter *)calloc (1, sizeof (Interpreter));
     if (!interp)
       FATAL (AWK_ERR_NOMEM, "Out of memory");
     interp->srand_seed = 1;
@@ -100,7 +100,7 @@ AWKINTERP* awk_init (const char **vars)
     }
 
     //add a fake argv[0]
-    awk_addarg (interp, "AWKLIB");
+    awk_addarg ((AWKINTERP*)interp, "AWKLIB");
   }
   catch (int)
   {
@@ -109,7 +109,7 @@ AWKINTERP* awk_init (const char **vars)
     return 0;
   }
   interp->status = AWKS_INIT;
-  return interp;
+  return (AWKINTERP*)interp;
 }
 
 /*!
@@ -117,7 +117,7 @@ AWKINTERP* awk_init (const char **vars)
 */
 int awk_setprog (AWKINTERP *pinter, const char *prog)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -136,7 +136,7 @@ int awk_setprog (AWKINTERP *pinter, const char *prog)
 
 int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -159,7 +159,7 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 */
 int awk_addarg (AWKINTERP *pinter, const char *arg)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   if (interp->status >= AWKS_RUN)
     return 0;
   if (interp->argc)
@@ -173,7 +173,7 @@ int awk_addarg (AWKINTERP *pinter, const char *arg)
 /// Compile an AWK program
 int awk_compile (AWKINTERP *pinter)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
@@ -215,6 +215,7 @@ int awk_compile (AWKINTERP *pinter)
 /// Execute an AWK program
 int awk_exec (AWKINTERP *pinter)
 {
+  interp = (Interpreter*)pinter;
   if (interp->status != AWKS_COMPILED)
   {
     strcpy (errmsg, "awk_exec: no compiled program");
@@ -222,7 +223,6 @@ int awk_exec (AWKINTERP *pinter)
     return 0;
   }
 
-  interp = pinter;
   symtab = interp->symtab;
   try {
     recinit ();
@@ -239,7 +239,7 @@ int awk_exec (AWKINTERP *pinter)
 
 int awk_run (AWKINTERP* pinter, const char *progfile)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   symtab = interp->symtab;
   try {
     if (interp->status != AWKS_INIT)
@@ -282,7 +282,7 @@ int awk_run (AWKINTERP* pinter, const char *progfile)
 /// Release all resources claimed by AWK interpreter
 void awk_end (AWKINTERP *pinter)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   for (int i = 0; i < interp->argc; i++)
     free (interp->argv[i]);
   dprintf ("freed argv[0] to argv[%d]\n", interp->argc);
@@ -326,19 +326,19 @@ int awk_setdebug (int level)
 /// Redirect input to a user function
 void awk_infunc (AWKINTERP* pinter, inproc user_input)
 {
-  pinter->inredir = user_input;
+  ((Interpreter*)pinter)->inredir = user_input;
 }
 
 /// Redirect output to a user function
 void awk_outfunc (AWKINTERP* pinter, outproc user_output)
 {
-  pinter->outredir = user_output;
+  ((Interpreter*)pinter)->outredir = user_output;
 }
 
 /// Redirects output to a file
 int awk_setoutput (AWKINTERP* pinter, const char *fname)
 {
-  FILE_STRUC *fs = &pinter->files[1];
+  FILE_STRUC *fs = &((Interpreter*)pinter)->files[1];
   FILE *f = fopen (fname, "w");
   if (!f)
     return 0; //something wrong
@@ -355,7 +355,7 @@ int awk_setoutput (AWKINTERP* pinter, const char *fname)
 /// Redirects input to read from a file
 int awk_setinput (AWKINTERP* pinter, const char *fname)
 {
-  FILE_STRUC *fs = &pinter->files[0];
+  FILE_STRUC *fs = &((Interpreter*)pinter)->files[0];
   FILE *f = fopen (fname, "r");
   if (!f)
     return 0; //something wrong
@@ -372,7 +372,7 @@ int awk_setinput (AWKINTERP* pinter, const char *fname)
 /// Retrieve a variable from symbol table
 int awk_getvar (AWKINTERP * pinter, awksymb * var)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   symtab = interp->symtab;
   var->flags = 0;
   try {
@@ -445,7 +445,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   int n;
   bool is_field = false;
 
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   symtab = interp->symtab;
   try {
     if (var->name[0] == '$' && is_number (var->name+1)
@@ -511,7 +511,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
 
 int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
 {
-  interp = pinter;
+  interp = (Interpreter*)pinter;
   symtab = interp->symtab;
   try {
     Cell *cp = setsymtab (fname, NULL, nargs, EXTFUN, symtab);

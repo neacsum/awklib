@@ -311,7 +311,7 @@ Cell *call (Node **a, int n)
     awksymb extret{ 0,0,0,0.,0 };
 
     //call external function
-    ((awkfunc)frm.fcn->sval) (interp, &extret, ndef, extargs);
+    ((awkfunc)frm.fcn->sval) ((AWKINTERP*)interp, &extret, ndef, extargs);
     y = gettemp ();
     free (extargs);
     if (extret.flags & AWKSYMB_STR)

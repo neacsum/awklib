@@ -195,7 +195,7 @@ struct Frame {
   Cell *ret;    // return value
 };
 
-typedef struct AWKINTERP {
+struct Interpreter {
   int status;           ///< Interpreter status. See below
 #define AWKS_INIT       1   ///< status block initialized
 #define AWKS_COMPILING  2   ///< compilation started
@@ -243,7 +243,7 @@ typedef struct AWKINTERP {
 
 #define NPREDEF 13
 
-} AWKINTERP;
+};
 
 #define FS        (CELL_FS->sval)
 #define RS        (CELL_RS->sval)
@@ -259,6 +259,6 @@ typedef struct AWKINTERP {
 #define RSTART    (CELL_RSTART->fval)
 #define RLENGTH   (CELL_RLENGTH->fval)
 
-extern AWKINTERP *interp;
+extern Interpreter *interp;
 
 #include "proto.h"

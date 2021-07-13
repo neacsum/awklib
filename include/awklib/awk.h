@@ -11,7 +11,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-struct AWKINTERP;
+struct AWKINTERP
+{
+  void* unused;
+};
+
 typedef int (*inproc)();
 typedef int (*outproc)(const char *buf, size_t len);
 

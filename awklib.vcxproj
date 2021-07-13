@@ -171,10 +171,10 @@
     <None Include="api.md" />
     <CustomBuild Include="awkgram.y">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; del -y ytab.h &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; del -y ytab.h &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; del -y ytab.h &amp;&amp; ren y.tab.h ytab.h)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">(yacc -d -o ytab.cpp awkgram.y &amp;&amp; del -y ytab.h &amp;&amp; ren y.tab.h ytab.h)</Command>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>
