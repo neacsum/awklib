@@ -21,8 +21,9 @@ IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
 ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ****************************************************************/
-
+#pragma once
 #include <assert.h>
+#include <stdio.h>
 
 typedef double  Awkfloat;
 
@@ -52,38 +53,35 @@ extern int  errorflag;  /* 1 if error has occurred */
 extern  char  *patbeg;  /* beginning of pattern matched */
 extern  size_t  patlen;    /* length of pattern matched.  set in b.c */
 
-/* Cell:  all information about a variable or constant */
+struct Array;
 
-typedef struct Cell {
-  unsigned char ctype;    /* Cell type, see below */
-#define OCELL   1
-#define OBOOL   2
-#define OJUMP   3
 
-  unsigned char csub;    /* Cell subtype, see below */
-#define CARG    6     //Cell is function call argument
-#define CCON    5     //Cell is constant (number or string)
-#define CTEMP   4
-#define CVAR    3
-#define CREC    2
-#define CFLD    1
+/// Cell:  all information about a variable or constant
+struct Cell {
+  enum class type {OCELL=1, OBOOL=2, OJUMP=3};  //cell type
+  enum class subtype {CARG=6, CCON=5, CTEMP=4, CVAR=3, CREC=2, CFLD=1, CNONE=0,
+                BTRUE=11, BFALSE=12,
+                JEXIT=21, JNEXT=22, JBREAK=23, JCONT=24, JRET=25, JNEXTFILE=26};
+  Cell (type t, subtype s, const char *n, void *v, Awkfloat f, unsigned char flags);
+  ~Cell ();
+  void setsval (const char* s);
+  void setfval (Awkfloat f);
+  const char* getsval ();
+  Awkfloat getfval ();
+  const char* getpssval ();
+  void update_str_val ();
 
-/* bool subtypes */
-#define BTRUE   11
-#define BFALSE  12
+  type ctype;    /* Cell type, see below */
 
-/* jump subtypes */
-#define JEXIT   21
-#define JNEXT   22
-#define JBREAK  23
-#define JCONT   24
-#define JRET    25
-#define JNEXTFILE  26
+  subtype csub;    /* Cell subtype, see below */
 
   char  *nval;        /* name, for variables only */
-  char  *sval;        /* string value */
+  union {
+    char* sval;        /* string value */
+    Array* arrval;     /* reuse for array pointer */
+  };
   Awkfloat fval;      /* value as number */
-  int   tval;         /* type info: STR|NUM|ARR|FCN|CONVC */
+  unsigned char   tval;   /* type flags: STR|NUM|ARR|FCN|CONVC */
 #define NUM       0x001   /* number value is valid */
 #define STR       0x002   /* string value is valid */
 #define ARR       0x004   /* this is an array */
@@ -92,18 +90,35 @@ typedef struct Cell {
 #define EXTFUN    0x020   /* external function */
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
-  struct Cell *cnext; /* ptr to next in arrays*/
-} Cell;
+  Cell *cnext; /* ptr to next in arrays*/
 
-typedef struct Array {    /* symbol table array */
+  bool isarr () const { return (tval & ARR) != 0; }
+  bool isfcn () const { return (tval & (FCN | EXTFUN)) != 0; }
+  bool isfld () const { return csub == subtype::CFLD; }
+  bool isrec () const { return csub == subtype::CREC; }
+  bool isnext () const  { return csub == subtype::JNEXT || csub == subtype::JNEXTFILE; }
+  bool isret () const { return csub == subtype::JRET; }
+  bool isbreak () const { return csub == subtype::JBREAK; }
+  bool iscont () const { return csub == subtype::JCONT; }
+  bool isjump () const { return ctype == type::OJUMP; }
+  bool isexit () const { return csub == subtype::JEXIT; }
+  bool istrue () const { return csub == subtype::BTRUE; }
+};
+
+struct Array {    /* symbol table array */
+  Array (int n);
+  ~Array ();
+  Cell* setsym (const char* n, const char* s, double f, unsigned int t);
+  Cell* removesym (const char* n);
+  Cell* lookup (const char* name);
+  void rehash ();
+
   int  nelem;     /* elements in table right now */
   int  size;      /* size of tab */
   Cell  **tab;    /* hash table pointers */
-} Array;
+};
 
 #define  NSYMTAB  50  /* initial size of a symbol table */
-extern Array  *symtab;
-
 
 /* function types */
 #define FLENGTH   1
@@ -142,11 +157,7 @@ extern Node  *nullnode;
 
 extern  int  pairstack[], paircnt;
 
-inline int isvalue (const Node* n) { return n->ntype == NVALUE; }
-inline int isarr (const Cell* c) { return (c->tval & ARR) != 0; }
-inline int isfcn (const Cell* c) { return (c->tval & (FCN | EXTFUN)) != 0; }
-inline int isfld (const Cell* c) { return c->csub == CFLD; }
-inline int isrec (const Cell* c) { return c->csub == CREC; }
+inline bool isvalue (const Node* n) { return n->ntype == NVALUE; }
 
 /* structures used by regular expression matching machinery, mostly b.c: */
 
@@ -196,6 +207,32 @@ struct Frame {
 };
 
 struct Interpreter {
+  Interpreter ();
+  ~Interpreter ();
+  void syminit ();
+  void envinit ();
+  void makefields (int nf);
+
+  void std_redirect (int nf, const char* fname);
+  void run ();
+  void clean_symtab ();
+  void closeall ();
+  void initgetrec ();
+  int getrec (Cell* cell);
+  void nextfile ();
+  int getchar (FILE* inf);
+  int readrec (Cell* cell, FILE* inf);
+  const char* getargv (int n);
+  int putstr (const char* str, FILE* fp);
+  void setclvar (const char* s);
+  void fldbld ();
+  int refldbld (const char* rec, const char* fs);
+  void cleanfld (int n1, int n2);
+  void newfld (int n);
+  void setlastfld (int n);
+  Cell* fieldadr (int n);
+  void growfldtab (size_t n);
+
   int status;           ///< Interpreter status. See below
 #define AWKS_INIT       1   ///< status block initialized
 #define AWKS_COMPILING  2   ///< compilation started
@@ -204,10 +241,9 @@ struct Interpreter {
 #define AWKS_DONE       5   ///< Program finished 
 
   int err;              ///< Last error or warning
+  bool first_run;       ///< true on first run after compile
   Array *symtab;        ///< symbol table
   Node *prog_root;      ///< root of parsing tree
-  int argc;             ///< number of arguments
-  char **argv;          ///< arguments array
   int argno;            ///< current input argument number */
   Array *envir;         ///< environment variables
   Array* argvtab;       ///< ARGV[n] array
@@ -218,46 +254,70 @@ struct Interpreter {
   int curprog;          ///< current program being compiled
   char **progs;         ///< array of program filenames
   struct FILE_STRUC *files;    ///< opened files
+                               ///< 0 = stdin
+                               ///< 1 = stdout
+                               ///< 2 = stderr
+  int nfiles;           ///< number of entries in files table
+  FILE* infile;         ///< current input file
   inproc inredir;       ///< input redirection function
   outproc outredir;     ///< output redirection function
   struct Frame  fn;     ///< frame data for current function call
-  int donerec;          ///< 1 if record broken into fields
-  int donefld;          ///< 1 if record is valid (no fld has changed)
+  bool donerec;         ///< true if record broken into fields
+  bool donefld;         ///< true if record is valid (no fld has changed)
   Cell *fldtab;        ///< $0, $1, ...
   int nfields;          ///< last allocated field in fldtab
   int lastfld;          ///< last used field
-  Cell **predefs;       ///< Predefined variables
-#define CELL_FS       interp->predefs[0]
-#define CELL_RS       interp->predefs[1]
-#define CELL_OFS      interp->predefs[2]
-#define CELL_ORS      interp->predefs[3]
-#define CELL_OFMT     interp->predefs[4]
-#define CELL_CONVFMT  interp->predefs[5]
-#define CELL_NF       interp->predefs[6]
-#define CELL_FILENAME interp->predefs[7]
-#define CELL_NR       interp->predefs[8]
-#define CELL_FNR      interp->predefs[9]
-#define CELL_SUBSEP   interp->predefs[10]
-#define CELL_RSTART   interp->predefs[11]
-#define CELL_RLENGTH  interp->predefs[12]
+#define CELL_FS         predefs[0]
+#define CELL_RS         predefs[1]
+#define CELL_OFS        predefs[2]
+#define CELL_ORS        predefs[3]
+#define CELL_OFMT       predefs[4]
+#define CELL_CONVFMT    predefs[5]
+#define CELL_NF         predefs[6]
+#define CELL_FILENAME   predefs[7]
+#define CELL_NR         predefs[8]
+#define CELL_FNR        predefs[9]
+#define CELL_SUBSEP     predefs[10]
+#define CELL_RSTART     predefs[11]
+#define CELL_RLENGTH    predefs[12]
+#define CELL_ARGC       predefs[13]
 
-#define NPREDEF 13
+#define NPREDEF 14
+  Cell* predefs[NPREDEF];  ///< Predefined variables
 
+  //TODO remove next line when finished converting to OO
+  void* interp; //only to highlight inconsistent use.
 };
 
-#define FS        (CELL_FS->sval)
-#define RS        (CELL_RS->sval)
-#define OFS       (CELL_OFS->sval)
-#define ORS       (CELL_ORS->sval)
-#define OFMT      (CELL_OFMT->sval)
-#define CONVFMT   (CELL_CONVFMT->sval)
-#define NF        (CELL_NF->fval)
-#define FILENAME  (CELL_FILENAME->sval)
-#define NR        (CELL_NR->fval)
-#define FNR       (CELL_FNR->fval)
-#define SUBSEP    (CELL_SUBSEP->sval)
-#define RSTART    (CELL_RSTART->fval)
-#define RLENGTH   (CELL_RLENGTH->fval)
+#define FS        (interp->CELL_FS->sval)
+#define RS        (interp->CELL_RS->sval)
+#define OFS       (interp->CELL_OFS->sval)
+#define ORS       (interp->CELL_ORS->sval)
+#define OFMT      (interp->CELL_OFMT->sval)
+#define CONVFMT   (interp->CELL_CONVFMT->sval)
+#define NF        (interp->CELL_NF->fval)
+#define FILENAME  (interp->CELL_FILENAME->sval)
+#define NR        (interp->CELL_NR->fval)
+#define FNR       (interp->CELL_FNR->fval)
+#define SUBSEP    (interp->CELL_SUBSEP->sval)
+#define RSTART    (interp->CELL_RSTART->fval)
+#define RLENGTH   (interp->CELL_RLENGTH->fval)
+#define ARGC      (interp->CELL_ARGC->fval)
+
+#define MY_FS       (CELL_FS->sval)
+#define MY_RS       (CELL_RS->sval)
+#define MY_OFS      (CELL_OFS->sval)
+#define MY_ORS      (CELL_ORS->sval)
+#define MY_OFMT     (CELL_OFMT->sval)
+#define MY_CONVFMT  (CELL_CONVFMT->sval)
+#define MY_NF       (CELL_NF->fval)
+#define MY_FILENAME (CELL_FILENAME->sval)
+#define MY_NR       (CELL_NR->fval)
+#define MY_FNR      (CELL_FNR->fval)
+#define MY_SUBSEP   (CELL_SUBSEP->sval)
+#define MY_RSTART   (CELL_RSTART->fval)
+#define MY_RLENGTH  (CELL_RLENGTH->fval)
+#define MY_ARGC     (CELL_ARGC->fval)
 
 extern Interpreter *interp;
 

@@ -434,9 +434,9 @@ term:
     | BLTIN
         { $$ = op2(BLTIN, bltin, itonp($1), rectonode()); }
     | CALL '(' ')'
-        { $$ = op2(CALL, call, celltonode($1,CVAR), NIL); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CVAR), NIL); }
     | CALL '(' patlist ')'
-        { $$ = op2(CALL, call, celltonode($1,CVAR), $3); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CVAR), $3); }
     | CLOSE term
         { $$ = op1(CLOSE, closefile, $2); }
     | DECR var
@@ -470,7 +470,7 @@ term:
           else
             $$ = op3(MATCHFCN, matchop, (Node *)1, $3, $5); }
     | NUMBER
-        { $$ = celltonode($1, CCON); }
+        { $$ = celltonode($1, Cell::subtype::CCON); }
     | SPLIT '(' pattern comma varname comma pattern ')'     /* string */
         { $$ = op4(SPLIT, split, $3, makearr($5), $7, (Node*)STRING); }
     | SPLIT '(' pattern comma varname comma reg_expr ')'    /* const /regexp/ */
@@ -480,7 +480,7 @@ term:
     | SPRINTF '(' patlist ')'
         { $$ = op1($1, awksprintf, $3); }
     | STRING
-        { $$ = celltonode($1, CCON); }
+        { $$ = celltonode($1, Cell::subtype::CCON); }
     | subop '(' reg_expr comma pattern ')'
         { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, (Node*)makedfa($3, 1), $5, rectonode()); }
     | subop '(' pattern comma pattern ')'
@@ -507,7 +507,7 @@ var:
     | varname '[' patlist ']'
         { $$ = op2(ARRAY, array, makearr($1), $3); }
     | IVAR
-        { $$ = op1(INDIRECT, indirect, celltonode($1, CVAR)); }
+        { $$ = op1(INDIRECT, indirect, celltonode($1, Cell::subtype::CVAR)); }
     | INDIRECT term
         { $$ = op1(INDIRECT, indirect, $2); }
     ;    
@@ -515,19 +515,19 @@ var:
 varlist:
       /* nothing */ { arglist = $$ = 0; }
     | VAR
-        { arglist = $$ = celltonode($1,CVAR); }
+        { arglist = $$ = celltonode($1,Cell::subtype::CVAR); }
     | varlist comma VAR
         { checkdup($1, $3);
-          arglist = $$ = linkum($1,celltonode($3,CVAR)); }
+          arglist = $$ = linkum($1,celltonode($3,Cell::subtype::CVAR)); }
     ;
 
 varname:
       VAR
-        { $$ = celltonode($1, CVAR); }
+        { $$ = celltonode($1, Cell::subtype::CVAR); }
     | ARG
         { $$ = op1(ARG, arg, itonp($1)); }
     | VARNF
-        { $$ = op1(VARNF, getnf, celltonode($1, CVAR)); }
+        { $$ = op1(VARNF, getnf, celltonode($1, Cell::subtype::CVAR)); }
     ;
 
 
@@ -540,16 +540,16 @@ while:
 
 void setfname(Cell *p)
 {
-  if (isarr(p))
+  if (p->isarr())
     SYNTAX("%s is an array, not a function", p->nval);
-  else if (isfcn(p))
+  else if (p->isfcn())
     SYNTAX("you can't define function %s more than once", p->nval);
   curfname = p->nval;
 }
 
 int constnode(Node *p)
 {
-  return isvalue(p) && ((Cell *) (p->narg[0]))->csub == CCON;
+  return isvalue(p) && ((Cell *) (p->narg[0]))->csub == Cell::subtype::CCON;
 }
 
 char *strnode(Node *p)
@@ -586,10 +586,10 @@ void yyinit (void)
   curfname = 0;
   arglist = 0;
   lexbuf_sz = 256;
-  lexbuf = (char*)malloc (lexbuf_sz);
+  lexbuf = new char[lexbuf_sz];
 }
 
 void yyend (void)
 {
-  free (lexbuf);
+  delete lexbuf;
 }

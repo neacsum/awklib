@@ -247,6 +247,33 @@ Redirect interpreter output to a file.
     awk_setoutput (pi, "results.txt");
     awk_exec (pi);
 ````
+
+### awk_redirect
+Redirect interpreter one of the standard files (stdin, stdout or stderr) to a file.
+
+#### Prototype:
+`int awk_redirect (AWKINTERP* pi, int n, const char *fname);`
+
+#### Parameters:
+`pi` - pointer to an interpreter object
+`n` - file to redirect (0 - stdin, 1 - stdout, 2 - stderr)
+`fname` - filename to be used for output
+
+#### Return:
+1 if successful, 0 otherwise.
+
+#### Example:
+````C
+    AWKINTERP *pi = awk_init (NULL);
+    awk_setprog (pi, "BEGIN {print \"Error redirected\" > \"/dev/stderr\"}");
+    awk_compile (pi);
+    awk_redirect (pi, 2, "errors.txt");
+    awk_exec (pi);
+````
+
+If `fname` is "-" (a single dash character), the redirection is terminated and
+file goes back to original destination (stdin, stdout or stderr).
+
 ### awk_outfunc
 Change the output function with a user-defined function. 
 

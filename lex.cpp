@@ -132,8 +132,7 @@ int gettok (char **pbuf, size_t *psz)
     for (; (c = input ()) != 0; )
     {
       if ((size_t)(bp - buf) >= sz)
-        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
-          FATAL (AWK_ERR_NOMEM, "out of space for name %.10s...", buf);
+        adjbuf (&buf, &sz, bp - buf + 2, 100, &bp);
       if (isalnum (c) || c == '_')
         *bp++ = c;
       else
@@ -153,8 +152,7 @@ int gettok (char **pbuf, size_t *psz)
     for (; (c = input ()) != 0; )
     {
       if ((size_t)(bp - buf) >= sz)
-        if (!adjbuf (&buf, &sz, bp - buf + 2, 100, &bp))
-          FATAL (AWK_ERR_NOMEM, "out of space for number %.10s...", buf);
+        adjbuf (&buf, &sz, bp - buf + 2, 100, &bp);
       if (isdigit (c) || c == 'e' || c == 'E'
         || c == '.' || c == '+' || c == '-')
         *bp++ = c;
@@ -215,7 +213,7 @@ int yylex (void)
       return word (lexbuf);
     if (isdigit (c))
     {
-      yylval.cp = setsymtab (lexbuf, lexbuf, atof (lexbuf), NUM | STR, symtab);
+      yylval.cp = interp->symtab->setsym (lexbuf, lexbuf, atof (lexbuf), NUM | STR);
       RET (NUMBER)
     }
 
@@ -394,7 +392,7 @@ int yylex (void)
           unputstr (lexbuf);
           RET (INDIRECT)
         }
-        yylval.cp = setsymtab (lexbuf, NULL, 0.0, NUM, symtab);
+        yylval.cp = interp->symtab->setsym (lexbuf, NULL, 0.0, NUM);
         RET (IVAR)
       }
       else if (c == 0)
@@ -452,12 +450,12 @@ int string (void)
   static char *buf = 0;
   static size_t bufsz = 500;
 
-  if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
-    FATAL (AWK_ERR_NOMEM, "out of space for strings");
+  if (buf == 0)
+    buf = new char[bufsz];
+
   for (bp = buf; (c = input ()) != '"'; )
   {
-    if (!adjbuf (&buf, &bufsz, bp - buf + 2, 500, &bp))
-      FATAL (AWK_ERR_NOMEM, "out of space for string %.10s...", buf);
+    adjbuf (&buf, &bufsz, bp - buf + 2, 500, &bp);
     switch (c)
     {
     case '\n':
@@ -525,8 +523,8 @@ int string (void)
   *bp = 0;
   s = tostring (buf);
   *bp++ = ' '; *bp++ = 0;
-  yylval.cp = setsymtab (buf, s, 0.0, STR, symtab);
-  free (s);
+  yylval.cp = interp->symtab->setsym (buf, s, 0.0, STR);
+  delete s;
   RET (STRING)
 }
 
@@ -575,7 +573,7 @@ int word (char *w)
       RET (kp->type)
 
     case VARNF:
-      yylval.cp = setsymtab ("NF", NULL, 0.0, NUM, symtab);
+      yylval.cp = interp->symtab->lookup ("NF");
       RET (VARNF)
 
     default:
@@ -590,7 +588,7 @@ int word (char *w)
   }
   else
   {
-    yylval.cp = setsymtab (w, NULL, 0.0, STR, symtab);
+    yylval.cp = interp->symtab->setsym (w, NULL, 0.0, STR);
     if (c == '(')
       RET (CALL)
     else
@@ -611,13 +609,12 @@ int regexpr (void)
   static size_t bufsz = 500;
   char *bp;
 
-  if (buf == 0 && (buf = (char *)malloc (bufsz)) == NULL)
-    FATAL (AWK_ERR_NOMEM, "out of space for reg expr");
+  if (buf == 0)
+    buf = new char[bufsz];
   bp = buf;
   for (; (c = input ()) != '/' && c != 0; )
   {
-    if (!adjbuf (&buf, &bufsz, bp - buf + 3, 500, &bp))
-      FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", buf);
+    adjbuf (&buf, &bufsz, bp - buf + 3, 500, &bp);
     if (c == '\n')
     {
       SYNTAX ("newline in regular expression %.10s...", buf);

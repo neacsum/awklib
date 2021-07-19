@@ -214,11 +214,11 @@ Node *op4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4)
   return x;
 }
 
-Node *celltonode (Cell *a, int csub)
+Node *celltonode (Cell *a, Cell::subtype csub)
 {
   Node *x;
 
-  a->ctype = OCELL;
+  a->ctype = Cell::type::OCELL;
   a->csub = csub;
   x = node1 (0, nullproc, (Node *)a);
   x->ntype = NVALUE;
@@ -228,7 +228,7 @@ Node *celltonode (Cell *a, int csub)
 Node *rectonode (void)  /* make $0 into a Node */
 {
   extern Cell *literal0;
-  return op1 (INDIRECT, indirect, celltonode (literal0, CCON));
+  return op1 (INDIRECT, indirect, celltonode (literal0, Cell::subtype::CCON));
 }
 
 Node *makearr (Node *p)
@@ -238,12 +238,12 @@ Node *makearr (Node *p)
   if (isvalue (p))
   {
     cp = (Cell *)(p->narg[0]);
-    if (isfcn (cp))
+    if (cp->isfcn ())
       SYNTAX ("%s is a function, not an array", cp->nval);
-    else if (!isarr (cp))
+    else if (!cp->isarr ())
     {
-      xfree (cp->sval);
-      cp->sval = (char *)makearray (NSYMTAB);
+      delete cp->sval;
+      cp->arrval = new Array (NSYMTAB);
       cp->tval = ARR;
     }
   }
@@ -286,7 +286,7 @@ void defn (Cell *v, Node *vl, Node *st)  /* turn on FCN bit in definition, */
   Node *p;
   int n;
 
-  if (isarr (v))
+  if (v->isarr ())
   {
     SYNTAX ("`%s' is an array name and a function name", v->nval);
     return;

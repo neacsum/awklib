@@ -343,8 +343,8 @@ char* cclenter (const char *argp)
   static size_t bufsz = 100;
 
   op = p;
-  if (buf == 0 && (buf = (unsigned char *)malloc (bufsz)) == NULL)
-    FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 1", p);
+  if (buf == 0)
+    buf = new unsigned char[bufsz];
   bp = buf;
   for (i = 0; (c = *p++) != 0; )
   {
@@ -366,22 +366,20 @@ char* cclenter (const char *argp)
         }
         while (c < c2)
         {
-          if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
-            FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 2", p);
+          adjbuf ((char**)&buf, &bufsz, bp - buf + 2, 100, (char**)&bp);
           *bp++ = ++c;
           i++;
         }
         continue;
       }
     }
-    if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 2, 100, (char **)&bp))
-      FATAL (AWK_ERR_NOMEM, "out of space for character class [%.10s...] 3", p);
+    adjbuf ((char**)&buf, &bufsz, bp - buf + 2, 100, (char**)&bp);
     *bp++ = c;
     i++;
   }
   *bp = 0;
   dprintf ("cclenter: in = |%s|, out = |%s|\n", op, buf);
-  xfree (op);
+  delete op;
   return (char *)tostring ((char *)buf);
 }
 
@@ -908,8 +906,8 @@ int relex (void)
     rlxval = c;
     return CHAR;
   case '[':
-    if (buf == 0 && (buf = (unsigned char *)malloc (bufsz)) == NULL)
-      FATAL (AWK_ERR_NOMEM, "out of space in reg expr %.10s..", lastre);
+    if (buf == 0)
+      buf = new unsigned char[bufsz];
     bp = buf;
     if (*prestr == '^')
     {
@@ -919,8 +917,7 @@ int relex (void)
     else
       cflag = 0;
     n = 2 * strlen ((const char *)prestr) + 1;
-    if (!adjbuf ((char **)&buf, &bufsz, n, 0, (char **)&bp))
-      FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", lastre);
+    adjbuf ((char**)&buf, &bufsz, n, 0, (char**)&bp);
     for (; ; )
     {
       if ((c = *prestr++) == '\\')
@@ -944,8 +941,7 @@ int relex (void)
           prestr += cc->cc_namelen + 3;
           for (i = 0; i < NCHARS; i++)
           {
-            if (!adjbuf ((char **)&buf, &bufsz, bp - buf + 1, 100, (char **)&bp))
-              FATAL (AWK_ERR_NOMEM, "out of space for reg expr %.10s...", lastre);
+            adjbuf ((char**)&buf, &bufsz, bp - buf + 1, 100, (char**)&bp);
             if (cc->cc_func (i))
             {
               *bp++ = i;

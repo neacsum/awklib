@@ -22,6 +22,8 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ****************************************************************/
 
+#include <stdio.h>
+
 void  setfname (Cell *);
 int   constnode (Node *);
 char* strnode (Node *);
@@ -51,7 +53,7 @@ Node* op1 (int tok, pfun fn, Node *);
 Node* op2 (int tok, pfun fn, Node *, Node *);
 Node* op3 (int tok, pfun fn, Node *, Node *, Node *);
 Node* op4 (int tok, pfun fn, Node *, Node *, Node *, Node *);
-Node* celltonode (Cell *c, int csub);
+Node* celltonode (Cell *c, Cell::subtype csub);
 Node* rectonode (void);
 Node* makearr (Node *);
 Node* pa2stat (Node *, Node *, Node *);
@@ -61,40 +63,12 @@ int   isarg (const char *);
 int   ptoi (void *);
 Node* itonp (int);
 void  freenode (Node* n);
-void  syminit (void);
-void  arginit (void);
-void  envinit (void);
-Array*  makearray (int);
-void  freearray (Array *);
-void freecell (Cell *);
 void  freeelem (Cell *, const char *);
-Cell* setsymtab (const char *name, const char *sval, double nval, unsigned int type, Array *tab);
-Cell* lookup (const char *name, Array *tab);
-void setfval (Cell *, Awkfloat);
 void  funnyvar (Cell *, const char *);
-void setsval (Cell *, const char *);
-double getfval (Cell *);
-const char* getsval (Cell *);
-const char* getpssval (Cell *);     /* for print */
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
-void  recinit (void);
-void  freefields (void);
-void  growfldtab (size_t n);
-int   getrec (Cell *c);
-int   awkputs (const char *str, FILE *fp);
-
-void  nextfile (void);
-int   readrec (Cell* c, FILE *inf);
-const char* getargv (int);
-void  setclvar (const char *);
-void  fldbld (void);
-void  cleanfld (int, int);
-void  newfld (int);
-void  setlastfld (int);
 void  recbld (void);
-Cell* fieldadr (int);
 void  yyerror (const char *);
 void  fpecatch (int);
 int   input (void);
@@ -103,10 +77,7 @@ double errcheck (double, const char *);
 int  isclvar (const char *);
 int  is_number (const char *);
 
-int  adjbuf (char **pb, size_t *sz, size_t min, int q, char **pbp);
-void  run (Node *);
-void  stdinit (void);
-void initgetrec (void);
+void  adjbuf (char **pb, size_t *sz, size_t min, int q, char **pbp);
 void tempfree (Cell *a);
 
 Cell* program (Node **, int);
@@ -148,6 +119,7 @@ const char* filename (FILE *);
 Cell* closefile (Node **, int);
 Cell* sub (Node **, int);
 Cell* gsub (Node **, int);
+Cell* execute (Node* u);
 
 FILE* popen (const char *, const char *);
 int   pclose (FILE *);
