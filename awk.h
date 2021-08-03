@@ -41,27 +41,42 @@ int errprintf (const char *fmt, ...);
 # define  dprintf 1? 0 : errprintf 
 #else
 extern int  dbg;
-#define  dprintf  if (dbg) errprintf
-#define YYDBGOUT if (dbg>2) errprintf
+#define  dprintf  (dbg==0)? 0 : errprintf
+#define YYDBGOUT  (dbg<=2)? 0 : errprintf
 #endif
 
 #define  RECSIZE  (8 * 1024)  /* sets limit on records, fields, etc., etc. */
 
 extern int  lineno;    /* line number in awk program */
-extern int  errorflag;  /* 1 if error has occurred */
 
 extern  char  *patbeg;  /* beginning of pattern matched */
 extern  size_t  patlen;    /* length of pattern matched.  set in b.c */
 
-struct Array;
+class Array;
 
 
 /// Cell:  all information about a variable or constant
 struct Cell {
   enum class type {OCELL=1, OBOOL=2, OJUMP=3};  //cell type
-  enum class subtype {CARG=6, CCON=5, CTEMP=4, CVAR=3, CREC=2, CFLD=1, CNONE=0,
-                BTRUE=11, BFALSE=12,
-                JEXIT=21, JNEXT=22, JBREAK=23, JCONT=24, JRET=25, JNEXTFILE=26};
+  enum class subtype {
+    // OCELL subtypes
+    CARR=8,   //array
+    CFUNC=7,  //function definition
+    CARG=6,   //function argument
+    CCON=5,   //constant 
+    CTEMP=4,  //temporary
+    CVAR=3,   //variable 
+    CREC=2,   //input record ($0)
+    CFLD=1,   //input field ($1, $2,...)
+    CNONE=0,  //not specified
+
+    //OBOOL subtypes
+    BTRUE=11, //true value
+    BFALSE=12, //false value
+
+    //OJUMP subtypes
+    JEXIT=21,   //
+    JNEXT=22, JBREAK=23, JCONT=24, JRET=25, JNEXTFILE=26};
   Cell (type t, subtype s, const char *n, void *v, Awkfloat f, unsigned char flags);
   ~Cell ();
   void setsval (const char* s);
@@ -71,9 +86,9 @@ struct Cell {
   const char* getpssval ();
   void update_str_val ();
 
-  type ctype;    /* Cell type, see below */
+  type ctype;    /* Cell type, see above */
 
-  subtype csub;    /* Cell subtype, see below */
+  subtype csub;    /* Cell subtype, see above */
 
   char  *nval;        /* name, for variables only */
   union {
@@ -81,19 +96,18 @@ struct Cell {
     Array* arrval;     /* reuse for array pointer */
   };
   Awkfloat fval;      /* value as number */
-  unsigned char   tval;   /* type flags: STR|NUM|ARR|FCN|CONVC */
-#define NUM       0x001   /* number value is valid */
-#define STR       0x002   /* string value is valid */
-#define ARR       0x004   /* this is an array */
-#define FCN       0x008   /* this is a function name */
-#define CONVC     0x010   /* string was converted from number via CONVFMT */
-#define EXTFUN    0x020   /* external function */
+  unsigned char   flags;   /* type flags */
+#define NUM       0x01   /* number value is valid */
+#define STR       0x02   /* string value is valid */
+#define CONVC     0x04   /* string was converted from number via CONVFMT */
+#define PREDEF    0x08   /* predefined variable*/
+#define EXTFUNC   0x10   /* external function*/
 
   char  *fmt;         /* CONVFMT/OFMT value used to convert from number */
   Cell *cnext; /* ptr to next in arrays*/
 
-  bool isarr () const { return (tval & ARR) != 0; }
-  bool isfcn () const { return (tval & (FCN | EXTFUN)) != 0; }
+  bool isarr () const { return csub == subtype::CARR; }
+  bool isfcn () const { return csub == subtype::CFUNC; }
   bool isfld () const { return csub == subtype::CFLD; }
   bool isrec () const { return csub == subtype::CREC; }
   bool isnext () const  { return csub == subtype::JNEXT || csub == subtype::JNEXTFILE; }
@@ -105,16 +119,43 @@ struct Cell {
   bool istrue () const { return csub == subtype::BTRUE; }
 };
 
-struct Array {    /* symbol table array */
+class Array {    /* symbol table array */
+public:
+  class Iterator {
+  public:
+    Iterator& operator ++(int);
+    Cell* operator *();
+    Cell* operator ->() { return operator *(); };
+    bool operator == (const Iterator& other) const;
+    bool operator != (const Iterator& other) const { return !operator== (other); }
+
+  private:
+    Iterator (const Array* a);
+    const Array* owner;
+    int ipos;
+    Cell* ptr;
+    friend class Array;
+  };
+
   Array (int n);
   ~Array ();
-  Cell* setsym (const char* n, const char* s, double f, unsigned int t);
+  Cell* setsym (const char* n, const char* s, double f, unsigned int t, Cell::subtype sub=Cell::subtype::CNONE);
+  Cell* setsym (const char* n, Array* arr, unsigned int t);
   Cell* removesym (const char* n);
+  void deletecell (Iterator& p);
   Cell* lookup (const char* name);
+  int   length () const;
+  int   size () const;
+
+  Iterator begin () const;
+  Iterator end () const;
+
+private:
   void rehash ();
+  Cell* insert_sym (const char* n);
 
   int  nelem;     /* elements in table right now */
-  int  size;      /* size of tab */
+  int  sz;        /* size of tab */
   Cell  **tab;    /* hash table pointers */
 };
 
@@ -206,6 +247,7 @@ struct Frame {
   Cell *ret;    // return value
 };
 
+
 struct Interpreter {
   Interpreter ();
   ~Interpreter ();
@@ -226,6 +268,7 @@ struct Interpreter {
   int putstr (const char* str, FILE* fp);
   void setclvar (const char* s);
   void fldbld ();
+  void recbld ();
   int refldbld (const char* rec, const char* fs);
   void cleanfld (int n1, int n2);
   void newfld (int n);
@@ -241,6 +284,7 @@ struct Interpreter {
 #define AWKS_DONE       5   ///< Program finished 
 
   int err;              ///< Last error or warning
+  char errmsg[1024];    ///< Last error message
   bool first_run;       ///< true on first run after compile
   Array *symtab;        ///< symbol table
   Node *prog_root;      ///< root of parsing tree
@@ -321,4 +365,21 @@ struct Interpreter {
 
 extern Interpreter *interp;
 
+struct awk_exception {
+  awk_exception (Interpreter &interp, int code, const char* msg);
+  Interpreter& interp;
+  int err;
+};
+
+inline
+int Array::length () const
+{
+  return nelem;
+}
+
+inline
+int Array::size () const
+{
+  return sz;
+}
 #include "proto.h"

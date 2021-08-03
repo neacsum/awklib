@@ -34,7 +34,7 @@ struct awksymb {
 typedef void (*awkfunc)(AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args);
 
 AWKINTERP* awk_init (const char **vars);
-int awk_err (const char **msg);
+int awk_err (AWKINTERP* pinter, const char **msg);
 int awk_setprog (AWKINTERP* pinter, const char *prog);
 int awk_addprogfile (AWKINTERP* pinter, const char *progfile);
 int awk_compile (AWKINTERP* pinter);

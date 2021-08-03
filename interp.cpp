@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
+#include <mutex>
 
 #include "awk.h"
 #include "ytab.h"
@@ -14,6 +16,8 @@ static int file_cmp (const char* f1, const char* f2);
 
 Node* nullnode;    /* zero&null, converted into a node for comparisons */
 Cell* literal0;
+extern char* curfname;  ///<current function name
+
 
 Interpreter::Interpreter ()
   : status{ AWKS_INIT }
@@ -38,6 +42,7 @@ Interpreter::Interpreter ()
   , donerec{ false }
   , donefld{ false }
 {
+  *errmsg = 0;
   syminit ();
   envinit ();
   srand ((unsigned int)srand_seed);
@@ -51,24 +56,31 @@ Interpreter::Interpreter ()
   files = new FILE_STRUC[nfiles];
   memset (files, 0, sizeof (FILE_STRUC) * nfiles);
   files[0].fp = stdin;
-  files[0].fname = strdup ("/dev/stdin");;
+  files[0].fname = tostring ("-");
   files[0].mode = LT;
   files[1].fp = stdout;
-  files[1].fname = strdup ("/dev/stdout");
+  files[1].fname = tostring ("/dev/stdout");
   files[1].mode = GT;
   files[2].fp = stderr;
-  files[2].fname = strdup ("/dev/stderr");
+  files[2].fname = tostring ("/dev/stderr");
   files[2].mode = GT;
 }
 
 Interpreter::~Interpreter ()
 {
-  if (files[0].fp != stdin)
+  if (files[0].fp && files[0].fp != stdin)
     fclose (files[0].fp);
+  delete files[0].fname;
+  if (files[1].fp && files[1].fp != stdout)
+    fclose (files[1].fp);
+  delete files[1].fname;
+  if (files[2].fp && files[2].fp != stderr)
+    fclose (files[2].fp);
+  delete files[2].fname;
 
   freenode (prog_root);
   dprintf ("freeing symbol table\n");
-  symtab->removesym ("SYMTAB"); //break recursion
+  symtab->removesym ("SYMTAB"); //break recursive link
   delete symtab;
   for (int i = 0; i < nprog; i++)
     delete progs[i];
@@ -76,7 +88,12 @@ Interpreter::~Interpreter ()
   delete lexprog;
   delete files;
 
-  delete []fldtab;
+  for (int i = 0; i < nfields; ++i)
+  {
+    delete fldtab[i].nval;
+    delete fldtab[i].sval;
+  }
+  free (fldtab);
 }
 
 /// Initialize symbol table with built-in vars
@@ -92,23 +109,23 @@ void Interpreter::syminit ()
   nullnode = celltonode (symtab->setsym ("$zero&null", "", 0.0, NUM | STR)
     , Cell::subtype::CCON);
 
-  CELL_FS = symtab->setsym ("FS", " ", 0.0, STR);
-  CELL_RS = symtab->setsym ("RS", "\n", 0.0, STR);
-  CELL_OFS = symtab->setsym ("OFS", " ", 0.0, STR);
-  CELL_ORS = symtab->setsym ("ORS", "\n", 0.0, STR);
-  CELL_OFMT = symtab->setsym ("OFMT", "%.6g", 0.0, STR);
-  CELL_CONVFMT = symtab->setsym ("CONVFMT", "%.6g", 0.0, STR);
-  CELL_FILENAME = symtab->setsym ("FILENAME", "", 0.0, STR);
-  CELL_NF = symtab->setsym ("NF", "", 0.0, NUM);
-  CELL_NR = symtab->setsym ("NR", "", 0.0, NUM);
-  CELL_FNR = symtab->setsym ("FNR", "", 0.0, NUM);
-  CELL_SUBSEP = symtab->setsym ("SUBSEP", "\034", 0.0, STR);
-  CELL_RSTART = symtab->setsym ("RSTART", "", 0.0, NUM);
-  CELL_RLENGTH = symtab->setsym ("RLENGTH", "", 0.0, NUM);
-  CELL_ARGC = symtab->setsym ("ARGC", "", 1.0, NUM);
-  symtab->setsym ("SYMTAB", (char*)symtab, 0.0, ARR);
+  CELL_FS = symtab->setsym ("FS", " ", 0.0, STR | PREDEF);
+  CELL_RS = symtab->setsym ("RS", "\n", 0.0, STR | PREDEF);
+  CELL_OFS = symtab->setsym ("OFS", " ", 0.0, STR | PREDEF);
+  CELL_ORS = symtab->setsym ("ORS", "\n", 0.0, STR | PREDEF);
+  CELL_OFMT = symtab->setsym ("OFMT", "%.6g", 0.0, STR | PREDEF);
+  CELL_CONVFMT = symtab->setsym ("CONVFMT", "%.6g", 0.0, STR | PREDEF);
+  CELL_FILENAME = symtab->setsym ("FILENAME", "", 0.0, STR | PREDEF);
+  CELL_NF = symtab->setsym ("NF", "", 0.0, NUM | PREDEF);
+  CELL_NR = symtab->setsym ("NR", "", 0.0, NUM | PREDEF);
+  CELL_FNR = symtab->setsym ("FNR", "", 0.0, NUM | PREDEF);
+  CELL_SUBSEP = symtab->setsym ("SUBSEP", "\034", 0.0, STR | PREDEF);
+  CELL_RSTART = symtab->setsym ("RSTART", "", 0.0, NUM | PREDEF);
+  CELL_RLENGTH = symtab->setsym ("RLENGTH", "", 0.0, NUM | PREDEF);
+  CELL_ARGC = symtab->setsym ("ARGC", "", 1.0, NUM | PREDEF);
 
-  symtab->setsym ("ARGV", (char*)(argvtab = new Array (DEFAULT_ARGV)), 0., ARR);
+  symtab->setsym ("ARGV", (argvtab = new Array (DEFAULT_ARGV)), PREDEF);
+  symtab->setsym ("SYMTAB", symtab, PREDEF);
 
   //add a fake argv[0]
   argvtab->setsym ("0", "AWKLIB", 0., STR);
@@ -122,9 +139,8 @@ void Interpreter::envinit ()
   Array* envtab;     /* symbol table containing ENVIRON[...] */
   char** envp;
   envp = environ;
-  cp = symtab->setsym ("ENVIRON", "", 0.0, ARR);
-  envtab = new Array (NSYMTAB);
-  cp->arrval = envtab;
+  cp = symtab->setsym ("ENVIRON", (envtab = new Array (NSYMTAB)), 0);
+  ;
   for (; *envp; envp++)
   {
     if ((p = strchr (*envp, '=')) == NULL)
@@ -159,7 +175,7 @@ void Interpreter::makefields (int nf)
     fldtab[i].ctype = Cell::type::OCELL;
     fldtab[i].csub = Cell::subtype::CFLD;
     fldtab[i].nval = tostring (temp);
-    fldtab[i].tval =  NUM | STR;
+    fldtab[i].flags =  NUM | STR;
   }
   nfields = nf;
 }
@@ -175,11 +191,9 @@ void Interpreter::std_redirect (int nf, const char* fname)
   FILE_STRUC& fs = files[nf];
   if (!strcmp (fname, "-"))
   {
-    //terminate redirection
-    fname = (nf == 0) ? "/dev/stdin" :
-      (nf == 1) ? "/dev/stdout" : "/dev/stderr";
     f = (nf == 0) ? stdin :
-      (nf == 1) ? stdout : stderr;
+        (nf == 1) ? stdout :
+                    stderr;
     if (fs.fp != f)
       fclose (fs.fp);
   }
@@ -189,12 +203,12 @@ void Interpreter::std_redirect (int nf, const char* fname)
     if (!f)
       return; //something wrong
 
-    if (fs.fp != stdin && fs.fp != stdout && fs.fp != stderr)
+    if (fs.fp && fs.fp != stdin && fs.fp != stdout && fs.fp != stderr)
       fclose (fs.fp);
   }
   fs.fp = f;
-  free (fs.fname);
-  fs.fname = strdup (fname);
+  delete fs.fname;
+  fs.fname = tostring (fname);
 }
 
 /// Execution of parse tree starts here
@@ -202,19 +216,37 @@ void Interpreter::run ()
 {
   status = AWKS_RUN;
 
-  //open I/O streams
-  if (files[0].fp != stdin)
-    files[0].fp = fopen (files[0].fname, "r");
-  if (files[1].fp != stdout)
-    files[1].fp = fopen (files[1].fname, "w");
-  if (files[2].fp != stderr)
-    files[2].fp = fopen (files[2].fname, "w");
+  //open input stream...
+  if (!files[0].fp)
+  {
+    if (!strcmp (files[0].fname, "-"))
+      files[0].fp = stdin;
+    else
+      files[0].fp = fopen (files[0].fname, "r");
+  }
+
+  //...and output streams
+  if (!files[1].fp)
+  {
+    if (!strcmp (files[1].fname, "/dev/stdout"))
+      files[1].fp = stdout;
+    else
+      files[1].fp = fopen (files[1].fname, "w");
+  }
+  if (!files[2].fp)
+  {
+    if (!strcmp (files[2].fname, "/dev/stderr"))
+      files[2].fp = stderr;
+    else
+      files[2].fp = fopen (files[2].fname, "w");
+  }
+
   if (!first_run)
     clean_symtab ();
   initgetrec ();
 
   execute (prog_root);
-  if (err)
+  if (err < 0)
     status = AWKS_DONE;
   else
     status = AWKS_COMPILED; //ready to run again
@@ -255,7 +287,7 @@ void Interpreter::closeall ()
       if (stat == EOF)
         WARNING ("i/o error occurred while closing %s", files[i].fname);
 
-      xfree (files[i].fname);
+      delete files[i].fname;
       files[i].fp = NULL;
     }
   }
@@ -264,28 +296,37 @@ void Interpreter::closeall ()
 /// Clear symbol table after a previous run
 void Interpreter::clean_symtab ()
 {
-  Cell* cp;
   dprintf ("Starting symtab cleanup\n");
-  for (int i = 0; i < symtab->size; i++)
+  Array::Iterator cp = symtab->begin ();
+  for (auto cp = symtab->begin (); cp != symtab->end (); cp++)
   {
-    for (cp = symtab->tab[i]; cp; cp = cp->cnext)
+    if (cp->csub == Cell::subtype::CVAR)
     {
-      if (cp->csub != Cell::subtype::CVAR || cp->isfcn())
-        continue;
-      dprintf ("cleaning %s t=%s\n", NN (cp->nval), flags2str (cp->tval));
-      if (cp->isarr ())
+      if ((cp->flags & PREDEF) == 0)
       {
-        if (cp->arrval != symtab)
-          delete cp->arrval;
-      }
-      else if (!cp->isfcn ())
+        dprintf ("cleaning CVAR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
         delete cp->sval;
-      cp->sval = 0;
-      cp->tval = NUM;
-      cp->fval = 0.;
-      cp->fmt = 0;
+        cp->sval = 0;
+        cp->fval = 0.;
+      }
+      else
+        dprintf ("skipping CVAR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
+    }
+    else if (cp->csub == Cell::subtype::CARR)
+    {
+      if ((cp->flags & PREDEF) == 0)
+      {
+        dprintf ("cleaning CARR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
+        delete cp->arrval;
+        cp->arrval = new Array (NSYMTAB);
+      }
+      else
+        dprintf ("skipping CARR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
     }
   }
+
+  delete MY_FILENAME;
+  MY_FILENAME = tostring (0);
   dprintf ("Done symtab cleanup\n");
 }
 /// Find first filename argument
@@ -313,7 +354,6 @@ void Interpreter::initgetrec ()
     argno++;
   }
   infile = files[0].fp;    /* no filenames, so use stdin (or its redirect)*/
-  MY_FILENAME = strdup (files[0].fname);
 }
 
 /// Get next input record
@@ -348,8 +388,8 @@ int Interpreter::getrec (Cell* cell)
         argno++;
         continue;
       }
-      xfree (MY_FILENAME);
-      MY_FILENAME = strdup (file);
+      delete MY_FILENAME;
+      MY_FILENAME = tostring (file);
       dprintf ("opening file %s\n", file);
       if (*file == '-' && *(file + 1) == '\0')
         infile = stdin;
@@ -428,11 +468,11 @@ int Interpreter::readrec (Cell* cell, FILE* inf)
   * rr = 0;
   dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
   cell->sval = buf;
-  cell->tval = STR;
+  cell->flags = STR;
   if (is_number (cell->sval))
   {
     cell->fval = atof (cell->sval);
-    cell->tval |= NUM | CONVC;
+    cell->flags |= NUM | CONVC;
   }
   return c == EOF && rr == buf ? 0 : 1;
 }
@@ -483,7 +523,7 @@ void Interpreter::setclvar (const char* s)
   if (is_number (q->sval))
   {
     q->fval = atof (q->sval);
-    q->tval |= NUM;
+    q->flags |= NUM;
   }
   dprintf ("command line set %s to |%s|\n", s, p);
 }
@@ -576,11 +616,11 @@ void Interpreter::fldbld ()
 
   for (j = 1, p = &fldtab[1]; j <= lastfld; j++, p++)
   {
-    p->tval = STR;
+    p->flags = STR;
     if (is_number (p->sval))
     {
       p->fval = atof (p->sval);
-      p->tval |= (NUM | CONVC);
+      p->flags |= (NUM | CONVC);
     }
   }
   MY_NF = lastfld;
@@ -593,6 +633,45 @@ void Interpreter::fldbld ()
       dprintf ("field %d (%s): |%s|\n", j, fldtab[j].nval, fldtab[j].sval);
   }
 #endif
+}
+
+/// Create $0 from $1..$NF if necessary
+void Interpreter::recbld ()
+{
+  int i;
+  char* r;
+  const char* p;
+
+  if (donerec)
+    return;
+
+  char* buf = new char[RECSIZE];
+  size_t sz = RECSIZE;
+
+  r = buf;
+  for (i = 1; i <= MY_NF; i++)
+  {
+    p = fldtab[i].getsval ();
+    adjbuf (&buf, &sz, 2 + strlen (p) + strlen (MY_OFS) + r - buf, RECSIZE, &r);
+    while ((*r = *p++) != 0)
+      r++;
+    if (i < MY_NF)
+    {
+      for (p = MY_OFS; (*r = *p++) != 0; )
+        r++;
+    }
+  }
+  *r = '\0';
+  delete fldtab[0].sval;
+  fldtab[0].sval = buf;
+  dprintf ("in recbld $0=|%s|\n", buf);
+  donerec = 1;
+  fldtab[0].flags = STR;
+  if (is_number (fldtab[0].sval))
+  {
+    fldtab[0].flags |= NUM;
+    fldtab[0].fval = atof (fldtab[0].sval);
+  }
 }
 
 /// Build fields from reg expr in FS
@@ -615,7 +694,7 @@ int Interpreter::refldbld (const char* rec, const char* fs)
     if (i > nfields)
       growfldtab (i);
     delete fldtab[i].sval;
-    fldtab[i].tval = STR;
+    fldtab[i].flags = STR;
     fldtab[i].sval = tostring (fr);
     dprintf ("refldbld: i=%d\n", i);
     if (nematch (pfa, rec))
@@ -649,7 +728,7 @@ void Interpreter::cleanfld (int n1, int n2)
   {
     delete fldtab[i].sval;
     fldtab[i].sval = 0;
-    fldtab[i].tval = STR | NUM;
+    fldtab[i].flags = STR | NUM;
     fldtab[i].fval = 0.;
     fldtab[i].fmt = NULL;
   }
@@ -701,6 +780,17 @@ void Interpreter::growfldtab (size_t n)
   makefields ((int)nf);
 }
 
+/// Generate error message and throws an exception
+void FATAL (int err, const char* fmt, ...)
+{
+  static char errmsg[1024];
+  va_list varg;
+  va_start (varg, fmt);
+  vsprintf (errmsg, fmt, varg);
+  va_end (varg);
+  throw awk_exception (*interp, err, errmsg);
+}
+
 // compare two filenames. Windows filenames are case insensitive
 int file_cmp (const char* f1, const char* f2)
 {
@@ -710,3 +800,29 @@ int file_cmp (const char* f1, const char* f2)
   return strcmp (f1, f2);
 #endif
 }
+
+/// Generate syntax error message and throws an exception
+void SYNTAX (const char* fmt, ...)
+{
+  va_list varg;
+  static char errmsg[1024];
+  char* pb = errmsg;
+  va_start (varg, fmt);
+  pb += vsprintf (pb, fmt, varg);
+  va_end (varg);
+  pb += sprintf (pb, " at source line %d", lineno);
+  if (curfname != NULL)
+    pb += sprintf (pb, " in function %s", curfname);
+  if (interp->status == AWKS_COMPILING && cursource () != NULL)
+    pb += sprintf (pb, " source file %s", cursource ());
+  throw awk_exception (*interp, AWK_ERR_SYNTAX, errmsg);
+}
+
+awk_exception::awk_exception (Interpreter& i, int code, const char* msg)
+  : interp{ i }
+  , err (code)
+{
+  interp.err = code;
+  strncpy (interp.errmsg, msg, sizeof(interp.errmsg)-1);
+}
+

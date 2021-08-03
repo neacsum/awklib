@@ -44,6 +44,7 @@ static const char  *version =
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <mutex>
 #include "awk.h"
 #include "ytab.h"
 #include <awklib/awk.h>
@@ -52,12 +53,10 @@ static const char  *version =
 #define  MAX_PFILE  20  /* max number of -f's */
 
 extern  FILE* yyin;     /* lex input file */
-extern char *curfname;  ///<current function name
 
 Interpreter *interp;      ///< current interpreter status block
+std::mutex awk_in_use;
 
-char errmsg[1024];      ///< last error message
-extern  int errorflag;  ///< non-zero if any syntax errors; set by yyerror
 extern Node *winner;    // parser stores root of program tree here
 
 #ifndef NDEBUG
@@ -68,7 +67,6 @@ const char *tokname (int tok);
 extern int yydebug;
 #endif
 #endif
-
 
 /*!
   Initialize interpreter and optionally sets user defined variables
@@ -81,6 +79,7 @@ AWKINTERP* awk_init (const char **vars)
 {
   signal (SIGFPE, fpecatch);
   try {
+    std::lock_guard<std::mutex> l (awk_in_use);
     interp = new Interpreter ();
 
     //add all user set variables
@@ -92,7 +91,7 @@ AWKINTERP* awk_init (const char **vars)
         FATAL (AWK_ERR_INVVAR, "invalid variable argument: %s", vars);
     }
   }
-  catch (int)
+  catch (awk_exception&)
   {
     delete interp;
     interp = 0;
@@ -105,6 +104,7 @@ AWKINTERP* awk_init (const char **vars)
 */
 int awk_setprog (AWKINTERP *pinter, const char *prog)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
@@ -112,18 +112,19 @@ int awk_setprog (AWKINTERP *pinter, const char *prog)
     if (interp->nprog)
       FATAL (AWK_ERR_PROGFILE, "Program file already set");
 
-    xfree (interp->lexprog);
-    interp->lexptr = interp->lexprog = strdup (prog);
+    delete interp->lexprog;
+    interp->lexptr = interp->lexprog = tostring (prog);
     return 1;
   }
-  catch (int) {
-    return 0;
+  catch (awk_exception& x) {
+    return x.err;
   }
   return 1;
 }
 
 int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
@@ -141,7 +142,7 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
       interp->progs = new char*;
     interp->progs[interp->nprog++] = tostring (progfile);
   }
-  catch (int) {
+  catch (awk_exception&) {
     return 0;
   }
   return 1;
@@ -152,6 +153,7 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 */
 int awk_addarg (AWKINTERP *pinter, const char *arg)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   if (interp->status >= AWKS_RUN)
     return 0;
@@ -170,6 +172,7 @@ int awk_addarg (AWKINTERP *pinter, const char *arg)
 /// Compile an AWK program
 int awk_compile (AWKINTERP *pinter)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
@@ -186,53 +189,53 @@ int awk_compile (AWKINTERP *pinter)
     interp->status = AWKS_COMPILING;
     yyparse ();
     setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
-    if (errorflag == 0)
-    {
-      interp->status = AWKS_COMPILED;
+    if (interp->err != 0)
+      return 0;
 #ifndef NDEBUG
-      if (dbg > 2)
-        print_tree (winner, 1);
+    if (dbg > 2)
+      print_tree (winner, 1);
 #endif
-      interp->prog_root = winner;
-    }
-
   }
-  catch (int) {
-    freenode (interp->prog_root);
+  catch (awk_exception&) {
     interp->status = AWKS_DONE;
     return 0;
   }
+  interp->status = AWKS_COMPILED;
+  interp->prog_root = winner;
   return 1;
 }
 
 /// Execute an AWK program
 int awk_exec (AWKINTERP *pinter)
 {
-  interp = (Interpreter*)pinter;
-  if (interp->status != AWKS_COMPILED)
+  Interpreter* ii = (Interpreter*)pinter;
+  if (ii->status != AWKS_COMPILED)
   {
-    strcpy (errmsg, "awk_exec: no compiled program");
-    errorflag = AWK_ERR_NOPROG;
+    strcpy (ii->errmsg, "awk_exec: no compiled program");
+    ii->err = AWK_ERR_NOPROG;
     return 0;
   }
 
+  std::lock_guard<std::mutex> l (awk_in_use);
+  interp = ii;
   try {
     interp->run ();
   }
-  catch (int& x) {
+  catch (awk_exception&) {
     interp->status = AWKS_DONE;
-    errorflag = x;
   }
-  return errorflag;
+  return interp->err;
 }
 
+/// Compile and execute a program
 int awk_run (AWKINTERP* pinter, const char *progfile)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   try {
     if (interp->status != AWKS_INIT)
       FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
-    interp->lexptr = interp->lexprog = strdup (progfile);
+    interp->lexptr = interp->lexprog = tostring (progfile);
     setlocale (LC_CTYPE, "");
     setlocale (LC_NUMERIC, "C"); /* for parsing cmdline & prog */
 
@@ -243,7 +246,7 @@ int awk_run (AWKINTERP* pinter, const char *progfile)
     yyparse ();
 
     setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
-    if (errorflag == 0)
+    if (interp->err == 0)
     {
 #ifndef NDEBUG
       if (dbg > 2)
@@ -253,27 +256,27 @@ int awk_run (AWKINTERP* pinter, const char *progfile)
       interp->run ();
     }
   }
-  catch (int& x)
+  catch (awk_exception&)
   {
     interp->status = AWKS_DONE;
-    errorflag = x;
   }
-  return errorflag;
+  return interp->err;
 }
 
 /// Release all resources claimed by AWK interpreter
 void awk_end (AWKINTERP *pinter)
 {
-  interp = (Interpreter*)pinter;
-  free (interp);
+  Interpreter* ii = (Interpreter*)pinter;
+  delete ii;
 }
 
 /// Return last error code and optionally the last error message
-int awk_err (const char **msg)
+int awk_err (AWKINTERP* pinter, const char **msg)
 {
+  Interpreter* ii = (Interpreter*)pinter;
   if (msg)
-    *msg = errorflag ? strdup (errmsg) : strdup ("OK");
-  return errorflag;
+    *msg = strdup (ii->errmsg);
+  return ii->err;
 }
 
 /// Set a new debug level. Return previous debug level
@@ -323,15 +326,15 @@ int awk_redirect (AWKINTERP* pinter, int n, const char* fname)
   if (n < 0 || n >2)
     return 0; //invalid slot number
 
-  Interpreter* interp = (Interpreter*)pinter;
-  interp->std_redirect (n, fname);
+  Interpreter* ii = (Interpreter*)pinter;
+  ii->std_redirect (n, fname);
   return 1;
 }
 
 /// Retrieve a variable from symbol table
 int awk_getvar (AWKINTERP * pinter, awksymb * var)
 {
-  interp = (Interpreter*)pinter;
+  Interpreter *interp = (Interpreter*)pinter;
   var->flags = 0;
   try {
     Cell *cp = NULL;
@@ -347,47 +350,47 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
       cp = interp->symtab->lookup (var->name);
     if (!cp)
     {
-      sprintf (errmsg, "awk_getvar: not found %s", var->name);
-      return (errorflag = AWK_ERR_NOVAR); //not found
+      sprintf (interp->errmsg, "awk_getvar: not found %s", var->name);
+      return (interp->err = AWK_ERR_NOVAR); //not found
     }
 
-    if (cp->tval & (FCN | EXTFUN))
+    if (cp->isfcn())
     {
-      sprintf (errmsg, "awk_getvar: bad variable type %s", var->name);
-      return (errorflag = AWK_ERR_INVVAR); //invalid variable type
+      sprintf (interp->errmsg, "awk_getvar: bad variable type %s", var->name);
+      return (interp->err = AWK_ERR_INVVAR); //invalid variable type
     }
 
-    if (cp->tval & ARR)
+    if (cp->isarr())
     {
       var->flags = AWKSYMB_ARR;
       if (!var->index)
       {
-        sprintf (errmsg, "awk_getvar: %s is an array", var->name);
+        sprintf (interp->errmsg, "awk_getvar: %s is an array", var->name);
         return AWK_ERR_ARRAY;
       }
       cp = cp->arrval->lookup (var->index);
       if (!cp)
       {
-        sprintf (errmsg, "awk_getvar: not found %s[%s]", var->name, var->index);
-        return (errorflag = AWK_ERR_NOVAR); //index not found
+        sprintf (interp->errmsg, "awk_getvar: not found %s[%s]", var->name, var->index);
+        return (interp->err = AWK_ERR_NOVAR); //index not found
       }
     }
     var->flags &= ~(AWKSYMB_NUM | AWKSYMB_STR);
     var->fval = 0.;
     var->sval = NULL;
-    if (cp->tval & NUM)
+    if (cp->flags & NUM)
     {
       var->flags |= AWKSYMB_NUM;
       var->fval = cp->fval;
     }
-    if (cp->tval & STR)
+    if (cp->flags & STR)
     {
       var->flags |= AWKSYMB_STR;
       var->sval = tostring (cp->sval);
     }
   }
-  catch (int& x) {
-    return (errorflag = x);
+  catch (awk_exception& x) {
+    return x.err;
   }
 
   return 1;
@@ -402,7 +405,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   int n;
   bool is_field = false;
 
-  interp = (Interpreter*)pinter;
+  Interpreter *interp = (Interpreter*)pinter;
   try {
     if (var->name[0] == '$' && is_number (var->name+1)
      && interp->status == AWKS_RUN)
@@ -410,40 +413,40 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
       n = (int)atof (var->name+1);
       if (n < 0 || n >= interp->nfields)
       {
-        sprintf (errmsg, "awk_setvar: invalid field %s", var->name);
-        return (errorflag = AWK_ERR_INVVAR);
+        sprintf (interp->errmsg, "awk_setvar: invalid field %s", var->name);
+        return (interp->err = AWK_ERR_INVVAR);
       }
       cp = &interp->fldtab[n];
       is_field = true;
     }
     else
       cp = interp->symtab->lookup (var->name);
-    if (!cp && !is_field)
+    if (!cp)
     {
       //new variable
       if ((var->flags & AWKSYMB_ARR) != 0 && !var->index)
       {
-        sprintf (errmsg, "awk_setvar: variable is an array %s", var->name);
-        return (errorflag = AWK_ERR_ARRAY);
+        sprintf (interp->errmsg, "awk_setvar: variable is an array %s", var->name);
+        return (interp->err = AWK_ERR_ARRAY);
       }
-      int t = (var->flags & AWKSYMB_ARR) ? ARR : (STR | NUM);
-      cp = interp->symtab->setsym (var->name, "", 0., t);
-      if (cp->tval & ARR)
-        cp->arrval = new Array (20); //arbitrary size
+      if ((var->flags & AWKSYMB_ARR) != 0)
+        cp = interp->symtab->setsym (var->name, new Array (20), 0); //arbitrary size
+      else
+        cp = interp->symtab->setsym (var->name, "", 0., (STR | NUM));
     }
-    if (cp->tval & ARR)
+    if (cp->isarr())
     {
       //array
       if (!var->index)
       {
-        sprintf (errmsg, "awk_setvar: variable is an array %s", var->name);
-        return (errorflag = AWK_ERR_ARRAY);
+        sprintf (interp->errmsg, "awk_setvar: variable is an array %s", var->name);
+        return (interp->err = AWK_ERR_ARRAY);
       }
       cp = cp->arrval->setsym (var->index, "", 0., (STR | NUM));
     }
-    if ((cp->tval & (STR | NUM)) == 0)
+    if ((cp->flags & (STR | NUM)) == 0)
     {
-      sprintf (errmsg, "awk_setvar: invalid variable type %s", var->name);
+      sprintf (interp->errmsg, "awk_setvar: invalid variable type %s", var->name);
       return AWK_ERR_INVTYPE;
     }
     if (var->flags & AWKSYMB_STR)
@@ -455,11 +458,11 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
       if (n == 0)
         interp->fldbld ();
       else
-        recbld ();
+        interp->recbld ();
     }
   }
-  catch (int& x) {
-    return (errorflag = x);
+  catch (awk_exception& x) {
+    return x.err;
   }
 
   return 1;
@@ -467,15 +470,17 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
 
 int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
 {
+  std::lock_guard<std::mutex> l (awk_in_use);
   interp = (Interpreter*)pinter;
   try {
-    Cell *cp = interp->symtab->setsym (fname, NULL, nargs, EXTFUN);
-    cp->tval = EXTFUN;
+    Cell *cp = interp->symtab->setsym (fname, NULL, nargs);
+    cp->csub = Cell::subtype::CFUNC;
+    cp->flags = EXTFUNC;
     cp->fval = nargs;
     delete cp->sval;
     cp->sval = (char *)fn;
   }
-  catch (int&) {
+  catch (awk_exception&) {
     return 0;
   }
 
@@ -562,7 +567,7 @@ void print_cell (Cell *c, int indent)
     "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE" };
 
   dprintf ("%*cCell 0x%p ", indent, ' ', c);
-  dprintf (" %s %s Flags: %s", ctype_str[(int)c->ctype], csub_str[(int)c->csub], flags2str(c->tval));
+  dprintf (" %s %s Flags: %s", ctype_str[(int)c->ctype], csub_str[(int)c->csub], flags2str(c->flags));
   dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
   if (c->nval)
     dprintf (" Name: %s", c->nval);
@@ -604,35 +609,6 @@ void print_tree (Node *n, int indent)
 
 /*======================= Error handling function ===========================*/
 
-/// Generate error message and throws an exception
-void FATAL (int err, const char *fmt, ...)
-{
-  va_list varg;
-  if (interp)
-    interp->err = err;
-  errorflag = err;
-  va_start (varg, fmt);
-  vsprintf (errmsg, fmt, varg);
-  va_end (varg);
-  throw err;
-}
-
-/// Generate syntax error message and throws an exception
-void SYNTAX (const char *fmt, ...)
-{
-  va_list varg;
-  char *pb = errmsg;
-  va_start (varg, fmt);
-  pb += vsprintf (pb, fmt, varg);
-  va_end (varg);
-  pb += sprintf (pb, " at source line %d", lineno);
-  if (curfname != NULL)
-    pb += sprintf (pb, " in function %s", curfname);
-  if (interp->status == AWKS_COMPILING && cursource () != NULL)
-    pb += sprintf (pb, " source file %s", cursource ());
-  errorflag = AWK_ERR_SYNTAX;
-  throw AWK_ERR_SYNTAX;
-}
 
 /// Called by yyparse when for syntax errors
 void yyerror (const char *s)

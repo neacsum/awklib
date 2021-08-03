@@ -5,6 +5,76 @@
 #include <sys/stat.h>
 
 using namespace std;
+
+#ifdef _WIN32
+const char* basename (const char* path)
+{
+  static char buf[FILENAME_MAX];
+  char* ptr;
+
+  strncpy (buf, path, sizeof (buf) - 1);
+  buf[sizeof (buf) - 1] = 0;
+  for (ptr = buf + strlen (buf); ptr > buf; ptr--)
+  {
+    if (*ptr == '\\' || *ptr == '/')
+      return ptr + 1;
+    if (*ptr == '.')
+      *ptr = 0;
+  }
+  return ptr;
+}
+#endif
+
+/*
+  Separate a test file in components.
+
+  Each test file contains a AWK program, an input file and an expected results file.
+  Components are separated by a line starting with '##'. This function creates
+  three files:
+   - *.awk - the program text
+   - *.in  - input data
+   - *.ref - reference output
+
+*/
+bool setup_test (const string& testfile)
+{
+  char buf[1024];
+  const char* name = basename (testfile.c_str());
+  FILE* in;
+  if (!(in = fopen (testfile.c_str(), "r")))
+    return false;
+
+  char fname[FILENAME_MAX];
+  strcpy (fname, name);
+  strcat (fname, ".awk");
+  FILE* output = fopen (fname, "w");
+  if (!output)
+    return false;
+
+  int step = 0;
+  while (fgets (buf, sizeof (buf), in))
+  {
+    if (buf[0] == '#' && buf[1] == '#')
+    {
+      fclose (output);
+      output = 0;
+      if (step > 1)
+        break;
+      strcpy (fname, name);
+      strcat (fname, step? ".ref" : ".in");
+      output = fopen (fname, "w");
+      if (!output)
+        return false;
+      ++step;
+    }
+    else
+      fputs (buf, output);
+  }
+  if (output)
+    fclose (output);
+  return (step > 1);
+}
+
 const char *dat{
   "Record 1\n"
   "Record 2\n"
@@ -21,39 +91,27 @@ const char *prog =
 
 #define REDO_TEST
 
-#if 0
-TEST (array_21)
+#define TESTNAME "18_array"
+TEST (failing)
 {
+  ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
+
   AWKINTERP* interp = awk_init (NULL);
-  CHECK (awk_addprogfile (interp, "../testdir/tests/array.awk"));
+  CHECK (awk_addprogfile (interp, TESTNAME ".awk"));
   CHECK (awk_compile (interp));
-  CHECK (awk_setinput (interp, "../testdir/tests/array.in"));
-  CHECK (awk_setoutput (interp, "array.out"));
-  CHECK (!awk_exec (interp));
-  CHECK_FILE_EQUAL ("../testdir/tests/array.ref", "array.out");
+  CHECK (awk_setinput (interp, TESTNAME ".in"));
+  CHECK (awk_setoutput (interp, TESTNAME ".out"));
+  CHECK (awk_exec (interp) >= 0);
+  CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
 #ifdef REDO_TEST
-  CHECK (!awk_exec (interp));
-  CHECK_FILE_EQUAL ("../testdir/tests/array.ref", "array.out");
+  CHECK (awk_exec (interp) >= 0);
+  CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
 #endif
   awk_end (interp);
-}
-#endif
-
-
-TEST (redir_out)
-{
-  AWKINTERP* interp = awk_init (NULL);
-  CHECK (awk_addprogfile (interp, "../testdir/tests/printnr.awk"));
-  CHECK (awk_compile (interp));
-  CHECK (awk_setinput (interp, "../testdir/tests/printnr.in"));
-  CHECK (awk_setoutput (interp, "printnr.out"));
-  CHECK (!awk_exec (interp));
-  CHECK_FILE_EQUAL ("../testdir/tests/printnr.ref", "printnr.out");
-#ifdef REDO_TEST
-  CHECK (!awk_exec (interp));
-  CHECK_FILE_EQUAL ("../testdir/tests/printnr.ref", "printnr.out");
-#endif
-  awk_end (interp);
+  remove (TESTNAME ".awk");
+  remove (TESTNAME ".in");
+  remove (TESTNAME ".ref");
+  remove (TESTNAME ".out");
 }
 
 //Test fixture
@@ -246,219 +304,159 @@ TEST_FIXTURE (fixt, do_run)
   CHECK_EQUAL ("2\n3\n", out.str ());
 }
 
+
 SUITE (one_true_awk)
 {
 
-#ifdef _MSC_VER
-  const char* basename (const char* path)
-  {
-    static char buf[FILENAME_MAX];
-    char* ptr;
+struct awk_frame {
+  awk_frame ();
+  ~awk_frame ();
+  bool setup (const string& test_name);
+  string name;
+  AWKINTERP* interp;
+};
 
-    strncpy (buf, path, sizeof (buf) - 1);
-    buf[sizeof (buf) - 1] = 0;
-    for (ptr = buf + strlen (buf); ptr > buf; ptr--)
-    {
-      if (*ptr == '\\' || *ptr == '/')
-        return ptr + 1;
-      if (*ptr == '.')
-        *ptr = 0;
-    }
-    return ptr;
-  }
-#endif
+awk_frame::awk_frame ()
+  : interp (awk_init (NULL))
+{
+}
 
+bool awk_frame::setup (const string& test_name)
+{
+  name = test_name;
+  if (!setup_test ("../testdir/tests/" + name + ".tst"))
+    return false;
+  CHECK (awk_addprogfile (interp, (name + ".awk").c_str()));
+  CHECK (awk_compile (interp));
+  CHECK (awk_addarg (interp, (name + ".in").c_str ()));
+  CHECK (awk_setoutput (interp, (name + ".out").c_str()));
+  return true;
+}
 
-#define xclose(f) { if (f) {fclose (f); f = 0;} }
-  struct awk_tester
-  {
-  public:
-    awk_tester () :
-      interp (awk_init (NULL)),
-      in (0), out (0), prog (0), ref (0)
-    {
-    }
+awk_frame::~awk_frame ()
+{
+  remove ((name + ".awk").c_str());
+  remove ((name + ".in").c_str());
+  remove ((name + ".out").c_str());
+  remove ((name + ".ref").c_str());
+  awk_end (interp);
+}
 
-    ~awk_tester ()
-    {
-      awk_end (interp);
-      xclose (tst);
-      xclose (in);
-      xclose (out);
-      xclose (prog);
-      xclose (ref);
-      cleanup ();
-    }
-
-    void setup (const char* testfname);
-    void makefiles ();
-    void cleanup ();
-
-    AWKINTERP* interp;
-    string progname, inname, refname, outname;
-    FILE* tst, * in, * out, * prog, * ref;
-  };
-
-  void awk_tester::setup (const char* testfile)
-  {
-    char testname[256];
-    ABORT (tst = fopen (testfile, "r"));
-
-    strcpy (testname, basename (testfile));
-    char* p = strchr (testname, '.');
-    if (p)
-      *p = 0;
-
-    progname = testname + string (".awk");
-    ABORT (prog = fopen (progname.c_str (), "w"));
-
-    inname = testname + string (".in");
-    ABORT (in = fopen (inname.c_str (), "w"));
-
-    refname = testname + string (".ref");
-    ABORT (ref = fopen (refname.c_str (), "w"));
-
-    outname = testname + string (".out");
-
-    makefiles ();
-    xclose (tst);
-    xclose (in);
-    xclose (prog);
-    xclose (ref);
-
-    CHECK (awk_addprogfile (interp, progname.c_str ()));
-    CHECK (awk_compile (interp));
-    CHECK (awk_addarg (interp, inname.c_str ()));
-    CHECK (awk_setoutput (interp, outname.c_str ()));
-    CHECK (awk_exec (interp) >= 0);
-  }
-
-  void awk_tester::makefiles ()
-  {
-    int step = 0;
-    char line[1024];
-    FILE* output = prog;
-    while (fgets (line, sizeof (line), tst))
-    {
-      if (line[0] == '#' && line[1] == '#')
-      {
-        switch (step++)
-        {
-        case 0: // end of program; beginning of input data
-          output = in; break;
-
-        case 1: // end of input data; beginning of reference output
-          output = ref; break;
-
-        case 2: //The End
-          return;
-
-        default:
-          CHECK_EX (1, "Too many sections in test file");
-          return;
-        }
-      }
-      else
-        fputs (line, output);
-    }
-    return;
-  }
-
-  void awk_tester::cleanup ()
-  {
-    remove (progname.c_str ());
-    remove (inname.c_str ());
-    remove (refname.c_str ());
-    remove (outname.c_str ());
-  }
-
-#define AWK_TEST(N, A) \
-  TEST_FIXTURE (awk_tester, N)\
+#define AWK_TEST(A) \
+  TEST_FIXTURE (awk_frame, _##A)\
   {\
-    setup ("../testdir/tests/" #A ".tst");\
+    ABORT (setup (#A));\
+    CHECK (awk_exec (interp) >= 0);\
     CHECK_FILE_EQUAL (#A ".out", #A ".ref");\
     CHECK (awk_exec (interp) >= 0);\
     CHECK_FILE_EQUAL (#A ".out", #A ".ref"); \
   }
 
-  AWK_TEST (T1, 1_printall);
-  AWK_TEST (T2, 2_printnr);
-  AWK_TEST (T3, 3_changefs);
-  AWK_TEST (T4, 4_changeofs);
-  AWK_TEST (T5, 5_concat);
-  AWK_TEST (T6, 6_fieldassign);
-  AWK_TEST (T7, 7_select);
-  AWK_TEST (T8, 8_while);
-  AWK_TEST (T9, 9_patmatch);
-  AWK_TEST (T10, 10_field_expression);
-  AWK_TEST (T11, 11_field_change);
-  AWK_TEST (T12, 12_regexp_pattern);
-  AWK_TEST (T13, 13_nf);
-  AWK_TEST (T14, 14_forloop);
-  AWK_TEST (T15, 15_diveq);
-  AWK_TEST (T16, 16_field_change1);
-  AWK_TEST (T17, 17_field_change2);
-  AWK_TEST (T18, 18_array);
-  AWK_TEST (T19, 19_array);
-  AWK_TEST (T20, 20_array);
-  AWK_TEST (T21, 21_array);
-  AWK_TEST (T22, 22_arith);
-  AWK_TEST (T23, 23_arith);
-  AWK_TEST (T24, 24_regexp_pattern);
-  AWK_TEST (T25, 25_assert);
-  AWK_TEST (T26, 25_rgexp_pattern);
-  AWK_TEST (T27, 26_avg);
-  AWK_TEST (T28, 27_field_change);
-  AWK_TEST (T29, 28_filename);
-  AWK_TEST (T30, 30_beginnext);
-  AWK_TEST (T31, 31_break);
-  AWK_TEST (T32, 32_break);
-  AWK_TEST (T33, 33_break);
-  AWK_TEST (T34, 34_missing_field);
-  AWK_TEST (T35, 35_builtins);
-  AWK_TEST (T36, 36_cat);
-  AWK_TEST (T37, 37_cat);
-  AWK_TEST (T38, 38_cat);
-  AWK_TEST (T39, 39_cmp);
-  AWK_TEST (T40, 40_coerce);
-  AWK_TEST (T41, 41_coerce);
-  AWK_TEST (T42, 42_comment);
-  AWK_TEST (T43, 43_comment);
-  AWK_TEST (T44, 44_concat);
-  AWK_TEST (T45, 45_cond);
-  AWK_TEST (T46, 46_contin);
-  AWK_TEST (T47, 47_count);
-  AWK_TEST (T48, 48_crlf);
-  AWK_TEST (T49, 49_acum);
-  AWK_TEST (T63, 63_fun);
-  AWK_TEST (T64, 64_funarg);
-
-  TEST_FIXTURE (awk_tester, T65)
+  AWK_TEST (1_printall);
+  AWK_TEST (2_printnr);
+  AWK_TEST (3_changefs);
+  AWK_TEST (4_changeofs);
+  AWK_TEST (5_concat);
+  AWK_TEST (6_fieldassign);
+  AWK_TEST (7_select);
+  AWK_TEST (8_while);
+  AWK_TEST (9_patmatch);
+  AWK_TEST (10_field_expression);
+  AWK_TEST (11_field_change);
+  AWK_TEST (12_regexp_pattern);
+  AWK_TEST (13_nf);
+  AWK_TEST (14_forloop);
+  AWK_TEST (15_diveq);
+  AWK_TEST (16_field_change1);
+  AWK_TEST (17_field_change2);
+  AWK_TEST (18_array);
+  AWK_TEST (19_array);
+  AWK_TEST (20_array);
+  AWK_TEST (21_array);
+  AWK_TEST (22_arith);
+  AWK_TEST (23_arith);
+  AWK_TEST (24_regexp_pattern);
+  AWK_TEST (25_assert);
+  AWK_TEST (25_rgexp_pattern);
+  AWK_TEST (26_avg);
+  AWK_TEST (27_field_change);
+  AWK_TEST (28_filename);
+  AWK_TEST (29_beginexit);
+  AWK_TEST (30_beginnext);
+  AWK_TEST (31_break);
+  AWK_TEST (32_break);
+  AWK_TEST (33_break);
+  AWK_TEST (34_missing_field);
+  AWK_TEST (35_builtins);
+  AWK_TEST (36_cat);
+  AWK_TEST (37_cat);
+  AWK_TEST (38_cat);
+  AWK_TEST (39_cmp);
+  AWK_TEST (40_coerce);
+  AWK_TEST (41_coerce);
+  AWK_TEST (42_comment);
+  AWK_TEST (43_comment);
+  AWK_TEST (44_concat);
+  AWK_TEST (45_cond);
+  AWK_TEST (46_contin);
+  AWK_TEST (47_count);
+  AWK_TEST (48_crlf);
+  AWK_TEST (49_acum);
+  AWK_TEST (50_fsofs);
+  AWK_TEST (51_delete);
+  AWK_TEST (52_delete);
+  AWK_TEST (53_delete);
+  AWK_TEST (54_delete);
+  AWK_TEST (55_do);
+  AWK_TEST (56_or_expr);
+  AWK_TEST (57_else);
+  AWK_TEST (58_exit);
+  AWK_TEST (59_exit);
+  AWK_TEST (63_fun);
+  AWK_TEST (64_funarg);
+  TEST_FIXTURE (awk_frame, _65_funackermann)
   {
-    int lvl = awk_setdebug (0);
-    UnitTest::Timer t;
-    t.Start ();
-    setup ("../testdir/tests/65_funackermann.tst");
-    int ms = t.GetTimeInMs ();
-    printf ("Ackermann test done in %d msec\n", ms);
+    ABORT (setup ("65_funackermann"));
+    int d = awk_setdebug (0);
+    CHECK (awk_exec (interp) >= 0);
     CHECK_FILE_EQUAL ("65_funackermann.out", "65_funackermann.ref");
-    awk_setdebug (lvl);
-  }
-}
-
-SUITE (Iter2)
-{
-  TEST (Run2)
-  {
-    AWKINTERP* interp = awk_init (NULL);
-    awk_setprog (interp, "BEGIN {print \"Program running\"}");
-    awk_compile (interp);
-    int ret = awk_exec (interp);
-    CHECK_EQUAL (0, ret);
-    ret = awk_exec (interp);
-    CHECK_EQUAL (0, ret);
-    awk_end (interp);
-  }
+    CHECK (awk_exec (interp) >= 0);
+    CHECK_FILE_EQUAL ("65_funackermann.out", "65_funackermann.ref");
+    awk_setdebug (d);
+  };
+  AWK_TEST (66_expconv);
+  AWK_TEST (67_for);
+  AWK_TEST (68_for);
+  AWK_TEST (69_for);
+  AWK_TEST (70_for);
+  AWK_TEST (71_sqrt);
+  AWK_TEST (72_expr);
+  AWK_TEST (73_match);
+  AWK_TEST (74_func);
+  AWK_TEST (75_func);
+  AWK_TEST (76_func);
+  AWK_TEST (77_func);
+  AWK_TEST (78_func);
+  AWK_TEST (80_format4);
+  AWK_TEST (81_func);
+  AWK_TEST (82_func);
+  AWK_TEST (83_func);
+  AWK_TEST (84_func);
+  AWK_TEST (85_func);
+  AWK_TEST (86_factorial);
+  AWK_TEST (87_fibbo);
+  AWK_TEST (88_multidim);
+  AWK_TEST (89_func);
+  AWK_TEST (90_func);
+  AWK_TEST (91_func);
+  AWK_TEST (92_func);
+  AWK_TEST (93_vf);
+  AWK_TEST (94_vf);
+  AWK_TEST (95_vf);
+  AWK_TEST (96_vf);
+  AWK_TEST (97_set);
+  AWK_TEST (98_set);
+  AWK_TEST (99_set);
 }
 
 int main (int argc, char **argv)
@@ -466,26 +464,7 @@ int main (int argc, char **argv)
   int ret;
   awk_setdebug (2);
 
-//  ret = UnitTest::RunSuite ("Iter2");
   ret = UnitTest::RunAllTests ();
-
-#if 0
-  AWKINTERP *interp = awk_init (NULL);
-  if (awk_setprog (interp, prog)
-   && awk_compile (interp))
-  {
-    awk_infunc (interp, [] ()->int {return instr.get (); });
-    awk_outfunc (interp, [](const char *buf, size_t sz)->int {out.write (buf, sz); return sz; });
-//    awk_addarg (interp, "test.data");
-    ret = awk_exec (interp);
-  }
-  printf ("Output:\n");
-  puts (out.str ().c_str ());
-  awk_end (interp);
-
-  UnitTest::GetDefaultReporter ().SetTrace (true);
-  ret = UnitTest::RunAllTests ();
-#endif
 
   return ret;
 }

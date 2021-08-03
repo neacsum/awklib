@@ -68,7 +68,6 @@ void  funnyvar (Cell *, const char *);
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
 
-void  recbld (void);
 void  yyerror (const char *);
 void  fpecatch (int);
 int   input (void);
@@ -124,8 +123,8 @@ Cell* execute (Node* u);
 FILE* popen (const char *, const char *);
 int   pclose (FILE *);
 
-void  SYNTAX (const char *, ...);
-void  FATAL (int err, const char *, ...);
+void  SYNTAX (const char*, ...);
+void  FATAL (int err, const char*, ...);
 
 const char *flags2str (int flags);
 const char *quote (const char *in);

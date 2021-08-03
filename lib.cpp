@@ -32,8 +32,6 @@ THIS SOFTWARE.
 #include "ytab.h"
 #include <awklib/err.h>
 
-int  errorflag = 0;
-
 
 static int  refldbld (const char *, const char *);
 
@@ -81,46 +79,6 @@ const char *quote (const char* in)
   return buf;
 }
 
-
-
-/// Create $0 from $1..$NF if necessary
-void recbld ()
-{
-  int i;
-  char *r;
-  const char *p;
-
-  if (interp->donerec)
-    return;
-
-  char *buf = (char *)malloc (RECSIZE);
-  size_t sz = RECSIZE;
-
-  r = buf;
-  for (i = 1; i <= NF; i++)
-  {
-    p = interp->fldtab[i].getsval ();
-    adjbuf (&buf, &sz, 2 + strlen (p) + strlen (OFS) + r - buf, RECSIZE, &r);
-    while ((*r = *p++) != 0)
-      r++;
-    if (i < NF)
-    {
-      for (p = OFS; (*r = *p++) != 0; )
-        r++;
-    }
-  }
-  *r = '\0';
-  delete interp->fldtab[0].sval;
-  interp->fldtab[0].sval = buf;
-  dprintf ("in recbld $0=|%s|\n", buf);
-  interp->donerec = 1;
-  interp->fldtab[0].tval = STR;
-  if (is_number (interp->fldtab[0].sval))
-  {
-    interp->fldtab[0].tval |= NUM;
-    interp->fldtab[0].fval = atof (interp->fldtab[0].sval);
-  }
-}
 
 double errcheck (double x, const char *s)
 {

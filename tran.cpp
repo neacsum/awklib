@@ -53,10 +53,10 @@ void funnyvar (Cell *vp, const char *rw)
 {
   if (vp->isarr ())
     FATAL (AWK_ERR_ARG, "can't %s %s; it's an array name.", rw, vp->nval);
-  if (vp->tval & FCN)
+  if (vp->isfcn())
     FATAL (AWK_ERR_ARG, "can't %s %s; it's a function.", rw, vp->nval);
   WARNING ("funny variable %s %p: n=%s s=\"%s\" f=%g t=0x%x",
-    rw, vp, vp->nval, vp->sval, vp->fval, vp->tval);
+    rw, vp, vp->nval, vp->sval, vp->fval, vp->flags);
 }
 
 /// Make a copy of string s
@@ -133,9 +133,8 @@ const char *flags2str (int flags)
   } flagtab[] = {
     { "NUM", NUM },
     { "STR", STR },
-    { "ARR", ARR },
-    { "FCN", FCN },
     { "CONVC", CONVC },
+    { "PREDEF", PREDEF},
     { NULL, 0 }
   };
   static char buf[100];

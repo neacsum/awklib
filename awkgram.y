@@ -102,7 +102,7 @@ size_t  lexbuf_sz;      /* size of lex buffer */
 
 program:
       pas
-        { if (errorflag==0)
+        { if (interp->err==0)
             winner = (Node *)stat3(PROGRAM, program, beginloc, $1, endloc);
           yyend (); }
     | error
@@ -362,7 +362,7 @@ stmt:
           $$ = stat1(BREAK, jump, NIL); }
     | CONTINUE st
         {  if (!inloop)
-            SYNTAX("continue illegal outside of loops");
+             SYNTAX("continue illegal outside of loops");
            $$ = stat1(CONTINUE, jump, NIL); }
     | do {inloop++;} stmt {--inloop;} WHILE '(' pattern ')' st
         { $$ = stat2(DO, dostat, $3, notnull($7)); }
@@ -434,9 +434,9 @@ term:
     | BLTIN
         { $$ = op2(BLTIN, bltin, itonp($1), rectonode()); }
     | CALL '(' ')'
-        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CVAR), NIL); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CFUNC), NIL); }
     | CALL '(' patlist ')'
-        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CVAR), $3); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CFUNC), $3); }
     | CLOSE term
         { $$ = op1(CLOSE, closefile, $2); }
     | DECR var
@@ -542,7 +542,7 @@ void setfname(Cell *p)
 {
   if (p->isarr())
     SYNTAX("%s is an array, not a function", p->nval);
-  else if (p->isfcn())
+  else if (p->isfcn() && p->sval)
     SYNTAX("you can't define function %s more than once", p->nval);
   curfname = p->nval;
 }

@@ -249,7 +249,7 @@ Redirect interpreter output to a file.
 ````
 
 ### awk_redirect
-Redirect interpreter one of the standard files (stdin, stdout or stderr) to a file.
+Redirect one of the interpreters' standard files (stdin, stdout or stderr) to a file.
 
 #### Prototype:
 `int awk_redirect (AWKINTERP* pi, int n, const char *fname);`

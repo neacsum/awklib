@@ -244,7 +244,7 @@ Node *makearr (Node *p)
     {
       delete cp->sval;
       cp->arrval = new Array (NSYMTAB);
-      cp->tval = ARR;
+      cp->csub = Cell::subtype::CARR;
     }
   }
   return p;
@@ -269,7 +269,7 @@ Node *linkum (Node *a, Node *b)
 {
   Node *c;
 
-  if (errorflag)  /* don't link things that are wrong */
+  if (interp->err)  /* don't link things that are wrong */
     return a;
   if (a == NULL)
     return b;
@@ -297,7 +297,7 @@ void defn (Cell *v, Node *vl, Node *st)  /* turn on FCN bit in definition, */
     return;
   }
 
-  v->tval = FCN;
+  v->csub = Cell::subtype::CFUNC;
   v->sval = (char *)st;
   n = 0;  /* count arguments */
   for (p = vl; p; p = p->nnext)

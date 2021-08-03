@@ -14,7 +14,7 @@ static int  hash (const char*, int);
 /// Make a new symbol table
 Array::Array (int n)
   : nelem (0)
-  , size (n)
+  , sz (n)
   , tab{ (Cell**)calloc (n, sizeof (Cell*)) }
 {
   if (tab == NULL)
@@ -27,26 +27,10 @@ Array::~Array ()
   Cell* cp, * temp;
   int i;
 
-  for (i = 0; i < size; i++)
+  for (i = 0; i < sz; i++)
   {
     for (cp = tab[i]; cp != NULL; cp = temp)
     {
-      dprintf ("freeing %s...", cp->nval);
-      if (cp->isarr ())
-      {
-        dprintf ("...cell is an array\n");
-        delete cp->arrval;
-      }
-      else if (cp->tval & (FCN | EXTFUN))
-      {
-        dprintf ("... skipping function\n");
-      }
-      else
-      {
-        dprintf (" (value=\"%s\")\n", quote (cp->sval));
-        delete cp->sval;
-      }
-      cp->sval = 0;
       temp = cp->cnext;  /* avoids freeing then using */
       delete cp;
       nelem--;
@@ -58,34 +42,65 @@ Array::~Array ()
   free (tab);
 }
 
-Cell* Array::setsym (const char* n, const char* s, double f, unsigned int t)
+Cell* Array::setsym (const char* n, const char* s, double f, unsigned int t, Cell::subtype sub)
+{
+  Cell* p;
+  assert (n != NULL);
+  if ((p = lookup (n)) == NULL)
+  {
+    p = insert_sym (n);
+    p->fval = f;
+    p->flags = t;
+    p->sval = s ? tostring (s) : 0;
+#ifndef  NDEBUG
+    dprintf ("setsym added n=%s t=%s",p->nval , flags2str (p->flags));
+    if ((p->flags & NUM) != 0)
+      dprintf (" f=%g", p->fval);
+    if ((p->flags & STR) != 0)
+      dprintf (" s=<%s>", quote (p->sval));
+    dprintf ("\n");
+#endif
+  }
+  else
+    dprintf ("setsym found n=%s t=%s\n", p->nval, flags2str (p->flags));
+  return p;
+}
+
+Cell* Array::setsym (const char* n, Array* arry, unsigned int t)
+{
+  Cell* p;
+  if (n != NULL && (p = lookup (n)) != NULL)
+    dprintf ("setsym found %s", n);
+  else
+  {
+    p = insert_sym (n);
+    p->csub = Cell::subtype::CARR;
+    p->arrval = arry;
+    p->flags = t;
+  }
+  return p;
+}
+
+Cell* Array::insert_sym (const char* n)
 {
   int h;
-  Cell* p;
 
-  if (n != NULL && (p = lookup (n)) != NULL)
-  {
-    dprintf ("setsym found n=%s s=<%s> f=%g t=%s\n",
-      NN (p->nval), quote (p->sval), p->fval, flags2str (p->tval));
-    return p;
-  }
-  p = new Cell (Cell::type::OCELL, Cell::subtype::CNONE, n, s ? tostring (s) : 0, f, t);
+  dprintf ("Inserting symbol %s\n");
+  Cell *p = new Cell (Cell::type::OCELL, Cell::subtype::CNONE, n, 0, 0, 0);
 
   nelem++;
-  if (nelem > FULLTAB * size)
+  if (nelem > FULLTAB * sz)
     rehash ();
-  h = hash (n, size);
+  h = hash (n, sz);
   p->cnext = tab[h];
   tab[h] = p;
-  dprintf ("setsym set n=%s s=<%s> f=%g t=%s\n",
-    p->nval, quote (p->sval), p->fval, flags2str (p->tval));
   return p;
 }
 
 /// Unchain an element from an array
 Cell* Array::removesym (const char* n)
 {
-  int h = hash (n, size);
+  int h = hash (n, sz);
   Cell* p, * prev = NULL;
   for (p = tab[h]; p != NULL; prev = p, p = p->cnext)
   {
@@ -95,11 +110,44 @@ Cell* Array::removesym (const char* n)
         tab[h] = p->cnext;
       else      /* middle somewhere */
         prev->cnext = p->cnext;
-      nelem--;
+      --nelem;
       return p;
     }
   }
   return 0;
+}
+
+/// Delete an element pointed by an iterator
+void Array::deletecell (Iterator& p)
+{
+  if (p.owner != this || p.ipos >= sz)
+    throw awk_exception (*interp, AWK_ERR_OTHER, "Invalid iterator in delete_cell");
+
+  Cell *cp = tab[p.ipos];
+  Cell* prev = 0;
+  while (cp && cp != p.ptr)
+  {
+    prev = cp;
+    cp = cp->cnext;
+  }
+  if (!cp)
+    throw awk_exception (*interp, AWK_ERR_OTHER, "Invalid iterator in delete_cell");
+
+  if (prev)
+    prev->cnext = cp->cnext;
+  else
+    tab[p.ipos] = cp->cnext;
+
+  //advance iterator to next valid position
+  p.ptr = cp->cnext;
+  while (p.ptr == 0 && p.ipos < sz)
+  {
+    p.ipos++;
+    p.ptr = tab[p.ipos];
+  }
+
+  delete cp;
+  --nelem;
 }
 
 /// Form hash value for string s
@@ -118,11 +166,11 @@ void Array::rehash ()
   int i, nh, nsz;
   Cell* cp, * op, ** np;
 
-  nsz = GROWTAB * size;
+  nsz = GROWTAB * sz;
   np = (Cell**)calloc (nsz, sizeof (Cell*));
   if (np == NULL)    /* can't do it, but can keep running. */
     return;    /* someone else will run out later. */
-  for (i = 0; i < size; i++)
+  for (i = 0; i < sz; i++)
   {
     for (cp = tab[i]; cp; cp = op)
     {
@@ -134,7 +182,7 @@ void Array::rehash ()
   }
   free (tab);
   tab = np;
-  size = nsz;
+  sz = nsz;
 }
 
 /// Look for s in tp
@@ -143,9 +191,65 @@ Cell* Array::lookup (const char* s)
   Cell* p;
   int h;
 
-  h = hash (s, size);
+  h = hash (s, sz);
   for (p = tab[h]; p != NULL; p = p->cnext)
     if (strcmp (s, p->nval) == 0)
       return p;   /* found it */
   return NULL;    /* not found */
 }
+
+Array::Iterator Array::begin () const
+{
+  Iterator it(this);
+  while (it.ipos < sz && tab[it.ipos] == 0)
+    it.ipos++;
+  if (it.ipos < sz)
+    it.ptr = tab[it.ipos];
+  return it;
+}
+
+Array::Iterator Array::end () const
+{
+  Iterator it (this);
+  it.ipos = sz;
+  return it;
+}
+
+
+Array::Iterator::Iterator (const Array* a)
+  : owner{a}
+  , ipos{ 0 }
+  , ptr{ 0 }
+{
+}
+
+Array::Iterator& Array::Iterator::operator++ (int)
+{
+  if (ptr)
+    ptr = ptr->cnext;
+  if (!ptr)
+  {
+    while (++ipos < owner->sz && owner->tab[ipos] == 0)
+      ;
+    if (ipos < owner->sz)
+      ptr = owner->tab[ipos];
+    else
+      ptr = 0;
+  }
+  return *this;
+}
+
+Cell* Array::Iterator::operator* ()
+{
+  if (ptr)
+    return ptr;
+
+  FATAL (AWK_ERR_OTHER, "Dereferencing invalid array iterator");
+  return 0;
+}
+
+bool Array::Iterator::operator==(const Iterator& other) const
+{
+  return (owner == other.owner) && (ipos == other.ipos) && (ptr == other.ptr);
+}
+

@@ -1,9 +1,7 @@
-# some question of what FILENAME ought to be before execution.
-# current belief:  "-", or name of first file argument.
-# this may not be sensible.
-
-# Mircea - current observed behaviour: FILENAME is empty.
-# Seems a sesnsible behaviour to me.
+# Per GAWK manual:
+# Inside a BEGIN rule, the value of FILENAME is "", because there are no input
+# files being processed yet.
+# https://www.gnu.org/software/gawk/manual/gawk.html#Auto_002dset
 
 BEGIN { print FILENAME }
 END { print NR }

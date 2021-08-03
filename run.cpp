@@ -116,7 +116,7 @@ Cell *execute (Node *u)
       if (x->isfld () && !interp->donefld)
         interp->fldbld ();
       else if (x->isrec () && !interp->donerec)
-        recbld ();
+        interp->recbld ();
 
       return x;
     }
@@ -127,7 +127,7 @@ Cell *execute (Node *u)
     if (x->isfld () && !interp->donefld)
       interp->fldbld ();
     else if (x->isrec () && !interp->donerec)
-      recbld ();
+      interp->recbld ();
     if (a->ntype == NEXPR)
       return x;
     if (x->isjump ())
@@ -209,7 +209,7 @@ Cell *call (Node **a, int n)
   {  /* get call args */
     y = execute (x);
     dprintf ("args[%d]: %s %f <%s>, t=%s\n",
-      i, NN (y->nval), y->fval, y->isarr () ? "(array)" : NN (y->sval), flags2str (y->tval));
+      i, NN (y->nval), y->fval, y->isarr () ? "(array)" : NN (y->sval), flags2str (y->flags));
     if (y->isfcn ())
       FATAL (AWK_ERR_RUNTIME, "can't use function %s as argument in %s", y->nval, frm.fcn->nval);
     if (i < ndef)  // used arguments are stored in args array the rest are just
@@ -222,21 +222,21 @@ Cell *call (Node **a, int n)
         frm.args[i] = gettemp ();
         frm.args[i]->csub = Cell::subtype::CARG;
         frm.args[i]->nval = y->nval?strdup (y->nval) : 0;
-        switch (y->tval & (NUM | STR))
+        switch (y->flags & (NUM | STR))
         {
         case STR:
           dprintf ("STR arg\n");
           frm.args[i]->sval = tostring (y->sval);
-          frm.args[i]->tval = STR;
+          frm.args[i]->flags = STR;
           break;
         case NUM:
           frm.args[i]->fval = y->fval;
-          frm.args[i]->tval = NUM;
+          frm.args[i]->flags = NUM;
           break;
         case (NUM|STR):
           frm.args[i]->sval = tostring (y->sval);
           frm.args[i]->fval = y->fval;
-          frm.args[i]->tval = NUM | STR;
+          frm.args[i]->flags = NUM | STR;
           break;
         case 0:
           frm.args[i]->sval = tostring ("");
@@ -264,15 +264,13 @@ Cell *call (Node **a, int n)
   interp->fn = frm;
 
   dprintf ("start exec of %s\n", frm.fcn->nval);
-  if (frm.fcn->tval & FCN)
-    y = execute ((Node *)(frm.fcn->sval));  /* execute body */
-  else
+  if (frm.fcn->flags & EXTFUNC)
   {
     //set args for external function
     awksymb *extargs = (awksymb *)calloc (ndef, sizeof (awksymb));
     for (i = 0; i < ndef; i++)
     {
-      if (frm.args[i]->tval & ARR)
+      if (frm.args[i]->isarr())
       {
         extargs[i].flags = AWKSYMB_ARR;
         extargs[i].name = frm.args[i]->nval;
@@ -295,20 +293,22 @@ Cell *call (Node **a, int n)
     if (extret.flags & AWKSYMB_NUM)
       frm.ret->setfval (extret.fval);
   }
+  else
+    y = execute ((Node*)(frm.fcn->sval));  /* execute body */
   dprintf ("finished exec of %s\n", frm.fcn->nval);
   interp->fn = prev;    //restore previous function frame
   for (i = 0; i < ndef; i++)
   {
     Cell* t = frm.args[i];
-    if (t->tval & ARR)
+    if (t->isarr())
     {
       //array coming out of the function
-      if (callpar[i] && (callpar[i]->tval & ARR) == 0)
+      if (callpar[i] && !callpar[i]->isarr())
       {
         //scalar coming in
         delete callpar[i]->sval;
-        callpar[i]->sval = t->sval;
-        callpar[i]->tval = ARR;
+        callpar[i]->csub = Cell::subtype::CARR;
+        callpar[i]->arrval = t->arrval;
         continue;
       }
     }
@@ -324,13 +324,13 @@ Cell *call (Node **a, int n)
   if (y->isexit () || y->isnext ())
     return y;
 
-  if ((frm.ret->tval & (NUM | STR)) == 0)
+  if ((frm.ret->flags & (NUM | STR)) == 0)
   {
     //no return statement
-    frm.ret->tval = NUM | STR;
+    frm.ret->flags = NUM | STR;
   }
   dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval, frm.ret->getfval (),
-    frm.ret->getsval (), flags2str (frm.ret->tval));
+    frm.ret->getsval (), flags2str (frm.ret->flags));
   return frm.ret;
 }
 
@@ -356,7 +356,7 @@ Cell *jump (Node **a, int n)
     if (a[0] != NULL)
     {
       y = execute (a[0]);
-      errorflag = (int)y->getfval ();
+      interp->err = (int)y->getfval ();
       tempfree (y);
     }
     return jexit;
@@ -366,19 +366,19 @@ Cell *jump (Node **a, int n)
     {
       Cell *pr = interp->fn.ret;
       y = execute (a[0]);
-      if ((y->tval & (NUM | STR)) == 0)
+      if ((y->flags & (NUM | STR)) == 0)
         funnyvar (y, "return");
 
-      pr->tval = 0;
-      if (y->tval & NUM)
+      pr->flags = 0;
+      if (y->flags & NUM)
       {
         pr->fval = y->getfval ();
-        pr->tval |= NUM;
+        pr->flags |= NUM;
       }
-      if (y->tval & STR)
+      if (y->flags & STR)
       {
         pr->setsval (y->getsval ());
-        pr->tval |= STR;
+        pr->flags |= STR;
       }
       tempfree (y);
     }
@@ -434,9 +434,9 @@ Cell *awkgetline (Node **a, int)
   if (c && is_number (r->sval))
   {
     r->fval = atof (r->sval);
-    r->tval |= NUM;
+    r->flags |= NUM;
   }
-  if (x->isrec())
+  if (r->isrec())
   {
     interp->donerec = true;
     interp->fldbld ();
@@ -481,12 +481,11 @@ Cell *array (Node **a, int n)
   {
     dprintf ("making %s into an array\n", NN (x->nval));
     delete x->sval;
-    x->tval &= ~(STR | NUM);
-    x->tval |= ARR;
+    x->flags &= ~(STR | NUM);
+    x->csub = Cell::subtype::CARR;
     x->arrval = new Array (NSYMTAB);
   }
   z = x->arrval->setsym (buf, "", 0.0, STR | NUM);
-  z->ctype = Cell::type::OCELL;
   z->csub = Cell::subtype::CVAR;
   tempfree (x);
   delete buf;
@@ -496,20 +495,19 @@ Cell *array (Node **a, int n)
 
 Cell *awkdelete (Node **a, int n)
 {
-  /* a[0] is symtab, a[1] is list of subscripts */
+  /* a[0] is array, a[1] is list of subscripts */
   Cell *x, *y;
   Node *np;
   const char *s;
   size_t nsub = strlen (SUBSEP);
 
-  x = execute (a[0]);  /* Cell* for symbol table */
+  x = execute (a[0]);  /* Cell* for array */
   if (!x->isarr ())
     return True;
   if (a[1] == 0)
-  {  /* delete the elements, not the table */
+  {
+    //replace with a clean array
     delete x->arrval;
-    x->tval &= ~STR;
-    x->tval |= ARR;
     x->arrval = new Array (NSYMTAB);
   }
   else
@@ -537,7 +535,7 @@ Cell *awkdelete (Node **a, int n)
 
 Cell *intest (Node **a, int n)
 {
-  /* a[0] is index (list), a[1] is symtab */
+  /* a[0] is index (list), a[1] is array */
   Cell *x, *ap, *k;
   Node *p;
   char *buf;
@@ -550,8 +548,8 @@ Cell *intest (Node **a, int n)
   {
     dprintf ("making %s into an array\n", ap->nval);
     delete ap->sval;
-    ap->tval &= ~(STR | NUM);
-    ap->tval |= ARR;
+    ap->flags &= ~(STR | NUM);
+    ap->csub = Cell::subtype::CARR;
     ap->arrval = new Array (NSYMTAB);
   }
   buf = new char[bufsz];
@@ -610,7 +608,7 @@ Cell *matchop (Node **a, int n)
     RSTART = (Awkfloat)start;
     RLENGTH = (Awkfloat)patlen;
     x = gettemp ();
-    x->tval = NUM;
+    x->flags = NUM;
     x->fval = (Awkfloat)start;
     return x;
   }
@@ -663,7 +661,7 @@ Cell *relop (Node **a, int n)
 
   x = execute (a[0]);
   y = execute (a[1]);
-  if ((x->tval & NUM) && (y->tval & NUM))
+  if ((x->flags & NUM) && (y->flags & NUM))
   {
     j = x->fval - y->fval;
     i = j < 0 ? -1 : (j > 0 ? 1 : 0);
@@ -694,7 +692,7 @@ void tempfree (Cell *a)
 {
   if (a->csub != Cell::subtype::CTEMP)
     return;
-  dprintf ("freeing %s %s %s\n", NN (a->nval), quote (a->sval), flags2str(a->tval));
+  dprintf ("freeing %s %s %s\n", NN (a->nval), quote (a->sval), flags2str(a->flags));
   delete a;
 }
 
@@ -951,7 +949,7 @@ int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
       sprintf (p, fmt, os);
       break;
     case 'c':
-      if (x->tval & NUM)
+      if (x->flags & NUM)
       {
         if (x->getfval ())
           sprintf (p, fmt, (int)x->getfval ());
@@ -996,7 +994,7 @@ Cell *awksprintf (Node **a, int n)
   tempfree (x);
   x = gettemp ();
   x->sval = tostring(buf);
-  x->tval = STR;
+  x->flags = STR;
   delete buf;
   return x;
 }
@@ -1111,7 +1109,7 @@ Cell *incrdecr (Node **a, int n)
     return(x);
   }
   z = gettemp ();
-  z->tval = NUM;
+  z->flags = NUM;
   z->setfval (xf);
   x->setfval (xf + k);
   tempfree (x);
@@ -1139,21 +1137,21 @@ Cell *assign (Node **a, int n)
     }
     if (x != y)  // leave alone self-assignment */
     {
-      x->tval &= ~(NUM | STR);
-      switch (y->tval & (STR|NUM))
+      x->flags &= ~(NUM | STR);
+      switch (y->flags & (STR|NUM))
       {
       case (NUM|STR):
         x->setsval (y->getsval ());
         x->fval = y->getfval ();
-        x->tval |= NUM | STR;
+        x->flags |= NUM | STR;
         break;
       case STR:
         x->setsval (y->getsval ());
-        x->tval |= STR;
+        x->flags |= STR;
         break;
       case NUM:
         x->setfval (y->getfval ());
-        x->tval |= NUM;
+        x->flags |= NUM;
         break;
       case 0:
         delete x->sval;
@@ -1224,7 +1222,7 @@ Cell *cat (Node **a, int q)
   tempfree (y);
   z = gettemp ();
   z->sval = s;
-  z->tval = STR;
+  z->flags = STR;
   delete sx;
   delete sy;
   return z;
@@ -1301,10 +1299,13 @@ Cell *split (Node **a, int nnn)
     FATAL (AWK_ERR_ARG, "illegal type of split");
   sep = *fs;
   ap = execute (a[1]);  /* array name */
-  delete ap->arrval;
   dprintf ("split: s=|%s|, a=%s, sep=|%s|\n", s, NN (ap->nval), fs);
-  ap->tval &= ~STR;
-  ap->tval |= ARR;
+  if (ap->isarr ())
+    delete ap->arrval;
+  else
+    delete ap->sval;
+  ap->flags &= ~(STR | NUM);
+  ap->csub = Cell::subtype::CARR;
   ap->arrval = new Array (NSYMTAB);
 
   n = 0;
@@ -1431,7 +1432,7 @@ Cell *split (Node **a, int nnn)
     tempfree (x);
   }
   x = gettemp ();
-  x->tval = NUM;
+  x->flags = NUM;
   x->fval = n;
   return x;
 }
@@ -1544,9 +1545,8 @@ Cell *forstat (Node **a, int n)
 /// For ... in statement  for (a[0] in a[1]) a[2]
 Cell *instat (Node **a, int n)
 {
-  Cell *x, *vp, *arrayp, *cp, *ncp;
+  Cell *x, *vp, *arrayp;
   Array *tp;
-  int i;
 
   vp = execute (a[0]);
   arrayp = execute (a[1]);
@@ -1555,25 +1555,21 @@ Cell *instat (Node **a, int n)
 
   tp = arrayp->arrval;
   tempfree (arrayp);
-  for (i = 0; i < tp->size; i++)
-  {  /* this routine knows too much */
-    for (cp = tp->tab[i]; cp != NULL; cp = ncp)
+  for (Array::Iterator cp = tp->begin(); cp != tp->end(); cp++)
+  {
+    vp->setsval (cp->nval);
+    x = execute (a[2]);
+    if (x->isbreak ())
     {
-      vp->setsval (cp->nval);
-      ncp = cp->cnext;
-      x = execute (a[2]);
-      if (x->isbreak ())
-      {
-        tempfree (vp);
-        return True;
-      }
-      if (x->isnext () || x->isexit () || x->isret ())
-      {
-        tempfree (vp);
-        return x;
-      }
-      tempfree (x);
+      tempfree (vp);
+      return True;
     }
+    if (x->isnext () || x->isexit () || x->isret ())
+    {
+      tempfree (vp);
+      return x;
+    }
+    tempfree (x);
   }
   return True;
 }
@@ -1598,7 +1594,7 @@ Cell *bltin (Node **a, int n)
   {
   case FLENGTH:
     if (x->isarr ())
-      u = x->arrval->nelem;  /* GROT.  should be function*/
+      u = x->arrval->length();  /* GROT.  should be function*/
     else
       u = (Awkfloat)strlen (x->getsval ());
     break;
@@ -2078,7 +2074,7 @@ Cell *gsub (Node **a, int nnn)
   tempfree (x);
   tempfree (y);
   x = gettemp ();
-  x->tval = NUM;
+  x->flags = NUM;
   x->fval = num;
   delete buf;
   return x;

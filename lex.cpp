@@ -100,7 +100,7 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
 #define  RET(x)  { return x; }
 #else
 const char *tokname (int tok);
-#define  RET(x)  { if(dbg>1) errprintf("lex %s\n", tokname(x)); return x; }
+#define  RET(x)  { if(dbg>1) errprintf("lex - " #x " %s\n", tokname(x)); return x; }
 #endif
 
 int peek (void)
@@ -214,6 +214,7 @@ int yylex (void)
     if (isdigit (c))
     {
       yylval.cp = interp->symtab->setsym (lexbuf, lexbuf, atof (lexbuf), NUM | STR);
+      yylval.cp->csub = Cell::subtype::CCON;
       RET (NUMBER)
     }
 
@@ -560,17 +561,17 @@ int word (char *w)
     switch (kp->type)
     {  /* special handling */
     case BLTIN:
-      RET (kp->type)
+      RET (BLTIN)
 
     case FUNC:
       if (infunc)
         SYNTAX ("illegal nested function");
-      RET (kp->type)
+      RET (FUNC)
 
     case RETURN:
       if (!infunc)
         SYNTAX ("return not in function");
-      RET (kp->type)
+      RET (RETURN)
 
     case VARNF:
       yylval.cp = interp->symtab->lookup ("NF");
@@ -581,7 +582,12 @@ int word (char *w)
     }
   }
   c = peek ();  /* look for '(' */
-  if (c != '(' && infunc && (n = isarg (w)) >= 0)
+  if (c == '(')
+  {
+    yylval.cp = interp->symtab->setsym (w, NULL, 0.0, 0, Cell::subtype::CFUNC);
+    RET (CALL)
+  }
+  else if (infunc && (n = isarg (w)) >= 0)
   {
     yylval.i = n;
     RET (ARG)
@@ -589,10 +595,7 @@ int word (char *w)
   else
   {
     yylval.cp = interp->symtab->setsym (w, NULL, 0.0, STR);
-    if (c == '(')
-      RET (CALL)
-    else
-      RET (VAR)
+    RET (VAR)
   }
 }
 
@@ -779,6 +782,7 @@ const char *tokname (int n)
       return names[i].pname;
   }
 
-  return "(unknown)";
+  sprintf (buf, "(unknown %d)", n);
+  return buf;
 }
 #endif
