@@ -28,6 +28,8 @@ THIS SOFTWARE.
 #include <stdlib.h>
 #include "awk.h"
 
+#define YY_NO_LEAKS
+
 void checkdup(Node *list, Cell *item);
 void yyinit (void);
 void yyend (void);

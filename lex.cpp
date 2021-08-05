@@ -39,7 +39,6 @@ extern size_t lexbuf_sz;   /* size of lex buffer */
 static void unput (int);
 static void unputstr (const char *);
 
-int  lineno = 1;
 int  bracecnt = 0;
 int  brackcnt = 0;
 int  parencnt = 0;
@@ -244,7 +243,7 @@ int yylex (void)
       else if (peek () == '\r')
       {
         input (); input ();  /* \n */
-        lineno++;
+        interp->lineno++;
       }
       else
         RET (c)
@@ -662,7 +661,7 @@ int input (void)
   else        /* awk -f ... */
     c = pgetc ();
   if (c == '\n')
-    lineno++;
+    interp->lineno++;
   else if (c == EOF)
     c = 0;
   if (ep >= ebuf + sizeof ebuf)
@@ -674,7 +673,7 @@ int input (void)
 void unput (int c)
 {
   if (c == '\n')
-    lineno--;
+    interp->lineno--;
   if (yysptr >= yysbuf + sizeof (yysbuf))
     FATAL (AWK_ERR_LIMIT, "pushed back too much: %.20s...", yysbuf);
   *yysptr++ = c;

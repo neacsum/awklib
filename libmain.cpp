@@ -189,20 +189,22 @@ int awk_compile (AWKINTERP *pinter)
     interp->status = AWKS_COMPILING;
     yyparse ();
     setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
-    if (interp->err != 0)
-      return 0;
+    if (interp->err == 0)
+    {
 #ifndef NDEBUG
-    if (dbg > 2)
-      print_tree (winner, 1);
+      if (dbg > 2)
+        print_tree (winner, 1);
 #endif
+      interp->status = AWKS_COMPILED;
+      interp->prog_root = winner;
+      return 1;
+    }
   }
   catch (awk_exception&) {
     interp->status = AWKS_DONE;
-    return 0;
   }
-  interp->status = AWKS_COMPILED;
-  interp->prog_root = winner;
-  return 1;
+
+  return 0;
 }
 
 /// Execute an AWK program
@@ -505,7 +507,7 @@ int pgetc (void)
         yyin = stdin;
       else if ((yyin = fopen(interp->progs[interp->curprog], "r")) == NULL)
         FATAL(AWK_ERR_INPROG, "can't open file %s", interp->progs[interp->curprog]);
-      lineno = 1;
+      interp->lineno = 1;
     }
     if ((c = getc(yyin)) != EOF)
       return c;
@@ -669,8 +671,8 @@ void error ()
   }
   if (interp->status == AWKS_COMPILING)
   {
-    if (lineno)
-      errprintf (" source line number %d", lineno);
+    if (interp->lineno)
+      errprintf (" source line number %d", interp->lineno);
     if (cursource ())
       errprintf (" source file %s", cursource ());
     errprintf ("\n");

@@ -39,7 +39,7 @@ Node *nodealloc (int n)
   if (x == NULL)
     FATAL (AWK_ERR_NOMEM, "out of space in nodealloc");
   x->nnext = NULL;
-  x->lineno = lineno;
+  x->lineno = interp?interp->lineno : 0;
   x->args = n;
   return x;
 }

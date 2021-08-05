@@ -23,6 +23,7 @@ Interpreter::Interpreter ()
   : status{ AWKS_INIT }
   , err{ 0 }
   , first_run{ true }
+  , lineno{ 1 }
   , symtab{ new Array (NSYMTAB) }
   , prog_root{ 0 }
   , argno{ 1 }
@@ -810,7 +811,7 @@ void SYNTAX (const char* fmt, ...)
   va_start (varg, fmt);
   pb += vsprintf (pb, fmt, varg);
   va_end (varg);
-  pb += sprintf (pb, " at source line %d", lineno);
+  pb += sprintf (pb, " at source line %d", interp->lineno);
   if (curfname != NULL)
     pb += sprintf (pb, " in function %s", curfname);
   if (interp->status == AWKS_COMPILING && cursource () != NULL)

@@ -47,8 +47,6 @@ extern int  dbg;
 
 #define  RECSIZE  (8 * 1024)  /* sets limit on records, fields, etc., etc. */
 
-extern int  lineno;    /* line number in awk program */
-
 extern  char  *patbeg;  /* beginning of pattern matched */
 extern  size_t  patlen;    /* length of pattern matched.  set in b.c */
 
@@ -286,6 +284,7 @@ struct Interpreter {
   int err;              ///< Last error or warning
   char errmsg[1024];    ///< Last error message
   bool first_run;       ///< true on first run after compile
+  int lineno;           ///< line number in awk program
   Array *symtab;        ///< symbol table
   Node *prog_root;      ///< root of parsing tree
   int argno;            ///< current input argument number */
