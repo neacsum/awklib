@@ -1,6 +1,6 @@
 # Embedded AWK Interpreter
 
-Copyright (c) 2019 Mircea Neacsu
+Copyright (c) 2019-2021 Mircea Neacsu
 
 This library is an AWK interpreter that can be embedded in C/C++
 programs. The code is based on the [One True AWK](https://github.com/onetrueawk/awk)
@@ -51,7 +51,13 @@ The library test suite requires the
 ## Installation ##
 All projects have been tested under Visual Studio 2019.
 
+## Contributing ##
+Contributors are welcome. Currently version 2 is in the making with important enhancements.
+
+For style rules please consult my [style guide](https://gist.github.com/neacsum/2abf84e818cf3fe06fe73a7640bf4703).
+
 ## Development Notes ##
+### Version 1 ###
 When doing this project I had the definite sensation of touching a piece of
 computer science history. Just the AWK name invokes, in my mind, revered giants
 of this field (my first book on compilers was Aho and Ullman 'green dragon book').
@@ -75,4 +81,9 @@ exiting abruptly when an error condition is encountered is perfectly OK.
 When this is converted to a function call, the function has to return (with an
 error code indication). The simplest solution that preserved most of the
 original code was to wrap the code in try-catch blocks.
+
+### Version 2 ###
+After spending more time with this project, I discovered a number of inconveniences. A major one was the inability to reuse a compiled AWK script with different input data. Another was the lack of any thread safety. Version 2 plans to address these issues.
+
+Also I gave up on any pretense that this is anything but C++ code. All memory management is moving to `new/delete` operators going away from `malloc/free`.
 
