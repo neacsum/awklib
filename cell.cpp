@@ -4,6 +4,8 @@
 #include <math.h>
 
 void print_cell (Cell* c, int indent);
+extern Interpreter* interp;
+int cell_count = 0;
 
 Cell::Cell (type t, subtype s, const char* n, void* v, Awkfloat f, unsigned char flags)
   : ctype{ t }
@@ -15,13 +17,16 @@ Cell::Cell (type t, subtype s, const char* n, void* v, Awkfloat f, unsigned char
   , fmt{ 0 }
   , cnext{ 0 }
 {
+#ifndef NDEBUG
+  dprintf ("Allocated cells = %d\n", id = ++cell_count);
+#endif
 }
 
 /// Free a symbol table entry
 Cell::~Cell ()
 {
 #ifndef NDEBUG
-  dprintf ("Deleting %s...", nval);
+  dprintf ("Deleting %s(%d)...", nval, id);
   print_cell (this, 1);
 #endif
   if (isarr ())
@@ -29,12 +34,18 @@ Cell::~Cell ()
     dprintf (" array\n");
     delete arrval;
   }
-  else if (!isfcn())
+  else if (isregex ())
+  {
+    dprintf ("regex\n");
+    delete re;
+  }
+  else if (!isfcn ())
   {
     dprintf (" freed %s\n", sval);
     delete sval;
   }
   delete nval;
+  dprintf ("Remaining cells = %d\n", --cell_count);
 }
 
 ///  Set string val of a Cell

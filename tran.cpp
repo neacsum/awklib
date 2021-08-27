@@ -30,6 +30,7 @@ THIS SOFTWARE.
 #include "awk.h"
 #include "ytab.h"
 #include <awklib/err.h>
+#include "proto.h"
 
 #ifndef _MSC_VER
 #include <unistd.h>

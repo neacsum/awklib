@@ -36,11 +36,16 @@ THIS SOFTWARE.
 
 #include "awk.h"
 #include "ytab.h"
+#include "proto.h"
+
 #include <awklib/err.h>
 #include <awklib/awk.h>
 
+using namespace std;
+
 extern  int  pairstack[];
 extern  Awkfloat  srand_seed;
+extern Interpreter* interp;
 
 static Cell  truecell (Cell::type::OBOOL, Cell::subtype::BTRUE, 0, 0, 1.0, NUM);
 Cell  *True  = &truecell;
@@ -92,27 +97,25 @@ void adjbuf (char **pbuf, size_t *psiz, size_t minlen, int quantum, char **pbptr
 }
 
 
-inline int notlegal (Node* n)
+inline int notlegal (const Node* n)
 {
-  return n->nobj <= FIRSTTOKEN
-      || n->nobj >= LASTTOKEN
+  return n->tokid <= FIRSTTOKEN
+      || n->tokid >= LASTTOKEN
       || n->proc == nullproc;
 }
 
 /// Execute a node of the parse tree
-Cell *execute (Node *u)
+Cell *execute (const Node* u)
 {
   Cell *x;
-  Node *a;
-
   if (u == NULL)
     return True;
 
-  for (a = u; ; a = a->nnext)
+  for (const Node* a = u; ; a = a->nnext)
   {
-    if (isvalue (a))
+    if (a->isvalue())
     {
-      x = (Cell *)(a->narg[0]);
+      x = a->to_cell();
       if (x->isfld () && !interp->donefld)
         interp->fldbld ();
       else if (x->isrec () && !interp->donerec)
@@ -123,7 +126,7 @@ Cell *execute (Node *u)
     if (notlegal (a))  /* probably a Cell* but too risky to print */
       FATAL (AWK_ERR_SYNTAX, "illegal statement");
    
-    x = (*a->proc)(a->narg, a->nobj);
+    x = (*a->proc)(a->arg, a->iarg);
     if (x->isfld () && !interp->donefld)
       interp->fldbld ();
     else if (x->isrec () && !interp->donerec)
@@ -139,7 +142,8 @@ Cell *execute (Node *u)
 }
 
 /// Execute an awk program
-Cell *program (Node **a, int n)
+//Cell *program (Node **a, int n)
+Cell* program (const Node::Arguments& a, int n)
 {        /* a[0] = BEGIN, a[1] = body, a[2] = END */
   Cell* x;
   int exit_seen = 0;
@@ -178,7 +182,7 @@ Cell *program (Node **a, int n)
   Function call
   a[0] - function, a[1] - args
 */
-Cell *call (Node **a, int n)
+Cell *call (const Node::Arguments& a, int n)
 {
   int i, ncall, ndef;
   Node *x;
@@ -190,7 +194,7 @@ Cell *call (Node **a, int n)
   frm.fcn = execute (a[0]);  /* the function itself */
   if (!frm.fcn->isfcn ())
     FATAL (AWK_ERR_RUNTIME, "calling undefined function %s", frm.fcn->nval);
-  for (ncall = 0, x = a[1]; x != NULL; x = x->nnext)  /* args in call */
+  for (ncall = 0, x = a[1].get(); x != NULL; x = x->nnext)  /* args in call */
     ncall++;
   ndef = (int)frm.fcn->fval;      /* args in defn */
   dprintf ("calling %s, %d args (%d in defn)\n", frm.fcn->nval, ncall, ndef);
@@ -205,7 +209,7 @@ Cell *call (Node **a, int n)
     callpar = (Cell**)calloc (ndef, sizeof(Cell*));
   }
 
-  for (i = 0, x = a[1]; x != NULL; i++, x = x->nnext)
+  for (i = 0, x = a[1].get(); x != NULL; i++, x = x->nnext)
   {  /* get call args */
     y = execute (x);
     dprintf ("args[%d]: %s %f <%s>, t=%s\n",
@@ -294,7 +298,7 @@ Cell *call (Node **a, int n)
       frm.ret->setfval (extret.fval);
   }
   else
-    y = execute ((Node*)(frm.fcn->sval));  /* execute body */
+    y = execute (frm.fcn->nodeptr);  /* execute body */
   dprintf ("finished exec of %s\n", frm.fcn->nval);
   interp->fn = prev;    //restore previous function frame
   for (i = 0; i < ndef; i++)
@@ -335,9 +339,8 @@ Cell *call (Node **a, int n)
 }
 
 /// nth argument of a function
-Cell *arg (Node **a, int n)
+Cell *arg (const Node::Arguments& a, int n)
 {
-  n = ptoi (a[0]);  /* argument number, counting from 0 */
   dprintf ("arg(%d), nargs=%d\n", n, interp->fn.nargs);
   if (n + 1 > interp->fn.nargs)
     FATAL (AWK_ERR_RUNTIME, "argument #%d of function %s was not supplied",
@@ -346,7 +349,7 @@ Cell *arg (Node **a, int n)
 }
 
 /// break, continue, next, nextfile, return
-Cell *jump (Node **a, int n)
+Cell *jump (const Node::Arguments& a, int n)
 {
   Cell *y;
 
@@ -404,9 +407,9 @@ Cell *jump (Node **a, int n)
 }
 
 /// Get next line from specific input
-Cell *awkgetline (Node **a, int)
+Cell *awkgetline (const Node::Arguments& a, int n)
 {
-  /* a[0] is variable, a[1] is operator, a[2] is filename */
+  /* a[0] is variable, a[1] is filename */
   Cell *r, *x;
   FILE *fp;
   int mode, c;
@@ -414,10 +417,10 @@ Cell *awkgetline (Node **a, int)
   r = a[0] ? execute (a[0]) : &interp->fldtab[0];
 
   fflush (interp->files[1].fp);  /* in case someone is waiting for a prompt */
-  if (a[2] != NULL)
+  if (a[2])
   {    /* getline < file */
-    x = execute (a[2]);    /* filename */
-    mode = ptoi (a[1]);
+    x = execute (a[1]);    /* filename */
+    mode = n;
     if (mode == '|')    /* input pipe */
       mode = LE;  /* arbitrary flag */
     fp = openfile (mode, x->getsval ());
@@ -445,7 +448,7 @@ Cell *awkgetline (Node **a, int)
 }
 
 /// get NF
-Cell *getnf (Node **a, int n)
+Cell *getnf (const Node::Arguments& a, int)
 {
   if (!interp->donefld)
     interp->fldbld ();
@@ -453,28 +456,21 @@ Cell *getnf (Node **a, int n)
   return pnf;
 }
 
-Cell *array (Node **a, int n)
+Cell *array (const Node::Arguments& a, int)
 {
-  /* a[0] is symtab, a[1] is list of subscripts */
+  /* a[0] array, a[1] is list of subscripts */
   Cell *x, *y, *z;
   const char *s;
   Node *np;
-  char *buf;
-  size_t bufsz = RECSIZE;
-  size_t nsub = strlen (SUBSEP);
 
-  buf = new char[bufsz];
-
-  x = execute (a[0]);  /* Cell* for symbol table */
-  buf[0] = 0;
-  for (np = a[1]; np; np = np->nnext)
+  x = execute (a[0]);  /* array */
+  string subscript;
+  for (np = a[1].get(); np; np = np->nnext)
   {
     y = execute (np);  /* subscript */
-    s = y->getsval ();
-    adjbuf (&buf, &bufsz, strlen (buf) + strlen (s) + nsub + 1, RECSIZE, 0);
-    strcat (buf, s);
+    subscript += y->getsval ();
     if (np->nnext)
-      strcat (buf, SUBSEP);
+      subscript += SUBSEP;
     tempfree (y);
   }
   if (!x->isarr ())
@@ -485,15 +481,12 @@ Cell *array (Node **a, int n)
     x->csub = Cell::subtype::CARR;
     x->arrval = new Array (NSYMTAB);
   }
-  z = x->arrval->setsym (buf, "", 0.0, STR | NUM);
-  z->csub = Cell::subtype::CVAR;
+  z = x->arrval->setsym (subscript.c_str(), "", 0.0, STR | NUM, Cell::subtype::CVAR);
   tempfree (x);
-  delete buf;
-
   return z;
 }
 
-Cell *awkdelete (Node **a, int n)
+Cell *awkdelete (const Node::Arguments& a, int)
 {
   /* a[0] is array, a[1] is list of subscripts */
   Cell *x, *y;
@@ -504,7 +497,7 @@ Cell *awkdelete (Node **a, int n)
   x = execute (a[0]);  /* Cell* for array */
   if (!x->isarr ())
     return True;
-  if (a[1] == 0)
+  if (!a[1])
   {
     //replace with a clean array
     delete x->arrval;
@@ -515,7 +508,7 @@ Cell *awkdelete (Node **a, int n)
     size_t bufsz = RECSIZE;
     char* buf = new char[bufsz];
     buf[0] = 0;
-    for (np = a[1]; np; np = np->nnext)
+    for (np = a[1].get(); np; np = np->nnext)
     {
       y = execute (np);  /* subscript */
       s = y->getsval ();
@@ -533,7 +526,7 @@ Cell *awkdelete (Node **a, int n)
   return True;
 }
 
-Cell *intest (Node **a, int n)
+Cell *intest (const Node::Arguments& a, int)
 {
   /* a[0] is index (list), a[1] is array */
   Cell *x, *ap, *k;
@@ -554,7 +547,7 @@ Cell *intest (Node **a, int n)
   }
   buf = new char[bufsz];
   buf[0] = 0;
-  for (p = a[0]; p; p = p->nnext)
+  for (p = a[0].get(); p; p = p->nnext)
   {
     x = execute (p);  /* expr */
     s = x->getsval ();
@@ -573,53 +566,78 @@ Cell *intest (Node **a, int n)
     return True;
 }
 
-/// ~ and match()
-Cell *matchop (Node **a, int n)
+/*
+  ~  and !~ operators
+    a[0] = target text
+    a[1] = already compiled regex
+    a[2] = regex string
+
+    Only one of a[1] and a[2] can be not NULL
+*/
+Cell *matchop (const Node::Arguments& a, int n)
 {
   Cell *x, *y;
-  const char *s, *t;
-  int i;
-  fa *pfa;
-  int (*mf)(fa *, const char *) = match, mode = 0;
+  bool found;
 
-  if (n == MATCHFCN)
-  {
-    mf = pmatch;
-    mode = 1;
-  }
-  x = execute (a[1]);  /* a[1] = target text */
-  s = x->getsval ();
-  if (a[0] == 0)    /* a[1] == 0: already-compiled reg expr */
-    i = (*mf)((fa *)a[2], s);
+  x = execute (a[0]);  /* a[0] = target text */
+  if (a[1])    /* a[1] != 0: already-compiled reg expr */
+    found = match(a[1]->to_cell(), x->getsval ());
   else
   {
     y = execute (a[2]);  /* a[2] = regular expr */
-    t = y->getsval ();
-    pfa = makedfa (t, mode);
-    i = (*mf)(pfa, s);
+    Cell* re = interp->makedfa (y->getsval (), 0, false);
+    found = match(re, x->getsval());
     tempfree (y);
   }
   tempfree (x);
-  if (n == MATCHFCN)
-  {
-    size_t start = patbeg - s + 1;
-    if (patlen == (size_t)(-1))
-      start = 0;
-    RSTART = (Awkfloat)start;
-    RLENGTH = (Awkfloat)patlen;
-    x = gettemp ();
-    x->flags = NUM;
-    x->fval = (Awkfloat)start;
-    return x;
-  }
-  else if ((n == MATCH && i == 1) || (n == NOTMATCH && i == 0))
+  if ((n == MATCH && found) || (n == NOTMATCH && !found))
     return True;
   else
     return False;
 }
 
+/*
+  match ()
+    a[0] = target text
+    a[1] = already compiled regex
+    a[2] = regex string
+
+    Only one of a[1] and a[2] can be not NULL
+*/
+Cell* matchfun (const Node::Arguments& a, int)
+{
+  Cell* x, * y;
+  bool found;
+  size_t patbeg, patlen;
+
+  x = execute (a[0]);  /* a[0] = target text */
+  const char *s = x->getsval ();
+  if (a[1])    /* a[1] != 0: already-compiled reg expr */
+    found = pmatch(a[1]->to_cell (), s, patbeg, patlen);
+  else
+  {
+    y = execute (a[2]);  /* a[2] = regular expr */
+    Cell* re = interp->makedfa (y->getsval (), 1, false);
+    found = pmatch(re, s, patbeg, patlen);
+    tempfree (y);
+  }
+  tempfree (x);
+  if (found)
+  {
+    RSTART = (Awkfloat)(patbeg + 1);
+    RLENGTH = (Awkfloat)patlen;
+  }
+  else
+    RSTART = 0.;
+
+  x = gettemp ();
+  x->flags = NUM;
+  x->fval = RSTART;
+  return x;
+}
+
 ///  Boolean operations a[0] || a[1], a[0] && a[1], !a[0]
-Cell *boolop (Node **a, int n)
+Cell *boolop (const Node::Arguments& a, int n)
 {
   Cell *x, *y;
   bool i;
@@ -653,7 +671,7 @@ Cell *boolop (Node **a, int n)
 }
 
 /// Relational operators  a[0] < a[1], etc.
-Cell *relop (Node **a, int n)
+Cell *relop (const Node::Arguments& a, int n)
 {
   int i;
   Cell *x, *y;
@@ -705,7 +723,7 @@ Cell *gettemp ()
 }
 
 /// $( a[0] )
-Cell *indirect (Node **a, int n)
+Cell *indirect (const Node::Arguments& a, int)
 {
   Awkfloat val;
   Cell *x;
@@ -726,7 +744,7 @@ Cell *indirect (Node **a, int n)
 }
 
 /// substr(a[0], a[1], a[2])
-Cell *substr (Node **a, int nnn)
+Cell *substr (const Node::Arguments& a, int)
 {
   const char *s;
   char *ss;
@@ -735,7 +753,7 @@ Cell *substr (Node **a, int nnn)
 
   x = execute (a[0]);
   y = execute (a[1]);
-  if (a[2] != 0)
+  if (a[2])
     z = execute (a[2]);
   s = x->getsval ();
   k = strlen (s) + 1;
@@ -782,7 +800,7 @@ Cell *substr (Node **a, int nnn)
 }
 
 /// index(a[0], a[1])
-Cell *sindex (Node **a, int nnn)
+Cell *sindex (const Node::Arguments& a, int)
 {
   Cell *x, *y, *z;
   const char *s1, *s2, *p1, *p2, *q;
@@ -979,7 +997,7 @@ int format (char **pbuf, size_t *pbufsize, const char *s, Node *a)
 }
 
 /// sprintf(a[0])
-Cell *awksprintf (Node **a, int n)
+Cell *awksprintf (const Node::Arguments& a, int)
 {
   Cell *x;
   Node *y;
@@ -1000,10 +1018,11 @@ Cell *awksprintf (Node **a, int n)
 }
 
 /// printf
-Cell *awkprintf (Node **a, int n)
+Cell *awkprintf (const Node::Arguments& a, int n)
 {
   /* a[0] is list of args, starting with format string */
-  /* a[1] is redirection operator, a[2] is redirection file */
+  /* a[1] is redirection file  */
+  /* n is redirection operator */
   FILE *fp;
   Cell *x;
   Node *y;
@@ -1016,7 +1035,7 @@ Cell *awkprintf (Node **a, int n)
   if ((len = format (&buf, &bufsz, x->getsval (), y)) == -1)
     FATAL (AWK_ERR_NOMEM, "printf string %.30s... too long.  can't happen.", buf);
   tempfree (x);
-  if (a[1] == NULL)
+  if (!n)
   {
     if (interp->outredir)
       interp->outredir (buf, len);
@@ -1029,7 +1048,7 @@ Cell *awkprintf (Node **a, int n)
   }
   else
   {
-    fp = redirect (ptoi (a[1]), a[2]);
+    fp = redirect (n, *a[1]);
     fwrite (buf, len, 1, fp);
     fflush (fp);
     if (ferror (fp))
@@ -1040,7 +1059,7 @@ Cell *awkprintf (Node **a, int n)
 }
 
 /// Arithmetic operations   a[0] + a[1], etc.  also -a[0]
-Cell *arith (Node **a, int n)
+Cell *arith (const Node::Arguments& a, int n)
 {
   Awkfloat i, j = 0;
   double v;
@@ -1094,7 +1113,7 @@ Cell *arith (Node **a, int n)
 }
 
 /// Increment/decrement operators a[0]++, etc.
-Cell *incrdecr (Node **a, int n)
+Cell *incrdecr (const Node::Arguments& a, int n)
 {
   Cell *x, *z;
   int k;
@@ -1117,7 +1136,7 @@ Cell *incrdecr (Node **a, int n)
 }
 
 /// a[0] = a[1], a[0] += a[1], etc.
-Cell *assign (Node **a, int n)
+Cell *assign (const Node::Arguments& a, int n)
 {
   /* this is subtle; don't muck with it. */
   Cell *x, *y;
@@ -1200,7 +1219,7 @@ Cell *assign (Node **a, int n)
 }
 
 /// Concatenation a[0] cat a[1]
-Cell *cat (Node **a, int q)
+Cell *cat (const Node::Arguments& a, int)
 {
   Cell *x, *y, *z;
   size_t n1, n2;
@@ -1229,11 +1248,11 @@ Cell *cat (Node **a, int q)
 }
 
 /// Pattern-action statement a[0] { a[1] }
-Cell *pastat (Node **a, int n)
+Cell *pastat (const Node::Arguments& a, int)
 {
   Cell *x;
 
-  if (a[0] == 0)
+  if (!a[0])
     x = execute (a[1]);
   else
   {
@@ -1248,12 +1267,12 @@ Cell *pastat (Node **a, int n)
 }
 
 /// Pattern range - action statement a[0], a[1] { a[2] }
-Cell *dopa2 (Node **a, int n)
+Cell *dopa2 (const Node::Arguments& a, int n)
 {
   Cell *x;
   int pair;
 
-  pair = ptoi (a[3]);
+  pair = n;
   if (pairstack[pair] == 0)
   {
     x = execute (a[0]);
@@ -1273,172 +1292,8 @@ Cell *dopa2 (Node **a, int n)
   return False;
 }
 
-/// split(a[0], a[1], a[2]); a[3] is type
-Cell *split (Node **a, int nnn)
-{
-  Cell *x = 0, *y, *ap;
-  char *s, *origs;
-  int sep;
-  char *t, temp, num[50];
-  const char *fs = 0;
-  int n, tempstat, arg3type;
-
-  y = execute (a[0]);  /* source string */
-  origs = s = strdup (y->getsval ());
-  arg3type = ptoi (a[3]);
-  if (a[2] == 0)    /* fs string */
-    fs = FS;
-  else if (arg3type == STRING)
-  {  /* split(str,arr,"string") */
-    x = execute (a[2]);
-    fs = x->getsval ();
-  }
-  else if (arg3type == REGEXPR)
-    fs = "(regexpr)";  /* split(str,arr,/regexpr/) */
-  else
-    FATAL (AWK_ERR_ARG, "illegal type of split");
-  sep = *fs;
-  ap = execute (a[1]);  /* array name */
-  dprintf ("split: s=|%s|, a=%s, sep=|%s|\n", s, NN (ap->nval), fs);
-  if (ap->isarr ())
-    delete ap->arrval;
-  else
-    delete ap->sval;
-  ap->flags &= ~(STR | NUM);
-  ap->csub = Cell::subtype::CARR;
-  ap->arrval = new Array (NSYMTAB);
-
-  n = 0;
-  if (arg3type == REGEXPR && strlen ((char*)((fa*)a[2])->restr) == 0)
-  {
-    /* split(s, a, //); have to arrange that it looks like empty sep */
-    arg3type = 0;
-    fs = "";
-    sep = 0;
-  }
-  if (*s != '\0' && (strlen (fs) > 1 || arg3type == REGEXPR))
-  {  /* reg expr */
-    fa *pfa;
-    if (arg3type == REGEXPR)
-    {  /* it's ready already */
-      pfa = (fa *)a[2];
-    }
-    else
-    {
-      pfa = makedfa (fs, 1);
-    }
-    if (nematch (pfa, s))
-    {
-      tempstat = pfa->initstat;
-      pfa->initstat = 2;
-      do
-      {
-        n++;
-        sprintf (num, "%d", n);
-        temp = *patbeg;
-        *patbeg = '\0';
-        if (is_number (s))
-          ap->arrval->setsym (num, s, atof (s), STR | NUM);
-        else
-          ap->arrval->setsym (num, s, 0.0, STR);
-        *patbeg = temp;
-        s = patbeg + patlen;
-        if (*(patbeg + patlen - 1) == 0 || *s == 0)
-        {
-          n++;
-          sprintf (num, "%d", n);
-          ap->arrval->setsym (num, "", 0.0, STR);
-          pfa->initstat = tempstat;
-          goto spdone;
-        }
-      } while (nematch (pfa, s));
-      pfa->initstat = tempstat;   /* bwk: has to be here to reset */
-              /* cf gsub and refldbld */
-    }
-    n++;
-    sprintf (num, "%d", n);
-    if (is_number (s))
-      ap->arrval->setsym (num, s, atof (s), STR | NUM);
-    else
-      ap->arrval->setsym (num, s, 0.0, STR);
-  spdone:
-    pfa = NULL;
-  }
-  else if (sep == ' ')
-  {
-    for (n = 0; ; )
-    {
-      while (*s == ' ' || *s == '\t' || *s == '\n')
-        s++;
-      if (*s == 0)
-        break;
-      n++;
-      t = s;
-      do
-        s++;
-      while (*s != ' ' && *s != '\t' && *s != '\n' && *s != '\0');
-      temp = *s;
-      *s = '\0';
-      sprintf (num, "%d", n);
-      if (is_number (t))
-        ap->arrval->setsym (num, t, atof (t), STR | NUM);
-      else
-        ap->arrval->setsym (num, t, 0.0, STR);
-      *s = temp;
-      if (*s != 0)
-        s++;
-    }
-  }
-  else if (sep == 0)
-  {  /* new: split(s, a, "") => 1 char/elem */
-    for (n = 0; *s != 0; s++)
-    {
-      char buf[2];
-      n++;
-      sprintf (num, "%d", n);
-      buf[0] = *s;
-      buf[1] = 0;
-      if (isdigit (buf[0]))
-        ap->arrval->setsym (num, buf, atof (buf), STR | NUM);
-      else
-        ap->arrval->setsym (num, buf, 0.0, STR);
-    }
-  }
-  else if (*s != 0)
-  {
-    for (;;)
-    {
-      n++;
-      t = s;
-      while (*s != sep && *s != '\n' && *s != '\0')
-        s++;
-      temp = *s;
-      *s = '\0';
-      sprintf (num, "%d", n);
-      if (is_number (t))
-        ap->arrval->setsym (num, t, atof (t), STR | NUM);
-      else
-        ap->arrval->setsym (num, t, 0.0, STR);
-      *s = temp;
-      if (*s++ == 0)
-        break;
-    }
-  }
-  tempfree (ap);
-  tempfree (y);
-  free (origs);
-  if (a[2] != 0 && arg3type == STRING)
-  {
-    tempfree (x);
-  }
-  x = gettemp ();
-  x->flags = NUM;
-  x->fval = n;
-  return x;
-}
-
-/// Ternaty operator ?:   a[0] ? a[1] : a[2]
-Cell *condexpr (Node **a, int n)
+/// Ternary operator ?:   a[0] ? a[1] : a[2]
+Cell *condexpr (const Node::Arguments& a, int n)
 {
   Cell *x;
 
@@ -1457,7 +1312,7 @@ Cell *condexpr (Node **a, int n)
 }
 
 /// If statement  if (a[0]) a[1]; else a[2]
-Cell *ifstat (Node **a, int n)
+Cell *ifstat (const Node::Arguments& a, int)
 {
   Cell *x;
 
@@ -1467,7 +1322,7 @@ Cell *ifstat (Node **a, int n)
     tempfree (x);
     x = execute (a[1]);
   }
-  else if (a[2] != 0)
+  else if (a[2])
   {
     tempfree (x);
     x = execute (a[2]);
@@ -1476,7 +1331,7 @@ Cell *ifstat (Node **a, int n)
 }
 
 /// While statement  while (a[0]) a[1]
-Cell *whilestat (Node **a, int n)
+Cell *whilestat (const Node::Arguments& a, int)
 {
   Cell *x;
 
@@ -1497,7 +1352,7 @@ Cell *whilestat (Node **a, int n)
 }
 
 /// Do statement  do a[0]; while(a[1])
-Cell *dostat(Node **a, int n)
+Cell *dostat(const Node::Arguments& a, int)
 {
   Cell *x;
 
@@ -1517,7 +1372,7 @@ Cell *dostat(Node **a, int n)
 }
 
 /// For statement  for (a[0]; a[1]; a[2]) a[3]
-Cell *forstat (Node **a, int n)
+Cell *forstat (const Node::Arguments& a, int)
 {
   Cell *x;
 
@@ -1525,7 +1380,7 @@ Cell *forstat (Node **a, int n)
   tempfree (x);
   for (;;)
   {
-    if (a[1] != 0)
+    if (a[1])
     {
       x = execute (a[1]);
       if (!x->istrue ()) return(x);
@@ -1543,7 +1398,7 @@ Cell *forstat (Node **a, int n)
 }
 
 /// For ... in statement  for (a[0] in a[1]) a[2]
-Cell *instat (Node **a, int n)
+Cell *instat (const Node::Arguments& a, int)
 {
   Cell *x, *vp, *arrayp;
   Array *tp;
@@ -1574,12 +1429,11 @@ Cell *instat (Node **a, int n)
   return True;
 }
 
-/// Builtin function (sin, cos, etc.)  a[0] is type, a[1] is arg list
-Cell *bltin (Node **a, int n)
+/// Builtin function (sin, cos, etc.)  n is type, a[0] is arg list
+Cell *bltin (const Node::Arguments& a, int n)
 {
   Cell *x, *y;
   Awkfloat u;
-  int t;
   Awkfloat tmp;
   char *p, *buf;
   Node *nextarg;
@@ -1587,10 +1441,9 @@ Cell *bltin (Node **a, int n)
   void flush_all (void);
   int status = 0;
 
-  t = ptoi (a[0]);
-  x = execute (a[1]);
-  nextarg = a[1]->nnext;
-  switch (t)
+  x = execute (a[0]);
+  nextarg = a[0]->nnext;
+  switch (n)
   {
   case FLENGTH:
     if (x->isarr ())
@@ -1649,8 +1502,8 @@ Cell *bltin (Node **a, int n)
 #endif
     break;
   case FRAND:
-    /* in principle, rand() returns something in 0..RAND_MAX */
-    u = (Awkfloat)(rand () % RAND_MAX) / RAND_MAX;
+    /* normalize to (0..1) range */
+    u = (Awkfloat)(interp->randgen ()) / ((Awkfloat)interp->randgen.max ()+1);
     break;
   case FSRAND:
     if (x->isrec ())  /* no argument provided */
@@ -1658,14 +1511,14 @@ Cell *bltin (Node **a, int n)
     else
       u = x->getfval ();
     tmp = u;
-    srand ((unsigned int)u);
-    u = interp->srand_seed;
-    interp->srand_seed = tmp;
+    interp->randgen.seed ((unsigned int)u);
+    u = (unsigned int)interp->rand_seed;
+    interp->rand_seed = (unsigned int)tmp;
     break;
   case FTOUPPER:
   case FTOLOWER:
     buf = tostring (x->getsval ());
-    if (t == FTOUPPER)
+    if (n == FTOUPPER)
     {
       for (p = buf; *p; p++)
         if (islower (*p))
@@ -1694,7 +1547,7 @@ Cell *bltin (Node **a, int n)
       u = fflush (fp);
     break;
   default:  /* can't happen */
-    FATAL (AWK_ERR_OTHER, "illegal function type %d", t);
+    FATAL (AWK_ERR_OTHER, "illegal function type %d", n);
     break;
   }
   tempfree (x);
@@ -1712,20 +1565,20 @@ Cell *bltin (Node **a, int n)
 /*!
   print 
     a[0] - print argument(s) (linked list)
-    a[1] - redirection operator (FFLUSH, GT, APPEND, PIPE) or NULL
-    a[2] - file or NULL
+    a[1] - file or NULL
+    n - redirection operator (FFLUSH, GT, APPEND, PIPE) or NULL
 */
-Cell *printstat (Node **a, int n)
+Cell *printstat (const Node::Arguments& a, int n)
 {
   Node *x;
   Cell *y;
   FILE *fp;
 
-  if (a[1] == 0)  /* a[1] is redirection operator, a[2] is file */
+  if (!n)  /* n is redirection operator, a[1] is file */
     fp = interp->files[1].fp;
   else
-    fp = redirect (ptoi (a[1]), a[2]);
-  for (x = a[0]; x != NULL; x = x->nnext)
+    fp = redirect (n, *a[1]);
+  for (x = a[0].get(); x != NULL; x = x->nnext)
   {
     y = execute (x);
     interp->putstr (y->getpssval (), fp);
@@ -1735,7 +1588,7 @@ Cell *printstat (Node **a, int n)
     else
       interp->putstr (OFS, fp);
   }
-  if (a[1] != 0)
+  if (n)
     fflush (fp);
   if (ferror (fp))
     FATAL (AWK_ERR_OUTFILE, "write error on %s", filename (fp));
@@ -1743,19 +1596,19 @@ Cell *printstat (Node **a, int n)
   return True;
 }
 
-Cell *nullproc (Node **a, int n)
+Cell *nullproc (const Node::Arguments& a, int n)
 {
   return 0;
 }
 
 /// Set up all i/o redirections
-FILE *redirect (int a, Node *b)
+FILE *redirect (int a, Node& b)
 {
   FILE *fp;
   Cell *x;
   const char *fname;
 
-  x = execute (b);
+  x = execute (&b);
   fname = x->getsval ();
   fp = openfile (a, fname);
   tempfree (x);
@@ -1851,7 +1704,7 @@ const char *filename (FILE *fp)
   return "???";
 }
 
-Cell *closefile (Node **a, int n)
+Cell *closefile (const Node::Arguments& a, int)
 {
   Cell *x;
   int i, stat;
@@ -1891,231 +1744,6 @@ void flush_all (void)
   for (i = 0; i < interp->nfiles; i++)
     if (interp->files[i].fp)
       fflush (interp->files[i].fp);
-}
-
-void backsub(char **pb_ptr, const char **sptr_ptr);
-
-/// substitute command
-Cell *sub (Node **a, int nnn)
-{
-  char *pb, *q;
-  Cell *x, *y, *result;
-  const char *t, *sptr;
-  fa *pfa;
-  size_t bufsz = RECSIZE;
-  char* buf = new char[bufsz];
-
-  x = execute (a[3]);  /* target string */
-  t = x->getsval ();
-  if (a[0] == 0)    /* 0 => a[1] is already-compiled regexpr */
-    pfa = (fa *)a[1];  /* regular expression */
-  else
-  {
-    y = execute (a[1]);
-    pfa = makedfa (y->getsval (), 1);
-    tempfree (y);
-  }
-  y = execute (a[2]);  /* replacement string */
-  result = False;
-  if (pmatch (pfa, t))
-  {
-    sptr = t;
-    adjbuf (&buf, &bufsz, 1 + patbeg - sptr, RECSIZE, 0);
-    pb = buf;
-    while (sptr < patbeg)
-      *pb++ = *sptr++;
-    sptr = y->getsval ();
-    while (*sptr != 0)
-    {
-      adjbuf (&buf, &bufsz, 5 + pb - buf, RECSIZE, &pb);
-      if (*sptr == '\\')
-      {
-        backsub (&pb, &sptr);
-      }
-      else if (*sptr == '&')
-      {
-        sptr++;
-        adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, RECSIZE, &pb);
-        for (q = patbeg; q < patbeg + patlen; )
-          *pb++ = *q++;
-      }
-      else
-        *pb++ = *sptr++;
-    }
-    *pb = '\0';
-    if (pb > buf + bufsz)
-      FATAL (AWK_ERR_OTHER, "sub result1 %.30s too big; can't happen", buf);
-    sptr = patbeg + patlen;
-    if ((patlen == 0 && *patbeg) || (patlen && *(sptr - 1)))
-    {
-      adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb);
-      while ((*pb++ = *sptr++) != 0)
-        ;
-    }
-    if (pb > buf + bufsz)
-      FATAL (AWK_ERR_OTHER, "sub result2 %.30s too big; can't happen", buf);
-    x->setsval (buf);  /* BUG: should be able to avoid copy */
-    result = True;;
-  }
-  tempfree (x);
-  tempfree (y);
-  delete buf;
-  return result;
-}
-
-/// global substitute
-Cell *gsub (Node **a, int nnn)
-{
-  Cell *x, *y;
-  char *pb, *q;
-  const char *t, *rptr, *sptr;
-  fa *pfa;
-  int mflag, tempstat, num;
-  size_t bufsz = RECSIZE;
-  char* buf = new char[bufsz];
-
-  mflag = 0;  /* if mflag == 0, can replace empty string */
-  num = 0;
-  x = execute (a[3]);  /* target string */
-  t = x->getsval ();
-  if (a[0] == 0)    /* 0 => a[1] is already-compiled regexpr */
-    pfa = (fa *)a[1];  /* regular expression */
-  else
-  {
-    y = execute (a[1]);
-    pfa = makedfa (y->getsval (), 1);
-    tempfree (y);
-  }
-  y = execute (a[2]);  /* replacement string */
-  if (pmatch (pfa, t))
-  {
-    tempstat = pfa->initstat;
-    pfa->initstat = 2;
-    pb = buf;
-    rptr = y->getsval ();
-    do
-    {
-      if (patlen == 0 && *patbeg != 0)
-      {  /* matched empty string */
-        if (mflag == 0)
-        {  /* can replace empty */
-          num++;
-          sptr = rptr;
-          while (*sptr != 0)
-          {
-            adjbuf (&buf, &bufsz, 5 + pb - buf, RECSIZE, &pb);
-            if (*sptr == '\\')
-            {
-              backsub (&pb, &sptr);
-            }
-            else if (*sptr == '&')
-            {
-              sptr++;
-              adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, RECSIZE, &pb);
-              for (q = patbeg; q < patbeg + patlen; )
-                *pb++ = *q++;
-            }
-            else
-              *pb++ = *sptr++;
-          }
-        }
-        if (*t == 0)  /* at end */
-          goto done;
-        adjbuf (&buf, &bufsz, 2 + pb - buf, RECSIZE, &pb);
-        *pb++ = *t++;
-        if (pb > buf + bufsz)  /* BUG: not sure of this test */
-          FATAL (AWK_ERR_OTHER, "gsub result0 %.30s too big; can't happen", buf);
-        mflag = 0;
-      }
-      else
-      {  /* matched nonempty string */
-        num++;
-        sptr = t;
-        adjbuf (&buf, &bufsz, 1 + (patbeg - sptr) + pb - buf, RECSIZE, &pb);
-        while (sptr < patbeg)
-          *pb++ = *sptr++;
-        sptr = rptr;
-        while (*sptr != 0)
-        {
-          adjbuf (&buf, &bufsz, 5 + pb - buf, RECSIZE, &pb);
-          if (*sptr == '\\')
-          {
-            backsub (&pb, &sptr);
-          }
-          else if (*sptr == '&')
-          {
-            sptr++;
-            adjbuf (&buf, &bufsz, 1 + patlen + pb - buf, RECSIZE, &pb);
-            for (q = patbeg; q < patbeg + patlen; )
-              *pb++ = *q++;
-          }
-          else
-            *pb++ = *sptr++;
-        }
-        t = patbeg + patlen;
-        if (patlen == 0 || *t == 0 || *(t - 1) == 0)
-          goto done;
-        if (pb > buf + bufsz)
-          FATAL (AWK_ERR_OTHER, "gsub result1 %.30s too big; can't happen", buf);
-        mflag = 1;
-      }
-    } while (pmatch (pfa, t));
-    sptr = t;
-    adjbuf (&buf, &bufsz, 1 + strlen (sptr) + pb - buf, 0, &pb);
-    while ((*pb++ = *sptr++) != 0)
-      ;
-  done:  if (pb < buf + bufsz)
-    *pb = '\0';
-         else if (*(pb - 1) != '\0')
-    FATAL (AWK_ERR_OTHER, "gsub result2 %.30s truncated; can't happen", buf);
-         x->setsval (buf);  /* BUG: should be able to avoid copy + free */
-         pfa->initstat = tempstat;
-  }
-  tempfree (x);
-  tempfree (y);
-  x = gettemp ();
-  x->flags = NUM;
-  x->fval = num;
-  delete buf;
-  return x;
-}
-
-/*!  handle \\& variations */
-void backsub (char **pb_ptr, const char **sptr_ptr)
-{
-  /* sptr[0] == '\\' */
-  char *pb = *pb_ptr;
-  const char* sptr = *sptr_ptr;
-
-  if (sptr[1] == '\\')
-  {
-    if (sptr[2] == '\\' && sptr[3] == '&')
-    { /* \\\& -> \& */
-      *pb++ = '\\';
-      *pb++ = '&';
-      sptr += 4;
-    }
-    else if (sptr[2] == '&')
-    {  /* \\& -> \ + matched */
-      *pb++ = '\\';
-      sptr += 2;
-    }
-    else
-    {      /* \\x -> \\x */
-      *pb++ = *sptr++;
-      *pb++ = *sptr++;
-    }
-  }
-  else if (sptr[1] == '&')
-  {  /* literal & */
-    sptr++;
-    *pb++ = *sptr++;
-  }
-  else        /* literal \ */
-    *pb++ = *sptr++;
-
-  *pb_ptr = pb;
-  *sptr_ptr = sptr;
 }
 
 #ifdef _MSC_VER

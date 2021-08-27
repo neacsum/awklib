@@ -11,13 +11,15 @@
 
 #define  DEFAULT_FLD  2         // Initial number of fields
 #define  DEFAULT_ARGV 3         // Initial number of entries in ARGV
+#define  NFA  20                // Cache this many dynamic regex's
 
 static int file_cmp (const char* f1, const char* f2);
 
-Node* nullnode;    /* zero&null, converted into a node for comparisons */
+Cell* literal_null;
 Cell* literal0;
-extern char* curfname;  ///<current function name
 
+extern char* curfname;  ///<current function name
+extern Interpreter* interp;
 
 Interpreter::Interpreter ()
   : status{ AWKS_INIT }
@@ -29,7 +31,7 @@ Interpreter::Interpreter ()
   , argno{ 1 }
   , envir{ 0 }
   , argvtab{ 0 }
-  , srand_seed{ 1. }
+  , rand_seed{ std::mt19937::default_seed }
   , lexprog{ 0 }
   , lexptr{ 0 }
   , nprog{ 0 }
@@ -46,7 +48,6 @@ Interpreter::Interpreter ()
   *errmsg = 0;
   syminit ();
   envinit ();
-  srand ((unsigned int)srand_seed);
 
   // Initialize $0 and fields
   //first allocation - deal with $0
@@ -79,7 +80,7 @@ Interpreter::~Interpreter ()
     fclose (files[2].fp);
   delete files[2].fname;
 
-  freenode (prog_root);
+  delete prog_root;
   dprintf ("freeing symbol table\n");
   symtab->removesym ("SYMTAB"); //break recursive link
   delete symtab;
@@ -101,14 +102,7 @@ Interpreter::~Interpreter ()
 void Interpreter::syminit ()
 {
   literal0 = symtab->setsym ("0", "0", 0.0, NUM | STR);
-  /*
-    this is used for if(x)... tests:
-  TODO Get rid of nullnode !!
-  How do you ensure there are no other nodes linked to it. Also reusing the
-  same node creates problems when parsing tree has to be freed.
-  */
-  nullnode = celltonode (symtab->setsym ("$zero&null", "", 0.0, NUM | STR)
-    , Cell::subtype::CCON);
+  literal_null = symtab->setsym ("$zero&null", "", 0.0, NUM | STR);
 
   CELL_FS = symtab->setsym ("FS", " ", 0.0, STR | PREDEF);
   CELL_RS = symtab->setsym ("RS", "\n", 0.0, STR | PREDEF);
@@ -679,17 +673,15 @@ void Interpreter::recbld ()
 int Interpreter::refldbld (const char* rec, const char* fs)
 {
   char* fr, * fields;
-  int i, tempstat;
-  fa* pfa;
+  int i;
 
   fields = strdup (rec);
   fr = fields;
   *fr = '\0';
   if (*rec == '\0')
     return 0;
-  pfa = makedfa (fs, 1);
+  Cell* re = makedfa (fs, 1);
   dprintf ("into refldbld, rec = <%s>, pat = <%s>\n", rec, fs);
-  tempstat = pfa->initstat;
   for (i = 1; ; i++)
   {
     if (i > nfields)
@@ -698,20 +690,19 @@ int Interpreter::refldbld (const char* rec, const char* fs)
     fldtab[i].flags = STR;
     fldtab[i].sval = tostring (fr);
     dprintf ("refldbld: i=%d\n", i);
-    if (nematch (pfa, rec))
+    size_t pstart, plen;
+    if (pmatch (re, rec, pstart, plen))
     {
-      pfa->initstat = 2;  /* horrible coupling to b.c */
-      dprintf ("match %s (%d chars)\n", patbeg, patlen);
-      strncpy (fr, rec, patbeg - rec);
-      fr += patbeg - rec + 1;
+      dprintf ("match %s (%d chars)\n", rec+pstart, plen);
+      strncpy (fr, rec, pstart);
+      fr += pstart + 1;
       *(fr - 1) = '\0';
-      rec = patbeg + patlen;
+      rec += pstart + plen;
     }
     else
     {
       dprintf ("no match %s\n", rec);
       strcpy (fr, rec);
-      pfa->initstat = tempstat;
       break;
     }
   }
@@ -779,6 +770,65 @@ void Interpreter::growfldtab (size_t n)
   if (n > nf)
     nf = n;
   makefields ((int)nf);
+}
+
+/// Allocate a node with n descendants
+Node* Interpreter::nodealloc (int n)
+{
+  Node* x =new Node ();
+  x->nnext = NULL;
+  x->lineno = lineno;
+  x->arg.resize (n);
+  return x;
+}
+
+Cell* Interpreter::makedfa (const char* s, int anchor, bool compiling)
+{
+  std::string ss(s);
+  requote (ss);
+  if (compiling)  /* a constant for sure */
+  {
+    // TODO reuse regex when compiling
+    std::regex* re = new std::regex (ss, std::regex_constants::awk);
+    Cell* x = new Cell (Cell::type::OREGEX, Cell::subtype::CCON, s, re, 0., anchor ? ANCHORED : 0);
+    return x;
+  }
+
+  unsigned char anchor_flag = anchor ? ANCHORED : 0;
+
+  for (int i = 0; i < ratab.size (); i++)  /* is it there already? */
+  {
+    if (((ratab[i]->flags & ANCHORED) == anchor_flag)
+      && strcmp (ratab[i]->nval, s) == 0)
+    {
+      ratab[i]->fval += 1.;
+      return ratab[i].get();
+    }
+  }
+
+  Cell* x = new Cell (Cell::type::OREGEX, Cell::subtype::CTEMP, s, 
+    new std::regex(ss, std::regex_constants::awk), 0., anchor_flag);
+
+  if (ratab.size() < NFA)
+  {
+    /* room for another */
+    ratab.emplace_back (x);
+    return x;
+  }
+
+  Awkfloat use = ratab[0]->fval;  /* replace least-recently used */
+  int nuse = 0;
+  for (int i = 1; i < ratab.size(); i++)
+  {
+    if (ratab[i]->fval < use)
+    {
+      use = ratab[i]->fval;
+      nuse = i;
+    }
+  }
+
+  ratab[nuse] = std::unique_ptr<Cell> (x);
+  return x;
 }
 
 /// Generate error message and throws an exception

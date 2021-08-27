@@ -9,7 +9,7 @@
 #define  GROWTAB  4 /* grow table by this factor */
 
 static int  hash (const char*, int);
-
+extern Interpreter* interp;
 
 /// Make a new symbol table
 Array::Array (int n)

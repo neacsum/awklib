@@ -31,7 +31,7 @@ THIS SOFTWARE.
 #include "awk.h"
 #include "ytab.h"
 #include <awklib/err.h>
-
+#include "proto.h"
 
 static int  refldbld (const char *, const char *);
 

@@ -26,51 +26,103 @@ THIS SOFTWARE.
 #include <string.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include "awk.h"
-#include "ytab.h"
 #include <awklib/err.h>
 
+#include "awk.h"
+#include "ytab.h"
+#include "proto.h"
 
-/// Allocate a node with n descendants
-Node *nodealloc (int n)
-{
-  Node *x;
-  x = (Node *)malloc (sizeof (Node) + (n - 1) * sizeof (Node *));
-  if (x == NULL)
-    FATAL (AWK_ERR_NOMEM, "out of space in nodealloc");
-  x->nnext = NULL;
-  x->lineno = interp?interp->lineno : 0;
-  x->args = n;
-  return x;
-}
+using namespace std;
+
+extern Interpreter* interp;
+extern Cell* literal0;
+extern Cell* literal_null;
 
 #ifndef NDEBUG
 const char *tokname (int tok);
+int node_count = 0;
 #endif
 
-/// Free a node and its descendants
-void freenode (Node *p)
+
+Node::Node ()
+  : nnext {0}
+  , lineno {0}
+  , ntype {NVALUE}
+  , tokid {0}
+  , iarg {0}
 {
-  Node *temp;
-  while (p)
-  {
-    if ((ptrdiff_t)p < LASTTOKEN)
-      break;
 #ifndef NDEBUG
-    dprintf ("%Deleting node 0x%p %s with %d arguments (line %d)", 
-      p, tokname (p->nobj), p->args, p->lineno);
-    dprintf (" type %s\n", p->ntype == NVALUE ? "value" : p->ntype == NSTAT ? "statement" : "expression");
+  dprintf ("Allocated nodes = %d\n", (id = ++node_count));
 #endif
-    if (p->ntype != NVALUE)
+}
+
+/// Create a node with one descendant 
+Node::Node (int id, pfun fn, int i, Node* arg1)
+  : Node ()
+{
+  tokid = id;
+  proc = fn;
+  arg.push_back (unique_ptr<Node> (arg1));
+  iarg = i;
+}
+
+/// Create a node with two descendants 
+Node::Node (int id, pfun fn, int i, Node* arg1, Node* arg2)
+  : Node ()
+{
+  tokid = id;
+  proc = fn;
+  arg.push_back (unique_ptr<Node> (arg1));
+  arg.push_back (unique_ptr<Node> (arg2));
+  iarg = i;
+}
+
+/// Create a node with three descendants 
+Node::Node (int id, pfun fn, int i, Node* arg1, Node* arg2, Node* arg3)
+  : Node ()
+{
+  tokid = id;
+  proc = fn;
+  arg.push_back (unique_ptr<Node> (arg1));
+  arg.push_back (unique_ptr<Node> (arg2));
+  arg.push_back (unique_ptr<Node> (arg3));
+  iarg = i;
+}
+
+Node::~Node ()
+{
+#ifndef NDEBUG
+    dprintf ("%Deleting node 0x%p %s with %d arguments (line %d)",
+      this, tokname (tokid), arg.size (), lineno);
+    dprintf (" type %s\n", ntype == NVALUE ? "value" : ntype == NSTAT ? "statement" : "expression");
+#endif
+    if (ntype == NVALUE)
     {
-      for (int i = 0; i < p->args; i++)
-        freenode (p->narg[i]);
+      Cell* x = (Cell*)arg[0].release ();
+      // Do not delete cell. It belongs to symtab
     }
-    temp = p;
-    p = p->nnext;
-    if (temp != nullnode)
-      free (temp);
-  }
+    else
+    {
+      for (int i = 0; i < arg.size (); i++)
+        arg[i].reset ();
+    }
+    delete nnext;
+#ifndef NDEBUG
+    dprintf ("Remaining nodes = %d\n", --node_count);
+#endif
+}
+
+/// Create a node with four descendants 
+Node::Node (int id, pfun fn, int i, Node* arg1, Node* arg2, Node* arg3, Node* arg4)
+  : Node ()
+{
+  tokid = id;
+  proc = fn;
+  arg.push_back (unique_ptr<Node> (arg1));
+  arg.push_back (unique_ptr<Node> (arg2));
+  arg.push_back (unique_ptr<Node> (arg3));
+  arg.push_back (unique_ptr<Node> (arg4));
+  iarg = i;
 }
 
 /// Convert node to a statement node (presumably from an expression node)
@@ -80,136 +132,82 @@ Node *exptostat (Node *a)
   return a;
 }
 
-/// Create a node with one descendant 
-Node *node1 (int tokid, pfun fn, Node *arg1)
-{
-  Node *x;
-
-  x = nodealloc (1);
-  x->nobj = tokid;
-  x->proc = fn;
-  x->narg[0] = arg1;
-  return x;
-}
-
-/// Crate a node with 2 descendants
-Node *node2 (int tokid, pfun fn, Node *arg1, Node *arg2)
-{
-  Node *x;
-
-  x = nodealloc (2);
-  x->nobj = tokid;
-  x->proc = fn;
-  x->narg[0] = arg1;
-  x->narg[1] = arg2;
-  return x;
-}
-
-/// Create a node with 3 descendants
-Node *node3 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3)
-{
-  Node *x;
-
-  x = nodealloc (3);
-  x->nobj = tokid;
-  x->proc = fn;
-  x->narg[0] = arg1;
-  x->narg[1] = arg2;
-  x->narg[2] = arg3;
-  return x;
-}
-
-/// Create a node with 4 descendants
-Node *node4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4)
-{
-  Node *x;
-
-  x = nodealloc (4);
-  x->nobj = tokid;
-  x->proc = fn;
-  x->narg[0] = arg1;
-  x->narg[1] = arg2;
-  x->narg[2] = arg3;
-  x->narg[3] = arg4;
-  return x;
-}
-
 /// Create a statement node with 1 descendant
-Node *stat1 (int tokid, pfun fn, Node *arg1)
+Node *stat1 (int tokid, pfun fn, Node *arg1, int iarg)
 {
   Node *x;
 
-  x = node1 (tokid, fn, arg1);
+  x = new Node (tokid, fn, iarg, arg1);
   x->ntype = NSTAT;
   return x;
 }
 
 /// Create a statement node with 2 descendants
-Node *stat2 (int tokid, pfun fn, Node *arg1, Node *arg2)
+Node *stat2 (int tokid, pfun fn, Node *arg1, Node *arg2, int iarg)
 {
   Node *x;
 
-  x = node2 (tokid, fn, arg1, arg2);
+  x = new Node (tokid, fn, iarg, arg1, arg2);
   x->ntype = NSTAT;
   return x;
 }
 
 /// Create a statement node with 3 descendants
-Node *stat3 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3)
+Node *stat3 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, int iarg)
 {
   Node *x;
 
-  x = node3 (tokid, fn, arg1, arg2, arg3);
+  x = new Node (tokid, fn, iarg, arg1, arg2, arg3);
   x->ntype = NSTAT;
   return x;
 }
 
 /// Create a statement node with 4 descendants
-Node *stat4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4)
+Node *stat4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4, int iarg)
 {
   Node *x;
 
-  x = node4 (tokid, fn, arg1, arg2, arg3, arg4);
+  x = new Node (tokid, fn, iarg, arg1, arg2, arg3, arg4);
   x->ntype = NSTAT;
   return x;
 }
 
 /// Create an expression node with 1 descendant
-Node *op1 (int tokid, pfun fn, Node *arg1)
+Node *op1 (int tokid, pfun fn, Node *arg1, int iarg)
 {
   Node *x;
 
-  x = node1 (tokid, fn, arg1);
+  x = new Node (tokid, fn, iarg, arg1);
   x->ntype = NEXPR;
   return x;
 }
 
 /// Create an expression node with 2 descendants
-Node *op2 (int tokid, pfun fn, Node *arg1, Node *arg2)
+Node *op2 (int tokid, pfun fn, Node *arg1, Node *arg2, int iarg)
 {
   Node *x;
 
-  x = node2 (tokid, fn, arg1, arg2);
+  x = new Node (tokid, fn, iarg, arg1, arg2);
   x->ntype = NEXPR;
   return x;
 }
 
 /// Create an expression node with 3 descendants
-Node *op3 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3)
+Node *op3 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, int iarg)
 {
   Node *x;
 
-  x = node3 (tokid, fn, arg1, arg2, arg3);
+  x = new Node (tokid, fn, iarg, arg1, arg2, arg3);
   x->ntype = NEXPR;
   return x;
 }
 
 /// Create an expression node with 4 descendants
-Node *op4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4)
+Node *op4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4, int iarg)
 {
   Node *x;
 
-  x = node4 (tokid, fn, arg1, arg2, arg3, arg4);
+  x = new Node (tokid, fn, iarg, arg1, arg2, arg3, arg4);
   x->ntype = NEXPR;
   return x;
 }
@@ -220,24 +218,28 @@ Node *celltonode (Cell *a, Cell::subtype csub)
 
   a->ctype = Cell::type::OCELL;
   a->csub = csub;
-  x = node1 (0, nullproc, (Node *)a);
+  x = new Node (0, nullproc, 0, (Node *)a);
   x->ntype = NVALUE;
   return x;
 }
 
-Node *rectonode (void)  /* make $0 into a Node */
+Node *rectonode ()  /* make $0 into a Node */
 {
-  extern Cell *literal0;
   return op1 (INDIRECT, indirect, celltonode (literal0, Cell::subtype::CCON));
 }
 
-Node *makearr (Node *p)
+Node* nullnode ()  /* zero&null, converted into a node for comparisons */
 {
-  Cell *cp;
+  return celltonode (literal_null, Cell::subtype::CCON);
+}
 
-  if (isvalue (p))
+/*TODO: Check if could use NF as an array. That would be bad!! */
+
+Node* makearr (Node* p)
+{
+  if (p->isvalue ())
   {
-    cp = (Cell *)(p->narg[0]);
+    Cell* cp = p->to_cell ();
     if (cp->isfcn ())
       SYNTAX ("%s is a function, not an array", cp->nval);
     else if (!cp->isarr ())
@@ -245,6 +247,7 @@ Node *makearr (Node *p)
       delete cp->sval;
       cp->arrval = new Array (NSYMTAB);
       cp->csub = Cell::subtype::CARR;
+      dprintf ("%s is now an array\n", cp->nval);
     }
   }
   return p;
@@ -258,7 +261,7 @@ Node *pa2stat (Node *a, Node *b, Node *c)  /* pat, pat {...} */
 {
   Node *x;
 
-  x = node4 (PASTAT2, dopa2, a, b, c, itonp (paircnt));
+  x = new Node (PASTAT2, dopa2, paircnt, a, b, c);
   if (paircnt++ >= PA2NUM)
     SYNTAX ("limited to %d pat,pat statements", PA2NUM);
   x->ntype = NSTAT;
@@ -313,19 +316,7 @@ int isarg (const char *s)    /* is s in argument list for current function? */
   int n;
 
   for (n = 0; p != 0; p = p->nnext, n++)
-    if (strcmp (((Cell *)(p->narg[0]))->nval, s) == 0)
+    if (strcmp (((Cell *)(p->arg[0].get()))->nval, s) == 0)
       return n;
   return -1;
 }
-
-int ptoi (void *p)  /* convert pointer to integer */
-{
-  return (int)(ptrdiff_t)p;  /* swearing that p fits, of course */
-}
-
-Node *itonp (int i)  /* and vice versa */
-{
-  return (Node *)(ptrdiff_t)i;
-}
-
-

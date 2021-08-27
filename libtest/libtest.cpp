@@ -10,10 +10,12 @@ using namespace std;
 bool setup_test (const string& testfile);
 
 // A convenient way to debug individual tests
-#define TESTNAME "18_array"
+#define TESTNAME "77_func"
 TEST (failing)
 {
   ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
+
+  int dbg = awk_setdebug (3);
 
   AWKINTERP* interp = awk_init (NULL);
   CHECK (awk_addprogfile (interp, TESTNAME ".awk"));
@@ -21,14 +23,16 @@ TEST (failing)
   CHECK (awk_setinput (interp, TESTNAME ".in"));
   CHECK (awk_setoutput (interp, TESTNAME ".out"));
   CHECK (awk_exec (interp) >= 0);
-  CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
-  CHECK (awk_exec (interp) >= 0);
-  CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
+  //CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
+  //CHECK (awk_exec (interp) >= 0);
+  //CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
   awk_end (interp);
   remove (TESTNAME ".awk");
   remove (TESTNAME ".in");
   remove (TESTNAME ".ref");
   remove (TESTNAME ".out");
+
+  awk_setdebug (dbg);
 }
 
 // API functions tests

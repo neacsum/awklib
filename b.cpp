@@ -22,1071 +22,344 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ****************************************************************/
 
-/* lasciate ogne speranza, voi ch'intrate. */
-
-
-#include <ctype.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <assert.h>
 #include "awk.h"
 #include "ytab.h"
+#include "proto.h"
+
 #include <awklib/err.h>
 
-#define  HAT  (NCHARS+2)  /* matches ^ in regular expr */
-                          /* NCHARS is 2**n */
-#define MAXLIN 22
+extern Interpreter* interp;
+using namespace std;
 
-#define type(v)     (v)->nobj  /* badly overloaded here */
-#define info(v)     (v)->ntype  /* badly overloaded here */
-#define left(v)     (v)->narg[0]
-#define right(v)    (v)->narg[1]
-#define parent(v)   (v)->nnext
-
-#define LEAF  case CCL: case NCCL: case CHAR: case DOT: case FINAL: case ALL:
-#define ELEAF  case EMPTYRE:    /* empty string in regexp */
-#define UNARY  case STAR: case PLUS: case QUEST:
-
-/* encoding in tree Nodes:
-  leaf (CCL, NCCL, CHAR, DOT, FINAL, ALL, EMPTYRE):
-    left is index, right contains value or pointer to value
-  unary (STAR, PLUS, QUEST): left is child, right is null
-  binary (CAT, OR): left and right are children
-  parent contains pointer to parent
-*/
-
-
-int  *setvec;
-int  *tmpset;
-int  maxsetvec = 0;
-
-int  rtok;    /* next token in current re */
-int  rlxval;
-static unsigned char  *rlxstr;
-static unsigned char  *prestr;  /* current position in current re */
-static unsigned char  *lastre;  /* origin of last re */
-
-static  int setcnt;
-static  int poscnt;
-
-char  *patbeg;
-size_t  patlen;
-
-#define  NFA  20  /* cache this many dynamic fa's */
-fa  *fatab[NFA];
-int  nfatab = 0;  /* entries in fatab */
-
-static int    makeinit (fa *, int);
-static fa*    mkdfa (const char *, int);
-static void   penter (Node *);
-static void   freetr (Node *);
-static int    hexstr (unsigned char **);
-static int    quoted (unsigned char **);
-static char*  cclenter (const char *);
-static void   overflo (const char *);
-static void   cfoll (fa *, Node *);
-static int    first (Node *);
-static void   follow (Node *);
-static int    member (int, const char *);
-static Node*  regexp (void);
-static Node*  reparse (const char *);
-static Node*  primary (void);
-static Node*  concat (Node *);
-static Node*  alt (Node *);
-static Node*  unary (Node *);
-static int    relex (void);
-static int    cgoto (fa *, int, int);
-
-/// Returns dfa for reg expr s
-fa* makedfa (const char *s, int anchor)
+int hexdigit (char c)
 {
-  int i, use, nuse;
-  fa *pfa;
-  static int now = 1;
-
-  if (setvec == 0)
-  {
-    /* first time through any RE */
-    maxsetvec = MAXLIN;
-    setvec = (int *)malloc (maxsetvec * sizeof (int));
-    tmpset = (int *)malloc (maxsetvec * sizeof (int));
-    if (setvec == 0 || tmpset == 0)
-      overflo ("out of space initializing makedfa");
-  }
-
-  if (interp->status == AWKS_COMPILING)  /* a constant for sure */
-    return mkdfa (s, anchor);
-  for (i = 0; i < nfatab; i++)  /* is it there already? */
-  {
-    if (fatab[i]->anchor == anchor
-      && strcmp ((const char *)fatab[i]->restr, s) == 0)
-    {
-      fatab[i]->use = now++;
-      return fatab[i];
-    }
-  }
-  pfa = mkdfa (s, anchor);
-  if (nfatab < NFA)
-  {
-    /* room for another */
-    fatab[nfatab] = pfa;
-    fatab[nfatab]->use = now++;
-    nfatab++;
-    return pfa;
-  }
-  use = fatab[0]->use;  /* replace least-recently used */
-  nuse = 0;
-  for (i = 1; i < nfatab; i++)
-  {
-    if (fatab[i]->use < use)
-    {
-      use = fatab[i]->use;
-      nuse = i;
-    }
-  }
-  freefa (fatab[nuse]);
-  fatab[nuse] = pfa;
-  pfa->use = now++;
-  return pfa;
-}
-
-/*!
-  Does the real work of making a dfa
-  anchor = 1 for anchored matches, else 0
-*/
-fa* mkdfa (const char *s, int anchor)
-{
-  Node *p, *p1;
-  fa *f;
-
-  p = reparse (s);
-  p1 = op2 (CAT, cat, op2 (STAR, nullproc, op2 (ALL, nullproc, NIL, NIL), NIL), p);
-  /* put ALL STAR in front of reg.  exp. */
-  p1 = op2 (CAT, cat, p1, op2 (FINAL, nullproc, NIL, NIL));
-  /* put FINAL after reg.  exp. */
-
-  poscnt = 0;
-  penter (p1);  /* enter parent pointers and leaf indices */
-  if ((f = (fa *)calloc (1, sizeof (fa) + poscnt * sizeof (rrow))) == NULL)
-    overflo ("out of space for fa");
-  f->accept = poscnt - 1;  /* penter has computed number of positions in re */
-  cfoll (f, p1);  /* set up follow sets */
-  freetr (p1);
-  if ((f->posns[0] = (int *)calloc (1, *(f->re[0].lfollow) * sizeof (int))) == NULL)
-    overflo ("out of space in makedfa");
-  if ((f->posns[1] = (int *)calloc (1, sizeof (int))) == NULL)
-    overflo ("out of space in makedfa");
-  *f->posns[1] = 0;
-  f->initstat = makeinit (f, anchor);
-  f->anchor = anchor;
-  f->restr = (unsigned char *)tostring (s);
-  return f;
-}
-
-int makeinit (fa *f, int anchor)
-{
-  int i, k;
-
-  f->curstat = 2;
-  f->out[2] = 0;
-  f->reset = 0;
-  k = *(f->re[0].lfollow);
-  xfree (f->posns[2]);
-  if ((f->posns[2] = (int *)calloc (1, (k + 1) * sizeof (int))) == NULL)
-    overflo ("out of space in makeinit");
-  for (i = 0; i <= k; i++)
-    (f->posns[2])[i] = (f->re[0].lfollow)[i];
-  if ((f->posns[2])[1] == f->accept)
-    f->out[2] = 1;
-  for (i = 0; i < NCHARS; i++)
-    f->gototab[2][i] = 0;
-  f->curstat = cgoto (f, 2, HAT);
-  if (anchor)
-  {
-    *f->posns[2] = k - 1;  /* leave out position 0 */
-    for (i = 0; i < k; i++)
-      (f->posns[0])[i] = (f->posns[2])[i];
-
-    f->out[0] = f->out[2];
-    if (f->curstat != 2)
-      --(*f->posns[f->curstat]);
-  }
-  return f->curstat;
-}
-
-/// Set up parent pointers and leaf indices
-void penter (Node *p)
-{
-  switch (type (p))
-  {
-  ELEAF
-  LEAF
-    info (p) = poscnt;
-    poscnt++;
-    break;
-  UNARY
-    penter (left (p));
-    parent (left (p)) = p;
-    break;
-  case CAT:
-  case OR:
-    penter (left (p));
-    penter (right (p));
-    parent (left (p)) = p;
-    parent (right (p)) = p;
-    break;
-
-  default:  /* can't happen */
-    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in penter", type (p));
-    break;
-  }
-}
-
-void freetr (Node *p)  /* free parse tree */
-{
-  switch (type (p))
-  {
-  ELEAF
-  LEAF
-    xfree (p);
-    break;
-
-  UNARY
-    freetr (left (p));
-    xfree (p);
-    break;
-
-  case CAT:
-  case OR:
-    freetr (left (p));
-    freetr (right (p));
-    xfree (p);
-    break;
-
-  default:  /* can't happen */
-    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in freetr", type (p));
-    break;
-  }
-}
-
-/* in the parsing of regular expressions, metacharacters like . have */
-/* to be seen literally;  \056 is not a metacharacter. */
-
-/// Find and eval hex string at pp, return new p
-int hexstr (unsigned char **pp)
-{
-  /* only pick up one 8-bit byte (2 chars) */
-  unsigned char *p;
-  int n = 0;
-  int i;
-
-  for (i = 0, p = (unsigned char *)*pp; i < 2 && isxdigit (*p); i++, p++)
-  {
-    if (isdigit (*p))
-      n = 16 * n + *p - '0';
-    else if (*p >= 'a' && *p <= 'f')
-      n = 16 * n + *p - 'a' + 10;
-    else if (*p >= 'A' && *p <= 'F')
-      n = 16 * n + *p - 'A' + 10;
-  }
-  *pp = (unsigned char *)p;
-  return n;
-}
-
-#define isoctdigit(c) ((c) >= '0' && (c) <= '7')  /* multiple use of arg */
-
-/// Pick up next thing after a \\ and increment *pp
-int quoted (unsigned char **pp)
-{
-  unsigned char *p = *pp;
-  int c;
-
-  if ((c = *p++) == 't')
-    c = '\t';
-  else if (c == 'n')
-    c = '\n';
-  else if (c == 'f')
-    c = '\f';
-  else if (c == 'r')
-    c = '\r';
-  else if (c == 'b')
-    c = '\b';
-  else if (c == '\\')
-    c = '\\';
-  else if (c == 'x')
-  {  /* hexadecimal goo follows */
-    c = hexstr (&p);  /* this adds a null if number is invalid */
-  }
-  else if (isoctdigit (c))
-  {  /* \d \dd \ddd */
-    int n = c - '0';
-    if (isoctdigit (*p))
-    {
-      n = 8 * n + *p++ - '0';
-      if (isoctdigit (*p))
-        n = 8 * n + *p++ - '0';
-    }
-    c = n;
-  } /* else */
-    /* c = c; */
-  *pp = p;
-  return c;
-}
-
-/// Add a character class
-char* cclenter (const char *argp)
-{
-  int i, c, c2;
-  unsigned char *p = (unsigned char *)argp;
-  unsigned char *op, *bp;
-  static unsigned char *buf = 0;
-  static size_t bufsz = 100;
-
-  op = p;
-  if (buf == 0)
-    buf = new unsigned char[bufsz];
-  bp = buf;
-  for (i = 0; (c = *p++) != 0; )
-  {
-    if (c == '\\')
-      c = quoted (&p);
-    else if (c == '-' && i > 0 && bp[-1] != 0)
-    {
-      if (*p != 0)
-      {
-        c = bp[-1];
-        c2 = *p++;
-        if (c2 == '\\')
-          c2 = quoted (&p);
-        if (c > c2)
-        {  /* empty; ignore */
-          bp--;
-          i--;
-          continue;
-        }
-        while (c < c2)
-        {
-          adjbuf ((char**)&buf, &bufsz, bp - buf + 2, 100, (char**)&bp);
-          *bp++ = ++c;
-          i++;
-        }
-        continue;
-      }
-    }
-    adjbuf ((char**)&buf, &bufsz, bp - buf + 2, 100, (char**)&bp);
-    *bp++ = c;
-    i++;
-  }
-  *bp = 0;
-  dprintf ("cclenter: in = |%s|, out = |%s|\n", op, buf);
-  delete op;
-  return (char *)tostring ((char *)buf);
-}
-
-void overflo (const char *s)
-{
-  FATAL (AWK_ERR_NOMEM, "regular expression too big: %.30s...", s);
-}
-
-/// Enter follow set of each leaf of vertex v into lfollow[leaf]
-void cfoll (fa *f, Node *v)
-{
-  int i;
-  int *p;
-
-  switch (type (v))
-  {
-  ELEAF
-  LEAF
-    f->re[info (v)].ltype = type (v);
-    f->re[info (v)].lval.np = right (v);
-    while (f->accept >= maxsetvec)
-    {  /* guessing here! */
-      maxsetvec *= 4;
-      setvec = (int *)realloc (setvec, maxsetvec * sizeof (int));
-      tmpset = (int *)realloc (tmpset, maxsetvec * sizeof (int));
-      if (setvec == 0 || tmpset == 0)
-        overflo ("out of space in cfoll()");
-    }
-    for (i = 0; i <= f->accept; i++)
-      setvec[i] = 0;
-    setcnt = 0;
-    follow (v);  /* computes setvec and setcnt */
-    if ((p = (int *)calloc (1, (setcnt + 1) * sizeof (int))) == NULL)
-      overflo ("out of space building follow set");
-    f->re[info (v)].lfollow = p;
-    *p = setcnt;
-    for (i = f->accept; i >= 0; i--)
-      if (setvec[i] == 1)
-        *++p = i;
-    break;
-
-  UNARY
-    cfoll (f, left (v));
-    break;
-
-  case CAT:
-  case OR:
-    cfoll (f, left (v));
-    cfoll (f, right (v));
-    break;
-
-  default:  /* can't happen */
-    FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in cfoll", type (v));
-  }
-}
-
-/*!
-  Collects initially active leaves of p into setvec
-  returns 0 if p matches empty string
-*/
-int first (Node *p)
-{
-  int b, lp;
-
-  switch (type (p))
-  {
-  ELEAF
-  LEAF
-    lp = info (p);  /* look for high-water mark of subscripts */
-    while (setcnt >= maxsetvec || lp >= maxsetvec)
-    {  /* guessing here! */
-      maxsetvec *= 4;
-      setvec = (int *)realloc (setvec, maxsetvec * sizeof (int));
-      tmpset = (int *)realloc (tmpset, maxsetvec * sizeof (int));
-      if (setvec == 0 || tmpset == 0)
-        overflo ("out of space in first()");
-    }
-    if (type (p) == EMPTYRE)
-    {
-      setvec[lp] = 0;
-      return 0;
-    }
-    if (setvec[lp] != 1)
-    {
-      setvec[lp] = 1;
-      setcnt++;
-    }
-    if (type (p) == CCL && (*(char *)right (p)) == '\0')
-      return 0;    /* empty CCL */
-    else
-      return 1;
-
-  case PLUS:
-    if (first (left (p)) == 0)
-      return 0;
-    return 1;
-
-  case STAR:
-  case QUEST:
-    first (left (p));
+  if (isdigit (c))
+    return c - '0';
+  else if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  else if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  else
     return 0;
-  case CAT:
-    if (first (left (p)) == 0 && first (right (p)) == 0) return(0);
-    return 1;
-  case OR:
-    b = first (right (p));
-    if (first (left (p)) == 0 || b == 0) return(0);
-    return 1;
-  }
-  FATAL (AWK_ERR_OTHER, "can't happen: unknown type %d in first", type (p));  /* can't happen */
-  return -1;
 }
+/*
+  There is no flavor of std::regex that exactly matches GAWK (or One True AWK)
+  syntax. The std::regex::constants::awk does not accept hex escaping (\xhh)
+  and std::regex::constants::ECMAScript does not accept octal escaping (\ddd).
 
-/// collects leaves that can follow v into setvec
-void follow (Node *v)
+  Here we convert a string containing \xhh to \ddd. The number of characters
+  the same.
+*/
+void requote (string& str)
 {
-  Node *p;
-
-  if (type (v) == FINAL)
-    return;
-  p = parent (v);
-  switch (type (p))
+  auto s = str.begin ();
+  while (s != str.end())
   {
-  case STAR:
-  case PLUS:
-    first (v);
-    follow (p);
-    return;
-
-  case OR:
-  case QUEST:
-    follow (p);
-    return;
-
-  case CAT:
-    if (v == left (p))
-    {  /* v is left child of p */
-      if (first (right (p)) == 0)
-      {
-        follow (p);
-        return;
-      }
+    if (*s == '\\' && *(s + 1) == 'x'
+      && isxdigit (*(s + 2)) && isxdigit (*(s + 3)))
+    {
+      int n = 0;
+      *s++ = '\\';
+      n = (hexdigit (*(s + 1)) << 4) + hexdigit (*(s + 2));
+      *s++ = (n >> 6) + '0';
+      *s++ = ((n >> 3) & 0x07) + '0';
+      *s++ = (n & 0x07) + '0';
     }
-    else    /* v is right child */
-      follow (p);
-    return;
+    else
+      s++;
   }
 }
 
-/// Is c in s?
-int member (int c, const char *sarg)
-{
-  unsigned char *s = (unsigned char *)sarg;
 
-  while (*s)
-    if (c == *s++)
-      return 1;
-  return 0;
+/// Compile a string into a regex and return the node containing that regex
+Node* nodedfa (const char *s, int anchor)
+{
+  Cell* a = interp->makedfa (s, anchor);
+  Node *x = new Node (0, nullproc, 0, (Node*)a);
+  x->ntype = NVALUE;
+
+  return x;
 }
 
-int match (fa *f, const char *p0)  /* shortest match ? */
+bool match (Cell *f, const char *p0)  /* shortest match ? */
 {
-  int s, ns;
-  unsigned char *p = (unsigned char *)p0;
-
-  s = f->reset ? makeinit (f, 0) : f->initstat;
-  if (f->out[s])
-    return(1);
-  do {
-    /* assert(*p < NCHARS); */
-    if ((ns = f->gototab[s][*p]) != 0)
-      s = ns;
-    else
-      s = cgoto (f, s, *p);
-    if (f->out[s])
-      return(1);
-  } while (*p++ != 0);
-  return 0;
+  assert (f->isregex ());
+  regex_constants::match_flag_type flags = regex_constants::match_default;
+  if ((f->flags & ANCHORED) != 0)
+    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
+  
+  bool result = regex_search (p0, *f->re, flags);
+  return result;
 }
 
 /// Longest match, for sub
-int pmatch (fa *f, const char *p0)
+bool pmatch (Cell *f, const char *p0, size_t& start, size_t& len)
 {
-  int s, ns;
-  unsigned char *p = (unsigned char *)p0;
-  unsigned char *q;
-  int i, k;
+  assert (f->isregex ());
+  regex_constants::match_flag_type flags = regex_constants::match_default;
+  if ((f->flags & ANCHORED) != 0)
+    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
 
-  /* s = f->reset ? makeinit(f,1) : f->initstat; */
-  if (f->reset)
-    f->initstat = s = makeinit (f, 1);
-  else
-    s = f->initstat;
-  patbeg = (char *)p;
-  patlen = (size_t)(-1);
-  do {
-    q = p;
-    do {
-      if (f->out[s])    /* final state */
-        patlen = q - p;
-      /* assert(*q < NCHARS); */
-      if ((ns = f->gototab[s][*q]) != 0)
-        s = ns;
-      else
-        s = cgoto (f, s, *q);
-      if (s == 1)
-      {  /* no transition */
-        if (patlen != (size_t)(-1))
-        {
-          patbeg = (char *)p;
-          return 1;
-        }
-        else
-          goto nextin;  /* no match */
-      }
-    } while (*q++ != 0);
-    if (f->out[s])
-      patlen = q - p - 1;  /* don't count $ */
-    if (patlen != (size_t)(-1))
-    {
-      patbeg = (char *)p;
-      return 1;
-    }
-  nextin:
-    s = 2;
-    if (f->reset)
-    {
-      for (i = 2; i <= f->curstat; i++)
-        xfree (f->posns[i]);
-      k = *f->posns[0];
-      if ((f->posns[2] = (int *)calloc (1, (k + 1) * sizeof (int))) == NULL)
-        overflo ("out of space in pmatch");
-      for (i = 0; i <= k; i++)
-        (f->posns[2])[i] = (f->posns[0])[i];
-      f->initstat = f->curstat = 2;
-      f->out[2] = f->out[0];
-      for (i = 0; i < NCHARS; i++)
-        f->gototab[2][i] = 0;
-    }
-  } while (*p++ != 0);
-  return 0;
-}
-
-/// Non-empty match, for sub
-int nematch (fa *f, const char *p0)
-{
-  int s, ns;
-  unsigned char *p = (unsigned char *)p0;
-  unsigned char *q;
-  int i, k;
-
-  /* s = f->reset ? makeinit(f,1) : f->initstat; */
-  if (f->reset)
-    f->initstat = s = makeinit (f, 1);
-  else
-    s = f->initstat;
-  patlen = (size_t)(-1);
-  while (*p)
+  cmatch m;
+  if (regex_search (p0, m, *f->re, flags))
   {
-    q = p;
-    do
-    {
-      if (f->out[s])    /* final state */
-        patlen = q - p;
-      /* assert(*q < NCHARS); */
-      if ((ns = f->gototab[s][*q]) != 0)
-        s = ns;
-      else
-        s = cgoto (f, s, *q);
-      if (s == 1)
-      {  /* no transition */
-        if (patlen != 0 && patlen != (size_t)(-1))
-        {
-          patbeg = (char *)p;
-          return 1;
-        }
-        else
-          goto nnextin;  /* no nonempty match */
-      }
-    } while (*q++ != 0);
-    if (f->out[s])
-      patlen = q - p - 1;  /* don't count $ */
-    if (patlen != 0 && patlen != (size_t)(-1))
-    {
-      patbeg = (char *)p;
-      return 1;
-    }
-  nnextin:
-    s = 2;
-    if (f->reset)
-    {
-      for (i = 2; i <= f->curstat; i++)
-        xfree (f->posns[i]);
-      k = *f->posns[0];
-      if ((f->posns[2] = (int *)calloc (1, (k + 1) * sizeof (int))) == NULL)
-        overflo ("out of state space");
-      for (i = 0; i <= k; i++)
-        (f->posns[2])[i] = (f->posns[0])[i];
-      f->initstat = f->curstat = 2;
-      f->out[2] = f->out[0];
-      for (i = 0; i < NCHARS; i++)
-        f->gototab[2][i] = 0;
-    }
-    p++;
+    start = m.position ();
+    len = m.length ();
+    return true;
   }
-  return 0;
+  return false;
 }
 
-/*!
-  Parses regular expression pointed to by p
-  uses relex() to scan regular expression
-*/
-Node *reparse (const char *p)
+/// split(a[0], a[1], a[2]);
+Cell* split (const Node::Arguments& a, int)
 {
-  Node *np;
+  Cell* x = 0;
 
-  dprintf ("reparse <%s>\n", p);
-  lastre = prestr = (unsigned char *)p;  /* prestr points to string to be parsed */
-  rtok = relex ();
-  /* GNU compatibility: an empty regexp matches anything */
-  if (rtok == '\0')
+  Cell* y = execute (a[0]);  /* source string */
+  char *orig_s = tostring (y->getsval ());
+  char* s = orig_s;
+  bool temp_re = false;
+
+  Cell* ap = execute (a[1]);  /* array name */
+  if (ap->isarr ())
+    delete ap->arrval;
+  else
+    delete ap->sval;
+  ap->flags &= ~(STR | NUM);
+  ap->csub = Cell::subtype::CARR;
+  ap->arrval = new Array (NSYMTAB);
+
+  const char* fs = 0;
+  regex* re = 0;
+  if (!a[2])    /* fs string */
   {
-    /* FATAL("empty regular expression"); previous */
-    return(op2 (EMPTYRE, nullproc, NIL, NIL));
+    fs = FS;
   }
-  np = regexp ();
-  if (rtok != '\0')
-    FATAL (AWK_ERR_SYNTAX, "syntax error in regular expression %s at %s", lastre, prestr);
-  return np;
-}
-
-/// Top-level parse of reg expr
-Node *regexp (void)
-{
-  return (alt (concat (primary ())));
-}
-
-Node *primary (void)
-{
-  Node *np;
-
-  switch (rtok)
-  {
-  case CHAR:
-    np = op2 (CHAR, nullproc, NIL, itonp (rlxval));
-    rtok = relex ();
-    return unary (np);
-
-  case ALL:
-    rtok = relex ();
-    return unary (op2 (ALL, nullproc, NIL, NIL));
-
-  case EMPTYRE:
-    rtok = relex ();
-    return unary (op2 (ALL, nullproc, NIL, NIL));
-
-  case DOT:
-    rtok = relex ();
-    return unary (op2 (DOT, nullproc, NIL, NIL));
-
-  case CCL:
-    np = op2 (CCL, nullproc, NIL, (Node*)cclenter ((char *)rlxstr));
-    rtok = relex ();
-    return unary (np);
-
-  case NCCL:
-    np = op2 (NCCL, nullproc, NIL, (Node *)cclenter ((char *)rlxstr));
-    rtok = relex ();
-    return unary (np);
-
-  case '^':
-    rtok = relex ();
-    return unary (op2 (CHAR, nullproc, NIL, itonp (HAT)));
-
-  case '$':
-    rtok = relex ();
-    return unary (op2 (CHAR, nullproc, NIL, NIL));
-
-  case '(':
-    rtok = relex ();
-    if (rtok == ')')
-    {  /* special pleading for () */
-      rtok = relex ();
-      return unary (op2 (CCL, nullproc, NIL, (Node *)tostring ("")));
-    }
-    np = regexp ();
-    if (rtok == ')')
-    {
-      rtok = relex ();
-      return unary (np);
-    }
+  else if (a[2]->ntype == NVALUE && a[2]->to_cell ()->isregex ())
+  { // precompiled regexp
+    if (strlen (a[2]->to_cell ()->nval))
+      re = a[2]->to_cell ()->re;
     else
-      FATAL (AWK_ERR_SYNTAX, "syntax error in regular expression %s at %s", lastre, prestr);
-  default:
-    FATAL (AWK_ERR_SYNTAX, "illegal primary in regular expression %s at %s", lastre, prestr);
+    {
+      /* split(s, a, //); have to arrange that it looks like empty sep */
+      fs = "";
+    }
   }
-  return 0;  /*NOTREACHED*/
-}
+  else
+  {  /* split(str,arr,"string") */
+    x = execute (a[2]);
+    fs = x->getsval ();
+    if (strlen (fs) > 1)
+    {
+      re = new regex (fs, regex_constants::awk);
+      temp_re = true;
+    }
+  }
 
-Node *concat (Node *np)
-{
-  switch (rtok)
+  int n = 0;
+  char num[10], temp;
+  if (re)
   {
-  case CHAR: case DOT: case ALL: case EMPTYRE: case CCL: case NCCL: case '$': case '(':
-    return concat (op2 (CAT, cat, np, primary ()));
-  }
-  return np;
-}
+    cmatch m;
 
-Node *alt (Node *np)
-{
-  if (rtok == OR)
+    while (regex_search (s, m, *re))
+    {
+      n++;
+      sprintf (num, "%d", n);
+      char* patbeg = s + m.position ();
+      temp = *patbeg;
+      *patbeg = '\0';
+      if (is_number (s))
+        ap->arrval->setsym (num, s, atof (s), STR | NUM);
+      else
+        ap->arrval->setsym (num, s, 0.0, STR);
+      *patbeg = temp;
+      s = patbeg + m.length ();
+    }
+  }
+  else
   {
-    rtok = relex ();
-    return alt (op2 (OR, nullproc, np, concat (primary ())));
+    char sep = *fs;
+    if (sep == ' ')
+    {
+      for (n = 0; ; )
+      {
+        while (*s == ' ' || *s == '\t' || *s == '\n')
+          s++;
+        if (*s == 0)
+          break;
+        n++;
+        const char* t = s;
+        do
+          s++;
+        while (*s != ' ' && *s != '\t' && *s != '\n' && *s != '\0');
+        temp = *s;
+        *s = '\0';
+        sprintf (num, "%d", n);
+        if (is_number (t))
+          ap->arrval->setsym (num, t, atof (t), STR | NUM);
+        else
+          ap->arrval->setsym (num, t, 0.0, STR);
+        *s = temp;
+        if (*s != 0)
+          s++;
+      }
+    }
+    else if (sep == 0)
+    {  /* new: split(s, a, "") => 1 char/elem */
+      for (n = 0; *s != 0; s++)
+      {
+        char buf[2];
+        n++;
+        sprintf (num, "%d", n);
+        buf[0] = *s;
+        buf[1] = 0;
+        if (isdigit (buf[0]))
+          ap->arrval->setsym (num, buf, atof (buf), STR | NUM);
+        else
+          ap->arrval->setsym (num, buf, 0.0, STR);
+      }
+    }
+    else if (*s != 0)
+    {
+      for (;;)
+      {
+        n++;
+        const char *t = s;
+        while (*s != sep && *s != '\n' && *s != '\0')
+          s++;
+        temp = *s;
+        *s = '\0';
+        sprintf (num, "%d", n);
+        if (is_number (t))
+          ap->arrval->setsym (num, t, atof (t), STR | NUM);
+        else
+          ap->arrval->setsym (num, t, 0.0, STR);
+        *s = temp;
+        if (*s++ == 0)
+          break;
+      }
+    }
   }
-  return np;
+  delete orig_s;
+
+  tempfree (ap);
+  tempfree (y);
+
+  if (temp_re)
+    delete re;
+
+  x = new Cell (Cell::type::OCELL, Cell::subtype::CTEMP, 0, 0, 0., 0);
+  x->flags = NUM;
+  x->fval = n;
+  return x;
 }
 
-Node *unary (Node *np)
-{
-  switch (rtok)
-  {
-  case STAR:
-    rtok = relex ();
-    return unary (op2 (STAR, nullproc, np, NIL));
-
-  case PLUS:
-    rtok = relex ();
-    return unary (op2 (PLUS, nullproc, np, NIL));
-
-  case QUEST:
-    rtok = relex ();
-    return unary (op2 (QUEST, nullproc, np, NIL));
-
-  default:
-    return np;
-  }
-}
+extern Cell *True, *False;
 
 /*
- * Character class definitions conformant to the POSIX locale as
- * defined in IEEE P1003.1 draft 7 of June 2001, assuming the source
- * and operating character sets are both ASCII (ISO646) or supersets
- * thereof.
- *
- * Note that to avoid overflowing the temporary buffer used in
- * relex(), the expanded character class (prior to range expansion)
- * must be less than twice the size of their full name.
- */
-
- /* Because isblank doesn't show up in any of the header files on any
-  * system i use, it's defined here.  if some other locale has a richer
-  * definition of "blank", define HAS_ISBLANK and provide your own
-  * version.
-  * the parentheses here are an attempt to find a path through the maze
-  * of macro definition and/or function and/or version provided.  thanks
-  * to nelson beebe for the suggestion; let's see if it works everywhere.
-  */
-
-  /* #define HAS_ISBLANK */
-#ifndef HAS_ISBLANK
-
-int (xisblank) (int c)
+  Change replacement string for sub and gsub replacing the AWK substitution
+  operator (&) with std::regex one ($&).
+*/
+void format_repl (string& s)
 {
-  return c == ' ' || c == '\t';
+  string out;
+  for (auto pc = s.begin (); pc != s.end (); pc++)
+  {
+    if (*pc == '\\')
+    {
+      if (++pc == s.end ())
+        break;
+    }
+    else if (*pc == '&')
+      out.push_back ('$');
+    out.push_back (*pc);
+  }
+  s = out;
 }
 
-#endif
 
-struct charclass {
-  const char *cc_name;
-  int cc_namelen;
-  int (*cc_func)(int);
-} charclasses[] = {
-  { "alnum",  5,  isalnum },
-  { "alpha",  5,  isalpha },
-#ifndef HAS_ISBLANK
-  { "blank",  5,  xisblank },
-#else
-  { "blank",  5,  isblank },
-#endif
-  { "cntrl",  5,  iscntrl },
-  { "digit",  5,  isdigit },
-  { "graph",  5,  isgraph },
-  { "lower",  5,  islower },
-  { "print",  5,  isprint },
-  { "punct",  5,  ispunct },
-  { "space",  5,  isspace },
-  { "upper",  5,  isupper },
-  { "xdigit",  6,  isxdigit },
-  { NULL,    0,  NULL },
-};
-
-/// Lexical analyzer for reparse
-int relex (void)
+/// substitute command
+/// a[0] = regexp string
+/// a[1] = compiled regexp
+/// a[2] = replacement string
+/// a[3] = target string
+Cell* sub (const Node::Arguments& a, int)
 {
-  int c;
-  size_t n;
-  int cflag;
-  static unsigned char *buf = 0;
-  static size_t bufsz = 100;
-  unsigned char *bp;
-  struct charclass *cc;
-  int i;
-
-  switch (c = *prestr++)
-  {
-  case '|': return OR;
-  case '*': return STAR;
-  case '+': return PLUS;
-  case '?': return QUEST;
-  case '.': return DOT;
-  case '\0': prestr--; return '\0';
-  case '^':
-  case '$':
-  case '(':
-  case ')':
-    return c;
-  case '\\':
-    rlxval = quoted (&prestr);
-    return CHAR;
-  default:
-    rlxval = c;
-    return CHAR;
-  case '[':
-    if (buf == 0)
-      buf = new unsigned char[bufsz];
-    bp = buf;
-    if (*prestr == '^')
-    {
-      cflag = 1;
-      prestr++;
-    }
-    else
-      cflag = 0;
-    n = 2 * strlen ((const char *)prestr) + 1;
-    adjbuf ((char**)&buf, &bufsz, n, 0, (char**)&bp);
-    for (; ; )
-    {
-      if ((c = *prestr++) == '\\')
-      {
-        *bp++ = '\\';
-        if ((c = *prestr++) == '\0')
-          FATAL (AWK_ERR_SYNTAX, "nonterminated character class %.20s...", lastre);
-        *bp++ = c;
-        /* } else if (c == '\n') { */
-        /*   FATAL("newline in character class %.20s...", lastre); */
-      }
-      else if (c == '[' && *prestr == ':')
-      {
-        /* POSIX char class names, Dag-Erling Smorgrav, des@ofug.org */
-        for (cc = charclasses; cc->cc_name; cc++)
-          if (strncmp ((const char *)prestr + 1, (const char *)cc->cc_name, cc->cc_namelen) == 0)
-            break;
-        if (cc->cc_name != NULL && prestr[1 + cc->cc_namelen] == ':' &&
-          prestr[2 + cc->cc_namelen] == ']')
-        {
-          prestr += cc->cc_namelen + 3;
-          for (i = 0; i < NCHARS; i++)
-          {
-            adjbuf ((char**)&buf, &bufsz, bp - buf + 1, 100, (char**)&bp);
-            if (cc->cc_func (i))
-            {
-              *bp++ = i;
-              n++;
-            }
-          }
-        }
-        else
-          *bp++ = c;
-      }
-      else if (c == '\0')
-        FATAL (AWK_ERR_SYNTAX, "nonterminated character class %.20s", lastre);
-      else if (bp == buf)
-      {  /* 1st char is special */
-        *bp++ = c;
-      }
-      else if (c == ']')
-      {
-        *bp++ = 0;
-        rlxstr = (unsigned char *)tostring ((char *)buf);
-        if (cflag == 0)
-          return CCL;
-        else
-          return NCCL;
-      }
-      else
-        *bp++ = c;
-    }
-  }
-}
-
-int cgoto (fa *f, int s, int c)
-{
-  int i, j, k;
-  int *p, *q;
-
-  assert (c == HAT || c < NCHARS);
-  while (f->accept >= maxsetvec)
-  {  /* guessing here! */
-    maxsetvec *= 4;
-    setvec = (int *)realloc (setvec, maxsetvec * sizeof (int));
-    tmpset = (int *)realloc (tmpset, maxsetvec * sizeof (int));
-    if (setvec == 0 || tmpset == 0)
-      overflo ("out of space in cgoto()");
-  }
-  for (i = 0; i <= f->accept; i++)
-    setvec[i] = 0;
-  setcnt = 0;
-  /* compute positions of gototab[s,c] into setvec */
-  p = f->posns[s];
-  for (i = 1; i <= *p; i++)
-  {
-    if ((k = f->re[p[i]].ltype) != FINAL)
-    {
-      if ((k == CHAR && c == ptoi (f->re[p[i]].lval.np))
-        || (k == DOT && c != 0 && c != HAT)
-        || (k == ALL && c != 0)
-        || (k == EMPTYRE && c != 0)
-        || (k == CCL && member (c, (char *)f->re[p[i]].lval.up))
-        || (k == NCCL && !member (c, (char *)f->re[p[i]].lval.up) && c != 0 && c != HAT)) {
-        q = f->re[p[i]].lfollow;
-        for (j = 1; j <= *q; j++)
-        {
-          if (q[j] >= maxsetvec)
-          {
-            maxsetvec *= 4;
-            setvec = (int *)realloc (setvec, maxsetvec * sizeof (int));
-            tmpset = (int *)realloc (tmpset, maxsetvec * sizeof (int));
-            if (setvec == 0 || tmpset == 0)
-              overflo ("cgoto overflow");
-          }
-          if (setvec[q[j]] == 0)
-          {
-            setcnt++;
-            setvec[q[j]] = 1;
-          }
-        }
-      }
-    }
-  }
-  /* determine if setvec is a previous state */
-  tmpset[0] = setcnt;
-  j = 1;
-  for (i = f->accept; i >= 0; i--)
-    if (setvec[i])
-    {
-      tmpset[j++] = i;
-    }
-  /* tmpset == previous state? */
-  for (i = 1; i <= f->curstat; i++)
-  {
-    p = f->posns[i];
-    if ((k = tmpset[0]) != p[0])
-      goto different;
-    for (j = 1; j <= k; j++)
-      if (tmpset[j] != p[j])
-        goto different;
-    /* setvec is state i */
-    f->gototab[s][c] = i;
-    return i;
-  different:;
-  }
-
-  /* add tmpset to current set of states */
-  if (f->curstat >= NSTATES - 1)
-  {
-    f->curstat = 2;
-    f->reset = 1;
-    for (i = 2; i < NSTATES; i++)
-      xfree (f->posns[i]);
-  }
+  Cell* result = False;
+  Cell* y;
+  Cell *x = execute (a[3]);  /* target string */
+  regex* re;
+  bool temp_re = false;
+  if (!a[0])  // a[1] is already-compiled regexp
+    re = a[1]->to_cell ()->re;
   else
-    ++(f->curstat);
-  for (i = 0; i < NCHARS; i++)
-    f->gototab[f->curstat][i] = 0;
-  xfree (f->posns[f->curstat]);
-  if ((p = (int *)calloc (1, (setcnt + 1) * sizeof (int))) == NULL)
-    overflo ("out of space in cgoto");
-
-  f->posns[f->curstat] = p;
-  f->gototab[s][c] = f->curstat;
-  for (i = 0; i <= setcnt; i++)
-    p[i] = tmpset[i];
-  if (setvec[f->accept])
-    f->out[f->curstat] = 1;
-  else
-    f->out[f->curstat] = 0;
-  return f->curstat;
+  {
+    y = execute (a[0]);
+    re = new regex (y->sval, regex_constants::awk);
+    temp_re = true;
+    tempfree (y);
+  }
+  y = execute (a[2]);  /* replacement string */
+  string repl (y->sval);
+  string target (x->getsval ());
+  format_repl (repl);
+  smatch m;
+  if (regex_search (target, m, *re))
+  {
+    target = regex_replace (target, *re, repl, regex_constants::format_first_only);
+    x->setsval (target.c_str ());
+    result = True;
+  }
+  tempfree (x);
+  tempfree (y);
+  return result;
 }
 
-/// Free a finite automaton
-void freefa (fa *f)
+/// global substitute
+/// a[0] = regexp string
+/// a[1] = compiled regexp
+/// a[2] = replacement string
+/// a[3] = target string
+Cell* gsub (const Node::Arguments& a, int)
 {
-  int i;
+  int num = 0;
 
-  if (f == NULL)
-    return;
-  for (i = 0; i <= f->curstat; i++)
-    xfree (f->posns[i]);
-  for (i = 0; i <= f->accept; i++)
+  Cell* y;
+  Cell* x = execute (a[3]);  /* target string */
+  regex* re;
+  bool temp_re = false;
+  if (!a[0])  // a[1] is already-compiled regexp
+    re = a[1]->to_cell ()->re;
+  else
   {
-    xfree (f->re[i].lfollow);
-    if (f->re[i].ltype == CCL || f->re[i].ltype == NCCL)
-      xfree ((f->re[i].lval.np));
+    y = execute (a[0]);
+    re = new regex (y->sval, regex_constants::awk);
+    temp_re = true;
+    tempfree (y);
   }
-  xfree (f->restr);
-  xfree (f);
+  y = execute (a[2]);  /* replacement string */
+  string repl (y->sval);
+  string target (x->getsval ());
+  format_repl (repl);
+  smatch m;
+  string::const_iterator i = target.begin ();
+  string result;
+  while (regex_search (i, target.cend (), m, *re))
+  {
+    result += m.prefix ();
+    result += m.format (repl);
+    i += m.position () + m.length();
+    num++;
+  }
+  result.append (i, target.cend ());
+  x->setsval (result.c_str ());
+  tempfree (x);
+  tempfree (y);
+
+  x = new Cell (Cell::type::OCELL, Cell::subtype::CTEMP, 0, 0, 0., 0);
+  x->flags = NUM;
+  x->fval = num;
+  return x;
 }

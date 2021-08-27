@@ -28,8 +28,10 @@ THIS SOFTWARE.
 #include <ctype.h>
 #include "awk.h"
 #include "ytab.h"
+#include "proto.h"
 #include <awklib/err.h>
 
+extern Interpreter* interp;
 extern YYSTYPE  yylval;
 extern int  infunc;
 
@@ -97,9 +99,11 @@ Keyword keywords[] = {  /* keep sorted: binary searched */
 
 #ifdef NDEBUG
 #define  RET(x)  { return x; }
+#define RETI(x)  { return x; }
 #else
 const char *tokname (int tok);
 #define  RET(x)  { if(dbg>1) errprintf("lex - " #x " %s\n", tokname(x)); return x; }
+#define  RETI(x)  { if(dbg>1) errprintf("lex - #%d %s\n", x, tokname(x)); return x; }
 #endif
 
 int peek (void)
@@ -188,8 +192,9 @@ int  sc = 0;  /* 1 => return a } right now */
 int  reg = 0;  /* 1 => return a REGEXPR now */
 
 /// Lexical analyzer
-int yylex (void)
+int yylex (void* ii)
 {
+  Interpreter* interp = (Interpreter*)ii;
   int c;
   if (lexbuf == 0) //should have been allocated in yyinit
     FATAL (AWK_ERR_NOMEM, "out of space in yylex");
@@ -221,6 +226,7 @@ int yylex (void)
     switch (c)
     {
     case '\n':          /* {EOL} */
+      interp->lineno++;
       RET (NL)
 
     case '\r':          /* assume \n is coming */
@@ -239,14 +245,17 @@ int yylex (void)
 
     case '\\':
       if (peek () == '\n')
+      {
         input ();
+        interp->lineno++;
+      }
       else if (peek () == '\r')
       {
         input (); input ();  /* \n */
         interp->lineno++;
       }
       else
-        RET (c)
+        RETI (c)
       break;
 
     case '&':
@@ -438,7 +447,7 @@ int yylex (void)
       return string ();  /* BUG: should be like tran.c ? */
 
     default:
-      RET (c)
+      RETI (c)
     }
   }
 }
@@ -577,7 +586,7 @@ int word (char *w)
       RET (VARNF)
 
     default:
-      RET (kp->type)
+      RETI (kp->type)
     }
   }
   c = peek ();  /* look for '(' */

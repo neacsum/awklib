@@ -49,6 +49,7 @@ static const char  *version =
 #include "ytab.h"
 #include <awklib/awk.h>
 #include <awklib/err.h>
+#include "proto.h"
 
 #define  MAX_PFILE  20  /* max number of -f's */
 
@@ -114,7 +115,6 @@ int awk_setprog (AWKINTERP *pinter, const char *prog)
 
     delete interp->lexprog;
     interp->lexptr = interp->lexprog = tostring (prog);
-    return 1;
   }
   catch (awk_exception& x) {
     return x.err;
@@ -122,6 +122,9 @@ int awk_setprog (AWKINTERP *pinter, const char *prog)
   return 1;
 }
 
+/*
+  Add a file as AWK program
+*/
 int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
 {
   std::lock_guard<std::mutex> l (awk_in_use);
@@ -142,8 +145,8 @@ int awk_addprogfile (AWKINTERP *pinter, const char *progfile)
       interp->progs = new char*;
     interp->progs[interp->nprog++] = tostring (progfile);
   }
-  catch (awk_exception&) {
-    return 0;
+  catch (awk_exception& x) {
+    return x.err;
   }
   return 1;
 }
@@ -173,35 +176,35 @@ int awk_addarg (AWKINTERP *pinter, const char *arg)
 int awk_compile (AWKINTERP *pinter)
 {
   std::lock_guard<std::mutex> l (awk_in_use);
-  interp = (Interpreter*)pinter;
+  Interpreter *ii = (Interpreter*)pinter;
   try {
-    if (interp->status != AWKS_INIT)
-      FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
-    if (!interp->lexprog && !interp->nprog)
+    if (ii->status != AWKS_INIT)
+      FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", ii->status);
+    if (!ii->lexprog && !interp->nprog)
       FATAL (AWK_ERR_NOPROG, "No program file");
-
+    interp = ii;
     setlocale (LC_CTYPE, "");
     setlocale (LC_NUMERIC, "C"); /* for parsing cmdline & prog */
 
     // (Re)init all parsing variables
     yyinit ();
     yyin = NULL;
-    interp->status = AWKS_COMPILING;
-    yyparse ();
+    ii->status = AWKS_COMPILING;
+    yyparse (ii);
     setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
-    if (interp->err == 0)
+    if (ii->err == 0)
     {
 #ifndef NDEBUG
       if (dbg > 2)
         print_tree (winner, 1);
 #endif
-      interp->status = AWKS_COMPILED;
-      interp->prog_root = winner;
+      ii->status = AWKS_COMPILED;
+      ii->prog_root = winner;
       return 1;
     }
   }
   catch (awk_exception&) {
-    interp->status = AWKS_DONE;
+    ii->status = AWKS_DONE;
   }
 
   return 0;
@@ -225,6 +228,7 @@ int awk_exec (AWKINTERP *pinter)
   }
   catch (awk_exception&) {
     interp->status = AWKS_DONE;
+    interp->closeall ();
   }
   return interp->err;
 }
@@ -233,36 +237,37 @@ int awk_exec (AWKINTERP *pinter)
 int awk_run (AWKINTERP* pinter, const char *progfile)
 {
   std::lock_guard<std::mutex> l (awk_in_use);
-  interp = (Interpreter*)pinter;
+  Interpreter *ii = (Interpreter*)pinter;
   try {
-    if (interp->status != AWKS_INIT)
-      FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", interp->status);
-    interp->lexptr = interp->lexprog = tostring (progfile);
+    if (ii->status != AWKS_INIT)
+      FATAL (AWK_ERR_BADSTAT, "Bad interpreter status (%d)", ii->status);
+    ii->lexptr = ii->lexprog = tostring (progfile);
     setlocale (LC_CTYPE, "");
     setlocale (LC_NUMERIC, "C"); /* for parsing cmdline & prog */
-
+    interp = ii;
     // (Re)init all parsing variables
     yyinit ();
     yyin = NULL;
-    interp->status = AWKS_COMPILING;
-    yyparse ();
+    ii->status = AWKS_COMPILING;
+    yyparse (ii);
 
     setlocale (LC_NUMERIC, ""); /* back to whatever it is locally */
-    if (interp->err == 0)
+    if (ii->err == 0)
     {
 #ifndef NDEBUG
       if (dbg > 2)
         print_tree (winner, 1);
 #endif
-      interp->prog_root = winner;
-      interp->run ();
+      ii->prog_root = winner;
+      ii->run ();
     }
   }
   catch (awk_exception&)
   {
-    interp->status = AWKS_DONE;
+    ii->status = AWKS_DONE;
+    ii->closeall ();
   }
-  return interp->err;
+  return ii->err;
 }
 
 /// Release all resources claimed by AWK interpreter
@@ -564,13 +569,14 @@ void print_cell (Cell *c, int indent)
     "0", "OCELL", "OBOOL", "OJUMP" };
 
   static const char *csub_str[] = {
-    "CNONE", "CFLD", "CVAR", "CNAME", "CTEMP", "CCON", "CCOPY", "CFREE", "8", "9", "10",
+    "CNONE", "CFLD", "CVAR", "CNAME", "CTEMP", "CCON", "CCOPY", "CFREE", "CARR", "9", "10",
     "BTRUE", "BFALSE", "13", "14", "15", "16", "17", "18", "19", "20",
     "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE" };
 
   dprintf ("%*cCell 0x%p ", indent, ' ', c);
   dprintf (" %s %s Flags: %s", ctype_str[(int)c->ctype], csub_str[(int)c->csub], flags2str(c->flags));
-  dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
+  if (!c->isarr() && !c->isfcn() && !c->isregex())
+    dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
   if (c->nval)
     dprintf (" Name: %s", c->nval);
   dprintf (" Next: %p\n", c->cnext);
@@ -580,7 +586,7 @@ void print_tree (Node *n, int indent)
 {
   int i;
   ptrdiff_t nn = (ptrdiff_t)n;
-  errprintf ("%*cNode 0x%p %s", indent, ' ', n, (nn < LASTTOKEN)? tokname((int)nn) : tokname (n->nobj));
+  errprintf ("%*cNode 0x%p %s", indent, ' ', n, (nn < LASTTOKEN)? tokname((int)nn) : tokname (n->tokid));
   if (nn < LASTTOKEN)
   {
     errprintf ("- FLAG\n");
@@ -590,21 +596,21 @@ void print_tree (Node *n, int indent)
   do
   {
     errprintf (" type %s", n->ntype == NVALUE ? "value" : n->ntype == NSTAT ? "statement" : "expression");
-    errprintf (" %d arguments\n", n->args);
+    errprintf (" %d arguments\n", n->arg.size());
     indent++;
-    for (i = 0; i < n->args; i++)
+    for (i = 0; i < n->arg.size(); i++)
     {
-      errprintf ("%*cArg %d of %s\n", indent, ' ', i, tokname(n->nobj));
+      errprintf ("%*cArg %d of %s\n", indent, ' ', i, tokname(n->tokid));
       if (n->ntype == NVALUE)
-        print_cell ((Cell *)n->narg[i], indent + 1);
-      else if (n->narg[i])
-        print_tree (n->narg[i], indent + 1);
+        print_cell (n->to_cell(), indent + 1);
+      else if (n->arg[i])
+        print_tree (n->arg[i].get(), indent + 1);
       else
         errprintf ("%*cNull arg\n", indent + 1, ' ');
     }
     indent--;
     if ((n = n->nnext) != NULL)
-      errprintf ("%*cNext node 0x%p %s", indent, ' ', n, tokname (n->nobj));
+      errprintf ("%*cNext node 0x%p %s", indent, ' ', n, tokname (n->tokid));
   } while (n);
 }
 #endif
