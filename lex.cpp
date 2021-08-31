@@ -217,8 +217,7 @@ int yylex (void* ii)
       return word (lexbuf);
     if (isdigit (c))
     {
-      yylval.cp = interp->symtab->setsym (lexbuf, lexbuf, atof (lexbuf), NUM | STR);
-      yylval.cp->csub = Cell::subtype::CCON;
+      yylval.cp = interp->symtab->setsym (lexbuf, lexbuf, atof (lexbuf), (NUM | STR | CONST));
       RET (NUMBER)
     }
 
@@ -532,7 +531,7 @@ int string (void)
   *bp = 0;
   s = tostring (buf);
   *bp++ = ' '; *bp++ = 0;
-  yylval.cp = interp->symtab->setsym (buf, s, 0.0, STR);
+  yylval.cp = interp->symtab->setsym (buf, s, 0.0, (STR|CONST));
   delete s;
   RET (STRING)
 }
@@ -592,7 +591,8 @@ int word (char *w)
   c = peek ();  /* look for '(' */
   if (c == '(')
   {
-    yylval.cp = interp->symtab->setsym (w, NULL, 0.0, 0, Cell::subtype::CFUNC);
+    yylval.cp = interp->symtab->setsym (w, NULL, 0.0, 0);
+    yylval.cp->ctype = Cell::type::CFUNC;
     RET (CALL)
   }
   else if (infunc && (n = isarg (w)) >= 0)

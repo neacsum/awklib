@@ -212,12 +212,12 @@ Node *op4 (int tokid, pfun fn, Node *arg1, Node *arg2, Node *arg3, Node *arg4, i
   return x;
 }
 
-Node *celltonode (Cell *a, Cell::subtype csub)
+Node *celltonode (Cell *a, Cell::type t, int flags)
 {
   Node *x;
 
-  a->ctype = Cell::type::OCELL;
-  a->csub = csub;
+  a->ctype = t;
+  a->flags |= flags;
   x = new Node (0, nullproc, 0, (Node *)a);
   x->ntype = NVALUE;
   return x;
@@ -225,12 +225,12 @@ Node *celltonode (Cell *a, Cell::subtype csub)
 
 Node *rectonode ()  /* make $0 into a Node */
 {
-  return op1 (INDIRECT, indirect, celltonode (literal0, Cell::subtype::CCON));
+  return op1 (INDIRECT, indirect, celltonode (literal0));
 }
 
 Node* nullnode ()  /* zero&null, converted into a node for comparisons */
 {
-  return celltonode (literal_null, Cell::subtype::CCON);
+  return celltonode (literal_null);
 }
 
 /*TODO: Check if could use NF as an array. That would be bad!! */
@@ -244,9 +244,7 @@ Node* makearr (Node* p)
       SYNTAX ("%s is a function, not an array", cp->nval);
     else if (!cp->isarr ())
     {
-      delete cp->sval;
-      cp->arrval = new Array (NSYMTAB);
-      cp->csub = Cell::subtype::CARR;
+      cp->makearray();
       dprintf ("%s is now an array\n", cp->nval);
     }
   }
@@ -291,17 +289,17 @@ void defn (Cell *v, Node *vl, Node *st)  /* turn on FCN bit in definition, */
 
   if (v->isarr ())
   {
-    SYNTAX ("`%s' is an array name and a function name", v->nval);
+    SYNTAX ("`%s' is an array name and a function name", v->nval.c_str());
     return;
   }
-  if (isarg (v->nval) != -1)
+  if (isarg (v->nval.c_str()) != -1)
   {
-    SYNTAX ("`%s' is both function name and argument name", v->nval);
+    SYNTAX ("`%s' is both function name and argument name", v->nval.c_str());
     return;
   }
 
-  v->csub = Cell::subtype::CFUNC;
-  v->sval = (char *)st;
+  v->ctype = Cell::type::CFUNC;
+  v->funptr = st;
   n = 0;  /* count arguments */
   for (p = vl; p; p = p->nnext)
     n++;
@@ -316,7 +314,7 @@ int isarg (const char *s)    /* is s in argument list for current function? */
   int n;
 
   for (n = 0; p != 0; p = p->nnext, n++)
-    if (strcmp (((Cell *)(p->arg[0].get()))->nval, s) == 0)
+    if (strcmp (((Cell *)(p->arg[0].get()))->nval.c_str(), s) == 0)
       return n;
   return -1;
 }

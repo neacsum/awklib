@@ -43,7 +43,7 @@ Node    *endloc;
 Node    *winner;
 int     infunc;         /* = 1 if in arglist or body of func */
 int     inloop;         /* = 1 if in while, for, do */
-char    *curfname;      /* current function name */
+std::string curfname;      /* current function name */
 Node    *arglist;       /* list of args for current function */
 char*   lexbuf;         /* buffer for lexical analyzer */
 size_t  lexbuf_sz;      /* size of lex buffer */
@@ -206,7 +206,7 @@ pa_stat:
     | XEND lbrace stmtlist '}'
         { endloc = linkum(endloc, $3); $$ = 0; }
     | FUNC funcname '(' varlist rparen {infunc++;} lbrace stmtlist '}'
-        { infunc--; curfname=0; defn((Cell *)$2, $4, $8); $$ = 0; }
+        { infunc--; curfname.clear (); defn((Cell *)$2, $4, $8); $$ = 0; }
     ;
 
 pa_stats:
@@ -440,9 +440,9 @@ term:
     | BLTIN
         { $$ = op1(BLTIN, bltin, rectonode(), $1); }
     | CALL '(' ')'
-        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CFUNC), NIL); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::type::CFUNC), NIL); }
     | CALL '(' patlist ')'
-        { $$ = op2(CALL, call, celltonode($1,Cell::subtype::CFUNC), $3); }
+        { $$ = op2(CALL, call, celltonode($1,Cell::type::CFUNC), $3); }
     | CLOSE term
         { $$ = op1(CLOSE, closefile, $2); }
     | DECR var
@@ -476,7 +476,7 @@ term:
           else
             $$ = op3(MATCHFCN, matchfun, $3, NIL, $5); }
     | NUMBER
-        { $$ = celltonode($1, Cell::subtype::CCON); }
+        { $$ = celltonode($1); }
     | SPLIT '(' pattern comma varname comma pattern ')'     /* string */
         { $$ = op3(SPLIT, split, $3, makearr($5), $7, STRING); }
     | SPLIT '(' pattern comma varname comma reg_expr ')'    /* const /regexp/ */
@@ -486,7 +486,7 @@ term:
     | SPRINTF '(' patlist ')'
         { $$ = op1($1, awksprintf, $3); }
     | STRING
-        { $$ = celltonode($1, Cell::subtype::CCON); }
+        { $$ = celltonode($1); }
     | subop '(' reg_expr comma pattern ')'
         { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa($3, 1), $5, rectonode()); }
     | subop '(' pattern comma pattern ')'
@@ -513,7 +513,7 @@ var:
     | varname '[' patlist ']'
         { $$ = op2(ARRAY, array, makearr($1), $3); }
     | IVAR
-        { $$ = op1(INDIRECT, indirect, celltonode($1, Cell::subtype::CVAR)); }
+        { $$ = op1(INDIRECT, indirect, celltonode($1)); }
     | INDIRECT term
         { $$ = op1(INDIRECT, indirect, $2); }
     ;    
@@ -521,19 +521,19 @@ var:
 varlist:
       /* nothing */ { arglist = $$ = 0; }
     | VAR
-        { arglist = $$ = celltonode($1,Cell::subtype::CVAR); }
+        { arglist = $$ = celltonode($1); }
     | varlist comma VAR
         { checkdup($1, $3);
-          arglist = $$ = linkum($1,celltonode($3,Cell::subtype::CVAR)); }
+          arglist = $$ = linkum($1,celltonode($3)); }
     ;
 
 varname:
       VAR
-        { $$ = celltonode($1, Cell::subtype::CVAR); }
+        { $$ = celltonode($1); }
     | ARG
         { $$ = op1(ARG, arg, nullnode(), $1); }
     | VARNF
-        { $$ = op1(VARNF, getnf, celltonode($1, Cell::subtype::CVAR)); }
+        { $$ = op1(VARNF, getnf, celltonode($1)); }
     ;
 
 while:
@@ -547,19 +547,19 @@ void setfname(Cell *p)
 {
   if (p->isarr())
     SYNTAX("%s is an array, not a function", p->nval);
-  else if (p->isfcn() && p->sval)
+  else if (p->isfcn() && p->funptr)
     SYNTAX("you can't define function %s more than once", p->nval);
   curfname = p->nval;
 }
 
 int constnode(Node *p)
 {
-  return p->isvalue() && p->to_cell()->csub == Cell::subtype::CCON;
+  return p->isvalue() && (p->to_cell()->flags & CONST) != 0;
 }
 
-char *strnode(Node *p)
+const char *strnode(Node *p)
 {
-  return p->to_cell()->sval;
+  return p->to_cell()->sval.c_str();
 }
 
 Node *notnull(Node *n)
@@ -575,10 +575,10 @@ Node *notnull(Node *n)
 
 void checkdup(Node *vl, Cell *cp)    /* check if name already in list */
 {
-  char *s = cp->nval;
+  auto s = cp->nval;
   for ( ; vl; vl = vl->nnext) {
-    if (strcmp(s, vl->to_cell()->nval) == 0) {
-      SYNTAX("duplicate argument %s", s);
+    if (s == vl->to_cell()->nval) {
+      SYNTAX("duplicate argument %s", s.c_str());
       break;
     }
   }
@@ -588,7 +588,7 @@ void yyinit (void)
 {
   beginloc = endloc = winner = 0;
   infunc = inloop = 0;
-  curfname = 0;
+  curfname.clear ();
   arglist = 0;
   lexbuf_sz = 256;
   lexbuf = new char[lexbuf_sz];

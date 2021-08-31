@@ -57,7 +57,7 @@ void funnyvar (Cell *vp, const char *rw)
   if (vp->isfcn())
     FATAL (AWK_ERR_ARG, "can't %s %s; it's a function.", rw, vp->nval);
   WARNING ("funny variable %s %p: n=%s s=\"%s\" f=%g t=0x%x",
-    rw, vp, vp->nval, vp->sval, vp->fval, vp->flags);
+    rw, vp, vp->nval, vp->sval.c_str(), vp->fval, vp->flags);
 }
 
 /// Make a copy of string s
@@ -136,6 +136,9 @@ const char *flags2str (int flags)
     { "STR", STR },
     { "CONVC", CONVC },
     { "PREDEF", PREDEF},
+    { "CONST", CONST},
+    { "ARR", ARR},
+    { "REGEX", REGEX},
     { NULL, 0 }
   };
   static char buf[100];

@@ -3,22 +3,24 @@
 #include <stdlib.h>
 #include <math.h>
 
-void print_cell (Cell* c, int indent);
+using namespace std;
+
 extern Interpreter* interp;
 int cell_count = 0;
+std::vector<Cell*> all_cells;
 
-Cell::Cell (type t, subtype s, const char* n, void* v, Awkfloat f, unsigned char flags)
+Cell::Cell (const char* n, type t, unsigned char flags, Awkfloat f)
   : ctype{ t }
-  , csub{ s }
-  , nval{ tostring (n) }
-  , sval{ (char*)v }
+  , nval{ n? n : string() }
   , flags{ flags }
+  , funptr{ nullptr }
   , fval{ f }
   , fmt{ 0 }
   , cnext{ 0 }
 {
 #ifndef NDEBUG
   dprintf ("Allocated cells = %d\n", id = ++cell_count);
+  all_cells.push_back (this);
 #endif
 }
 
@@ -26,8 +28,16 @@ Cell::Cell (type t, subtype s, const char* n, void* v, Awkfloat f, unsigned char
 Cell::~Cell ()
 {
 #ifndef NDEBUG
-  dprintf ("Deleting %s(%d)...", nval, id);
+  dprintf ("Deleting %s(%d)...", nval.c_str(), id);
   print_cell (this, 1);
+  for (auto p = all_cells.begin(); p != all_cells.end(); ++p)
+  {
+    if (*p == this)
+    {
+      all_cells.erase (p);
+      break;
+    }
+  }
 #endif
   if (isarr ())
   {
@@ -39,70 +49,59 @@ Cell::~Cell ()
     dprintf ("regex\n");
     delete re;
   }
-  else if (!isfcn ())
-  {
-    dprintf (" freed %s\n", sval);
-    delete sval;
-  }
-  delete nval;
   dprintf ("Remaining cells = %d\n", --cell_count);
 }
 
 ///  Set string val of a Cell
 void Cell::setsval (const char* s)
 {
-  char* t;
   int fldno;
   Awkfloat f;
 
   dprintf ("starting setsval %s = <%s>, t=%s, r,f=%d,%d\n",
-    NN (nval), s, flags2str (flags), interp->donerec, interp->donefld);
+    nval.c_str(), s, flags2str (flags), interp->donerec, interp->donefld);
   if (isarr() || isfcn ())
     funnyvar (this, "assign to");
-  if (csub == subtype::CFLD)
+  if (isfld())
   {
-    interp->donerec = 0;  /* mark $0 invalid */
-    fldno = atoi (nval);
+    interp->donefld = false;  /* mark $1... invalid */
+    fldno = stoi (nval);
     if (fldno > NF)
-      interp->newfld (fldno);
+      interp->setlastfld (fldno);
     dprintf ("setting $%d to %s\n", fldno, s);
   }
-  else if (csub == subtype::CREC)
+  else if (isrec())
   {
-    interp->donefld = 0;  /* mark $1... invalid */
-    interp->donerec = 1;
+    interp->donefld = false;  /* mark $1... invalid */
+    interp->donerec = true;
   }
   else if (this == interp->CELL_OFS)
   {
-    if (interp->donerec == 0)
+    if (!interp->donerec)
       interp->recbld ();
   }
-  t = tostring (s);  /* in case it's self-assign */
-  delete sval;
   flags &= ~(NUM | CONVC);
   flags |= STR;
-  fmt = NULL;
-  sval = t;
-  if (is_number (t))
+  fmt.clear();
+  sval = s;
+  if (is_number (s))
   {
-    fval = atof (t);
+    fval = atof (s);
     flags |= NUM;
   }
   else
-  {
     fval = 0.;
-    flags &= ~NUM;
-  }
-  if (this == interp->CELL_NF)
+
+  if (isnf())
   {
-    interp->donerec = 0;  /* mark $0 invalid */
+    interp->donerec = false;  /* mark $0 invalid */
     f = getfval ();
     interp->setlastfld ((int)f);
     dprintf ("setting NF to %g\n", f);
   }
 
-  dprintf ("setsval %s = <%s>, t=%s r,f=%d,%d\n",
-    NN (nval), t, flags2str (flags), interp->donerec, interp->donefld);
+  dprintf ("setsval %c%s = <%s>, t=%s r,f=%d,%d\n",
+    (isfld () || isrec ()) ? '$' : ' ', nval.c_str (), sval.c_str (), flags2str (flags), interp->donerec, interp->donefld);
 }
 
 ///  Set float val of a Cell
@@ -113,19 +112,18 @@ void Cell::setfval (Awkfloat f)
   f += 0.0;    /* normalize negative zero to positive zero */
   if (isarr() || isfcn())
     funnyvar (this, "assign to");
-  delete sval; /* free any previous string */
-  sval = 0;
+  sval.clear (); /* free any previous string */
   flags &= ~(STR | CONVC); /* mark string invalid */
-  fmt = NULL;
+  fmt.clear ();
   flags |= NUM;  /* mark number ok */
   if (isfld ())
   {
     interp->donerec = false;  /* mark $0 invalid */
-    fldno = atoi (nval);
+    fldno = stoi (nval);
     if (fldno > NF)
-      interp->newfld (fldno);
+      interp->setlastfld (fldno);
   }
-  else if (this == interp->CELL_NF)
+  else if (isnf ())
   {
     interp->donerec = false;  /* mark $0 invalid */
     interp->setlastfld ((int)f);
@@ -133,8 +131,8 @@ void Cell::setfval (Awkfloat f)
   }
   else if (isrec ())
   {
-    interp->donefld = 0;  /* mark $1... invalid */
-    interp->donerec = 1;
+    interp->donefld = false;  /* mark $1... invalid */
+    interp->donerec = true;
   }
   fval = f;
   if (isrec () || isfld ())
@@ -142,10 +140,10 @@ void Cell::setfval (Awkfloat f)
     //fields have always a string value
     fmt = CONVFMT;
     update_str_val ();
-    dprintf ("setfval $%s = %s, t=%s\n", nval, sval, flags2str (flags));
   }
   else
-    dprintf ("setfval %s = %g, t=%s\n", NN (nval), f, flags2str (flags));
+    dprintf ("setfval %c%s = %g, t=%s\n", 
+      (isfld () || isrec ()) ? '$' : ' ', nval.c_str(), f, flags2str (flags));
 }
 
 ///  Get float val of a Cell
@@ -153,15 +151,17 @@ Awkfloat Cell::getfval ()
 {
   if ((flags & (NUM | STR)) == 0)
     funnyvar (this, "read float value of");
-  if (isfld () && !interp->donefld)
+
+  if ((isfld () || isnf ()) && !interp->donefld)
     interp->fldbld ();
   else if (isrec () && !interp->donerec)
     interp->recbld ();
-  if (!(flags & NUM))  /* not a number */
-    fval = sval ? atof (sval) : 0.;  /* best guess */
 
-  dprintf ("getfval %s = %g, t=%s\n",
-    NN (nval), fval, flags2str (flags));
+  if (!(flags & NUM))  /* no numeric value */
+    fval = sval.empty() ? 0. : atof (sval.c_str());  /* best guess */
+
+  dprintf ("getfval %c%s = %g, t=%s\n",
+    (isfld () || isrec ()) ? '$' : ' ', nval.c_str (), fval, flags2str (flags));
   return fval;
 }
 
@@ -171,34 +171,22 @@ const char* Cell::getsval ()
   if ((flags & (NUM | STR)) == 0)
     funnyvar (this, "read string value of");
 
-  if (isfld ())
-  {
-    if (!interp->donefld)
+  if ((isfld () || isnf ()) && !interp->donefld)
       interp->fldbld ();
-    dprintf ("getsval: $%s: <%s> t=%s\n", nval, sval, flags2str (flags));
-  }
-  else if (isrec ())
-  {
-    if (!interp->donerec)
+  else if (isrec () && !interp->donerec)
       interp->recbld ();
-    dprintf ("getsval: $0: <%s>, t=%s\n", sval, flags2str (flags));
-  }
-  else
-  {
-    //this is not $0, $1,...
-    if ((flags & STR) == 0)
-    {
-      // don't have a string value but can make one
-      fmt = CONVFMT;
-      update_str_val ();
-      flags |= CONVC;
-    }
-    dprintf ("getsval %s = <%s>, t=%s\n", NN (nval), NN (sval), flags2str (flags));
-  }
-  if (!sval)
-    sval = tostring (0);
 
-  return sval;
+  if ((flags & STR) == 0)
+  {
+    // don't have a string value but can make one
+    fmt = CONVFMT;
+    update_str_val ();
+    flags |= CONVC;
+  }
+
+  dprintf ("getsval %c%s = <%s>, t=%s\n", 
+    (isfld () || isrec ()) ? '$' : ' ', nval.c_str (), sval.c_str (), flags2str (flags));
+  return sval.c_str();
 }
 
 /// Get string val of a Cell for print */
@@ -207,41 +195,74 @@ const char* Cell::getpssval ()
   if ((flags & (NUM | STR)) == 0)
     funnyvar (this, "print string value of");
 
-  if (isfld ())
-  {
-    if (!interp->donefld)
+  if ((isfld () || isnf()) && !interp->donefld)
       interp->fldbld ();
-    if (!sval)
-    {
-      sval = tostring (0);
-      flags |= STR;
-    }
-
-    dprintf ("getpsval: $%s: <%s> t=%s\n", nval, sval, flags2str (flags));
-    return sval;
-  }
-  else if (isrec ())
-  {
-    if (!interp->donerec)
+  else if (isrec () && !interp->donerec)
       interp->recbld ();
-    dprintf ("getpsval: $0: <%s> t=%s\n", sval, flags2str (flags));
-    return sval;
-  }
 
-  //this is not $0, $1, ...
   if ((flags & STR) == 0)
   {
     fmt = OFMT;
     update_str_val ();
     flags &= ~CONVC;
   }
-  if (!sval)
-    sval = tostring (0);
 
-  dprintf ("getpsval %s = <%s>, t=%s\n",
-    NN (nval), NN (sval), flags2str (flags));
-  return sval;
+  dprintf ("getpsval %c%s = <%s>, t=%s\n",
+    (isfld () || isrec ()) ? '$' : ' ', nval.c_str (), sval.c_str (), flags2str (flags));
+  return sval.c_str();
 }
+
+/// Clear cell content
+void Cell::clear ()
+{
+  sval.clear ();
+  flags = STR;
+  fval = 0.;
+  fmt.clear ();
+}
+
+///Turn cell into an array discarding any previous content
+void Cell::makearray (size_t sz)
+{
+  sval.clear ();
+  fmt.clear ();
+  fval = 0.;
+  flags = ARR;
+  arrval = new Array (NSYMTAB);
+}
+
+
+/// Check if string matches regular expression of this cell
+bool Cell::match (const char* str, bool anchored)
+{
+  assert (isregex ());
+  regex_constants::match_flag_type flags = regex_constants::match_default;
+  if (anchored)
+    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
+
+  bool result = regex_search (str, *re, flags);
+  return result;
+}
+
+/// pattern match, for sub
+bool Cell::pmatch (const char* p0, size_t& start, size_t& len, bool anchored)
+{
+  assert (isregex ());
+  regex_constants::match_flag_type flags = regex_constants::match_default;
+  if (anchored)
+    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
+
+  cmatch m;
+  if (regex_search (p0, m, *re, flags))
+  {
+    start = m.position ();
+    len = m.length ();
+    return true;
+  }
+  return false;
+}
+
+
 
 /* Don't duplicate the code for actually updating the value */
 void Cell::update_str_val ()
@@ -251,9 +272,7 @@ void Cell::update_str_val ()
   if (modf (fval, &dtemp) == 0)  /* it's integral */
     sprintf (s, "%.30g", fval);
   else
-    sprintf (s, fmt, fval);
-  delete sval;
-  sval = tostring (s);
-  //  vp->flags |= STR;
+    sprintf (s, fmt.c_str(), fval);
+  sval = s;
 }
 

@@ -38,45 +38,35 @@ static int  refldbld (const char *, const char *);
 
 
 /// Quick and dirty character quoting can quote a few short character strings
-const char *quote (const char* in)
+std::string quote (const std::string& in)
 {
-  static char buf[256];
-  char *out = buf;
+  if (in.empty())
+    return "(null)";
 
-  if (!in)
+  std::string out;
+  for (auto p : in)
   {
-    strcpy (out, "(null)");
-    return buf;
-  }
-
-  while (*in)
-  {
-    switch (*in)
+    switch (p)
     {
     case '\n':
-      *out++ = '\\';
-      *out++ = 'n';
+      out += "\\n";
       break;
     case '\r':
-      *out++ = '\\';
-      *out++ = 'r';
+      out += "\\r";
       break;
     case '\t':
-      *out++ = '\\';
-      *out++ = 't';
+      out += "\\t";
       break;
     default:
-      *out++ = *in;
+      out.push_back(p);
     }
-    in++;
-    if ((size_t)(out - buf) > sizeof (buf) - 5)
+    if (out.size() > 100)
     {
-      strcpy (out, "...");
-      return buf;
+      out += "...";
+      break;
     }
   }
-  *out++ = 0;
-  return buf;
+  return out;
 }
 
 
@@ -118,7 +108,7 @@ int isclvar (const char *s)
 /* wrong: violates 4.10.1.4 of ansi C standard */
 
 #include <math.h>
-int is_number (const char *s)
+bool is_number (const char *s)
 {
   double r;
   char *ep;

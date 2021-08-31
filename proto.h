@@ -26,7 +26,7 @@ THIS SOFTWARE.
 
 void  setfname (Cell *);
 int   constnode (Node *);
-char* strnode (Node *);
+const char* strnode (Node *);
 Node* notnull (Node *);
 int   yylex (void*);
 int   yyparse (void*);
@@ -34,8 +34,6 @@ void  yyinit (void);
 void  startreg (void);
 
 Node* nodedfa (const char* str, int anchor);
-bool  match (Cell*, const char *);
-bool  pmatch (Cell* f, const char* p0, size_t& start, size_t& len);
 
 int   pgetc (void);
 char* cursource (void);
@@ -49,7 +47,7 @@ Node* op1 (int tok, pfun fn, Node *, int iarg = 0);
 Node* op2 (int tok, pfun fn, Node *, Node *, int iarg = 0);
 Node* op3 (int tok, pfun fn, Node *, Node *, Node *, int iarg = 0);
 Node* op4 (int tok, pfun fn, Node *, Node *, Node *, Node *, int iarg = 0);
-Node* celltonode (Cell *c, Cell::subtype csub);
+Node* celltonode (Cell *c, Cell::type t = Cell::type::CELL, int flags = 0);
 Node* rectonode ();
 Node* nullnode ();
 Node* makearr (Node *);
@@ -57,7 +55,6 @@ Node* pa2stat (Node *, Node *, Node *);
 Node* linkum (Node *, Node *);
 void  defn (Cell *, Node *, Node *);
 int   isarg (const char *);
-void  freeelem (Cell *, const char *);
 void  funnyvar (Cell *, const char *);
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
@@ -68,7 +65,12 @@ int   input (void);
 void  WARNING (const char *, ...);
 double errcheck (double, const char *);
 int  isclvar (const char *);
-int  is_number (const char *);
+bool  is_number (const char *);
+inline
+bool is_number (const std::string& c)
+{
+  return is_number (c.c_str ());
+}
 
 void  adjbuf (char **pb, size_t *sz, size_t min, int q, char **pbp);
 void tempfree (Cell *a);
@@ -129,5 +131,8 @@ int   pclose (FILE *);
 void  SYNTAX (const char*, ...);
 void  FATAL (int err, const char*, ...);
 
+#ifndef NDEBUG
+void print_cell (Cell* c, int indent);
 const char *flags2str (int flags);
-const char *quote (const char *in);
+std::string quote (const std::string& in);
+#endif

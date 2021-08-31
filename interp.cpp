@@ -18,7 +18,7 @@ static int file_cmp (const char* f1, const char* f2);
 Cell* literal_null;
 Cell* literal0;
 
-extern char* curfname;  ///<current function name
+extern std::string curfname;  ///<current function name
 extern Interpreter* interp;
 
 Interpreter::Interpreter ()
@@ -51,8 +51,7 @@ Interpreter::Interpreter ()
 
   // Initialize $0 and fields
   //first allocation - deal with $0
-  fldtab = new Cell (Cell::type::OCELL, Cell::subtype::CREC, "0", NULL, 0., NUM | STR);
-  nfields = 0;
+  fldtab.push_back (std::make_unique<Cell> ("0", Cell::type::REC, STR));
   makefields (DEFAULT_FLD);
 
   files = new FILE_STRUC[nfiles];
@@ -82,27 +81,20 @@ Interpreter::~Interpreter ()
 
   delete prog_root;
   dprintf ("freeing symbol table\n");
-  symtab->removesym ("SYMTAB"); //break recursive link
-  delete symtab;
+  Cell *p = symtab->removesym ("SYMTAB"); //break recursive link
+  delete p;
   for (int i = 0; i < nprog; i++)
     delete progs[i];
   delete progs;
   delete lexprog;
   delete files;
-
-  for (int i = 0; i < nfields; ++i)
-  {
-    delete fldtab[i].nval;
-    delete fldtab[i].sval;
-  }
-  free (fldtab);
 }
 
 /// Initialize symbol table with built-in vars
 void Interpreter::syminit ()
 {
-  literal0 = symtab->setsym ("0", "0", 0.0, NUM | STR);
-  literal_null = symtab->setsym ("$zero&null", "", 0.0, NUM | STR);
+  literal0 = symtab->setsym ("0", "0", 0.0, (NUM | STR | PREDEF | CONST));
+  literal_null = symtab->setsym ("$zero&null", "", 0.0, (NUM | STR | PREDEF | CONST));
 
   CELL_FS = symtab->setsym ("FS", " ", 0.0, STR | PREDEF);
   CELL_RS = symtab->setsym ("RS", "\n", 0.0, STR | PREDEF);
@@ -111,7 +103,8 @@ void Interpreter::syminit ()
   CELL_OFMT = symtab->setsym ("OFMT", "%.6g", 0.0, STR | PREDEF);
   CELL_CONVFMT = symtab->setsym ("CONVFMT", "%.6g", 0.0, STR | PREDEF);
   CELL_FILENAME = symtab->setsym ("FILENAME", "", 0.0, STR | PREDEF);
-  CELL_NF = symtab->setsym ("NF", "", 0.0, NUM | PREDEF);
+  CELL_NF = symtab->setsym ("NF", "", DEFAULT_FLD, NUM | PREDEF);
+  CELL_NF->ctype = Cell::type::CNF;
   CELL_NR = symtab->setsym ("NR", "", 0.0, NUM | PREDEF);
   CELL_FNR = symtab->setsym ("FNR", "", 0.0, NUM | PREDEF);
   CELL_SUBSEP = symtab->setsym ("SUBSEP", "\034", 0.0, STR | PREDEF);
@@ -134,7 +127,7 @@ void Interpreter::envinit ()
   Array* envtab;     /* symbol table containing ENVIRON[...] */
   char** envp;
   envp = environ;
-  cp = symtab->setsym ("ENVIRON", (envtab = new Array (NSYMTAB)), 0);
+  cp = symtab->setsym ("ENVIRON", (envtab = new Array (NSYMTAB)), PREDEF);
   ;
   for (; *envp; envp++)
   {
@@ -151,28 +144,19 @@ void Interpreter::envinit ()
   }
 }
 
-/// Create fields up to $nf inclusive
-void Interpreter::makefields (int nf)
+/// Create fields up to nf inclusive
+void Interpreter::makefields (size_t nf)
 {
-  if (nf < nfields)
+  if (nf < fldtab.size())
     return;   //all good
 
-  size_t sz = (nf + 1) * sizeof (Cell);
-  fldtab = (Cell*)realloc (fldtab, sz);
-  if (!fldtab)
-    FATAL (AWK_ERR_NOMEM, "out of space growing fields to %d", nf);
-
-  for (int i = nfields + 1; i <= nf; i++)
+  for (size_t i = fldtab.size (); i <= nf; i++)
   {
     char temp[50];
-    sprintf (temp, "%d", i);
-    memset (&fldtab[i], 0, sizeof (Cell));
-    fldtab[i].ctype = Cell::type::OCELL;
-    fldtab[i].csub = Cell::subtype::CFLD;
-    fldtab[i].nval = tostring (temp);
-    fldtab[i].flags =  NUM | STR;
+    sprintf (temp, "%zu", i);
+    fldtab.push_back (
+      std::make_unique<Cell> (temp, Cell::type::FLD, STR));
   }
-  nfields = nf;
 }
 
 /// Redirect one of the standard streams (stdin, stdout, stderr) to another file
@@ -292,36 +276,33 @@ void Interpreter::closeall ()
 void Interpreter::clean_symtab ()
 {
   dprintf ("Starting symtab cleanup\n");
-  Array::Iterator cp = symtab->begin ();
-  for (auto cp = symtab->begin (); cp != symtab->end (); cp++)
+  for (auto cp : *symtab)
   {
-    if (cp->csub == Cell::subtype::CVAR)
+    if (cp->ctype == Cell::type::CELL)
     {
-      if ((cp->flags & PREDEF) == 0)
+      if ((cp->flags & (CONST | PREDEF)) == 0)
       {
-        dprintf ("cleaning CVAR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
-        delete cp->sval;
-        cp->sval = 0;
+        dprintf ("cleaning %s t=%s\n", cp->nval.c_str(), flags2str (cp->flags));
+        cp->sval.clear ();
         cp->fval = 0.;
+        if (cp->flags & ARR)
+        {
+          dprintf ("%s is an array\n", cp->nval.c_str());
+          delete cp->arrval;
+          cp->arrval = new Array (NSYMTAB);
+        }
       }
       else
-        dprintf ("skipping CVAR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
-    }
-    else if (cp->csub == Cell::subtype::CARR)
-    {
-      if ((cp->flags & PREDEF) == 0)
-      {
-        dprintf ("cleaning CARR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
-        delete cp->arrval;
-        cp->arrval = new Array (NSYMTAB);
-      }
-      else
-        dprintf ("skipping CARR %s t=%s\n", NN (cp->nval), flags2str (cp->flags));
+        dprintf ("skipping %s t=%s\n", cp->nval.c_str(), flags2str (cp->flags));
     }
   }
 
-  delete MY_FILENAME;
-  MY_FILENAME = tostring (0);
+  //Revert to default values
+  MY_FS = MY_OFS = " ";
+  MY_RS = MY_ORS = "\n";
+  MY_OFMT = MY_CONVFMT = "%.6g";
+  MY_SUBSEP = "\034";
+  MY_FILENAME.clear();
   dprintf ("Done symtab cleanup\n");
 }
 /// Find first filename argument
@@ -330,7 +311,6 @@ void Interpreter::initgetrec ()
   int i;
   const char* p;
 
-  infile = NULL;
   argno = 1;
   CELL_FNR->setfval (0.);
   CELL_NR->setfval (0.);
@@ -345,19 +325,23 @@ void Interpreter::initgetrec ()
     if (isclvar (p))
       setclvar (p);  /* a command line assignment before filename */
     else
+    {
+      if ((infile = fopen (p, "r")) == NULL)
+        FATAL (AWK_ERR_INFILE, "can't open file %s", infile);
       return;
+    }
     argno++;
   }
   infile = files[0].fp;    /* no filenames, so use stdin (or its redirect)*/
 }
 
 /// Get next input record
-int Interpreter::getrec (Cell* cell)
+bool Interpreter::getrec (Cell* cell)
 {
   const char* file = 0;
 
   dprintf ("RS=<%s>, FS=<%s>, ARGC=%d, FILENAME=%s\n",
-    quote (MY_RS), quote (MY_FS), (int)MY_ARGC, MY_FILENAME);
+    quote (MY_RS).c_str(), quote (MY_FS).c_str (), (int)MY_ARGC, MY_FILENAME.c_str());
   if (cell->isrec ())
   {
     donefld = false;
@@ -383,8 +367,7 @@ int Interpreter::getrec (Cell* cell)
         argno++;
         continue;
       }
-      delete MY_FILENAME;
-      MY_FILENAME = tostring (file);
+      MY_FILENAME = file;
       dprintf ("opening file %s\n", file);
       if (*file == '-' && *(file + 1) == '\0')
         infile = stdin;
@@ -396,12 +379,12 @@ int Interpreter::getrec (Cell* cell)
     {
       MY_NR = MY_NR + 1;
       MY_FNR = MY_FNR + 1;
-      return 1;
+      return true;
     }
     /* EOF arrived on this file; set up next */
     nextfile ();
   }
-  return 0;  /* true end of file(s) */
+  return false;  /* end of file(s) */
 }
 
 void Interpreter::nextfile ()
@@ -420,17 +403,13 @@ int Interpreter::getchar (FILE* inf)
 }
 
 /// Read one record in cell's string value
-int Interpreter::readrec (Cell* cell, FILE* inf)
+bool Interpreter::readrec (Cell* cell, FILE* inf)
 {
   int sep, c;
-  char* rr, * buf;
-  size_t bufsize = RECSIZE;
 
-  delete cell->sval;
-  cell->sval = 0;
-  buf = new char[bufsize];
+  cell->sval.clear ();
 
-  if ((sep = *MY_RS) == 0)
+  if (MY_RS.empty ())
   {
     sep = '\n';
     while ((c = getchar (inf)) == '\n' && c != EOF)  /* skip leading \n's */
@@ -438,15 +417,15 @@ int Interpreter::readrec (Cell* cell, FILE* inf)
     if (c != EOF)
       ungetc (c, inf);
   }
-  for (rr = buf; ; )
+  else
+    sep = MY_RS[0];
+
+  while (1)
   {
     for (; (c = getchar (inf)) != sep && c != EOF; )
-    {
-      if ((size_t)(rr - buf + 1) > bufsize)
-        adjbuf (&buf, &bufsize, 1 + rr - buf, RECSIZE, &rr);
-      *rr++ = c;
-    }
-    if (*MY_RS == sep || c == EOF)
+      cell->sval.push_back (c);
+
+    if (MY_RS[0] == sep || c == EOF)
       break;
 
     /*
@@ -456,20 +435,20 @@ int Interpreter::readrec (Cell* cell, FILE* inf)
     */
     if ((c = getchar (inf)) == '\n' || c == EOF) /* 2 in a row */
       break;
-    adjbuf (&buf, &bufsize, 2 + rr - buf, RECSIZE, &rr);
-    *rr++ = '\n';
-    *rr++ = c;
+    cell->sval.push_back ('\n');
+    cell->sval.push_back (c);
   }
-  * rr = 0;
-  dprintf ("readrec saw <%s>, returns %d\n", buf, c == EOF && rr == buf ? 0 : 1);
-  cell->sval = buf;
   cell->flags = STR;
   if (is_number (cell->sval))
   {
-    cell->fval = atof (cell->sval);
+    cell->fval = atof (cell->sval.c_str());
     cell->flags |= NUM | CONVC;
   }
-  return c == EOF && rr == buf ? 0 : 1;
+
+  bool ret = c != EOF || !cell->sval.empty ();
+  dprintf ("readrec saw <%s>, returns %s\n",
+    cell->sval.c_str (), ret? "true" : "false");
+  return ret;
 }
 
 /// Get ARGV[n]
@@ -480,9 +459,9 @@ const char* Interpreter::getargv (int n)
   char temp[50];
 
   sprintf (temp, "%d", n);
-  if (argvtab->lookup (temp) == NULL)
+  if (!(x = argvtab->lookup (temp)))
     return NULL;
-  x = argvtab->setsym (temp, "", 0.0, STR);
+
   s = x->getsval ();
   dprintf ("getargv(%d) returns |%s|\n", n, s);
   return s;
@@ -517,7 +496,7 @@ void Interpreter::setclvar (const char* s)
   q->setsval (p);
   if (is_number (q->sval))
   {
-    q->fval = atof (q->sval);
+    q->fval = stof (q->sval);
     q->flags |= NUM;
   }
   dprintf ("command line set %s to |%s|\n", s, p);
@@ -527,21 +506,19 @@ void Interpreter::setclvar (const char* s)
 void Interpreter::fldbld ()
 {
   char* fields, * fb, * fe, sep;
-  Cell* p;
-  int i, j;
 
   if (donefld)
     return;
 
-  fields = strdup (fldtab[0].getsval ());
-  i = 0;  /* number of fields accumulated here */
+  fields = strdup (fldtab[0]->getsval ());
+  int i = 0;  /* number of fields accumulated here */
   fb = fields;        //beginning of field
-  if (strlen (MY_FS) > 1)
+  if (MY_FS.size() > 1)
   {
     /* it's a regular expression */
-    i = refldbld (fields, MY_FS);
+    i = refldbld (fields);
   }
-  else if ((sep = *MY_FS) == ' ')
+  else if ((sep = MY_FS[0]) == ' ')
   {
     /* default whitespace */
     for (i = 0; ; )
@@ -555,25 +532,23 @@ void Interpreter::fldbld ()
         fe++;
       if (*fe)
         *fe++ = 0;
-      if (++i > nfields)
+      if (++i >= fldtab.size())
         growfldtab (i);
-      delete fldtab[i].sval;
-      fldtab[i].sval = tostring (fb);
+      fldtab[i]->sval = fb;
       fb = fe;
     }
   }
-  else if ((sep = *MY_FS) == 0)
+  else if (!sep)
   {
     /* new: FS="" => 1 char/field */
     for (i = 0; *fb != 0; fb++)
     {
       char buf[2];
-      if (++i > nfields)
+      if (++i >= fldtab.size ())
         growfldtab (i);
       buf[0] = *fb;
       buf[1] = 0;
-      delete fldtab[i].sval;
-      fldtab[i].sval = tostring (buf);
+      fldtab[i]->sval = buf;
     }
   }
   else if (*fb != 0)
@@ -586,7 +561,7 @@ void Interpreter::fldbld ()
   */
     int rtest = '\n';  /* normal case */
     int end_seen = 0;
-    if (strlen (MY_RS) > 0)
+    if (MY_RS.size() > 0)
       rtest = '\0';
     fe = fb;
     for (i = 0; !end_seen; )
@@ -599,33 +574,32 @@ void Interpreter::fldbld ()
       else
         end_seen = 1;
 
-      if (++i > nfields)
+      if (++i >= fldtab.size ())
         growfldtab (i);
-      delete fldtab[i].sval;
-      fldtab[i].sval = tostring (fb);
+      fldtab[i]->sval = fb;
     }
   }
-  cleanfld (i + 1, lastfld);  /* clean out junk from previous record */
-  lastfld = i;
+  cleanfld (i + 1, (int)MY_NF);  /* clean out junk from previous record */
+  MY_NF = i;
   donefld = true;
 
-  for (j = 1, p = &fldtab[1]; j <= lastfld; j++, p++)
+  for (i = 1; i <= MY_NF; i++)
   {
-    p->flags = STR;
-    if (is_number (p->sval))
+    assert (fldtab[i]);
+    fldtab[i]->flags = STR;
+    if (is_number (fldtab[i]->sval))
     {
-      p->fval = atof (p->sval);
-      p->flags |= (NUM | CONVC);
+      fldtab[i]->fval = atof (fldtab[i]->sval.c_str());
+      fldtab[i]->flags |= (NUM | CONVC);
     }
   }
-  MY_NF = lastfld;
   donerec = true; /* restore */
   free (fields);
 #ifndef NDEBUG
   if (dbg)
   {
-    for (j = 0; j <= lastfld; j++)
-      dprintf ("field %d (%s): |%s|\n", j, fldtab[j].nval, fldtab[j].sval);
+    for (i = 0; i <= MY_NF; i++)
+      dprintf ("field %d (%s): |%s|\n", i, fldtab[i]->nval.c_str(), fldtab[i]->sval.c_str());
   }
 #endif
 }
@@ -633,119 +607,79 @@ void Interpreter::fldbld ()
 /// Create $0 from $1..$NF if necessary
 void Interpreter::recbld ()
 {
-  int i;
-  char* r;
-  const char* p;
-
   if (donerec)
     return;
 
-  char* buf = new char[RECSIZE];
-  size_t sz = RECSIZE;
-
-  r = buf;
-  for (i = 1; i <= MY_NF; i++)
+  std::string& rec = fldtab[0]->sval;
+  rec.clear ();
+  for (int i = 1; i <= MY_NF; i++)
   {
-    p = fldtab[i].getsval ();
-    adjbuf (&buf, &sz, 2 + strlen (p) + strlen (MY_OFS) + r - buf, RECSIZE, &r);
-    while ((*r = *p++) != 0)
-      r++;
+    rec += fldtab[i]->getsval ();
     if (i < MY_NF)
-    {
-      for (p = MY_OFS; (*r = *p++) != 0; )
-        r++;
-    }
+      rec += MY_OFS;
   }
-  *r = '\0';
-  delete fldtab[0].sval;
-  fldtab[0].sval = buf;
-  dprintf ("in recbld $0=|%s|\n", buf);
-  donerec = 1;
-  fldtab[0].flags = STR;
-  if (is_number (fldtab[0].sval))
+  dprintf ("in recbld $0=|%s|\n", rec.c_str());
+  fldtab[0]->flags = STR;
+  if (is_number (rec))
   {
-    fldtab[0].flags |= NUM;
-    fldtab[0].fval = atof (fldtab[0].sval);
+    fldtab[0]->flags |= NUM;
+    fldtab[0]->fval = atof (rec.c_str());
   }
+
+  donerec = true;
 }
 
 /// Build fields from reg expr in FS
-int Interpreter::refldbld (const char* rec, const char* fs)
+int Interpreter::refldbld (const char* in)
 {
-  char* fr, * fields;
-  int i;
-
-  fields = strdup (rec);
-  fr = fields;
-  *fr = '\0';
-  if (*rec == '\0')
+  std::string rec = in;
+  if (rec.empty())
     return 0;
-  Cell* re = makedfa (fs, 1);
-  dprintf ("into refldbld, rec = <%s>, pat = <%s>\n", rec, fs);
-  for (i = 1; ; i++)
+  if (!CELL_FS->isregex())
+    CELL_FS->re = new std::regex (CELL_FS->sval, std::regex_constants::awk);
+
+  dprintf ("into refldbld, rec = <%s>, pat = <%s>\n", rec, CELL_FS->sval.c_str());
+  int i = 1;
+  size_t pstart, plen;
+  while (CELL_FS->pmatch (rec.c_str(), pstart, plen))
   {
-    if (i > nfields)
+    if (i >= fldtab.size ())
       growfldtab (i);
-    delete fldtab[i].sval;
-    fldtab[i].flags = STR;
-    fldtab[i].sval = tostring (fr);
-    dprintf ("refldbld: i=%d\n", i);
-    size_t pstart, plen;
-    if (pmatch (re, rec, pstart, plen))
-    {
-      dprintf ("match %s (%d chars)\n", rec+pstart, plen);
-      strncpy (fr, rec, pstart);
-      fr += pstart + 1;
-      *(fr - 1) = '\0';
-      rec += pstart + plen;
-    }
-    else
-    {
-      dprintf ("no match %s\n", rec);
-      strcpy (fr, rec);
-      break;
-    }
+    fldtab[i]->flags = STR;
+    fldtab[i]->sval = rec.substr (0, pstart);
+
+    dprintf ("match $%d = %s\n", i, fldtab[i]->sval.c_str());
+    rec = rec.substr (pstart + plen);
+    dprintf ("remaining <%s>\n", rec);
+    ++i;
   }
-  free (fields);
+  fldtab[i]->flags = STR;
+  fldtab[i]->sval = rec;
+  dprintf ("last field $%d = %s\n", i, fldtab[i]->sval.c_str ());
+
   return i;
 }
 
 /// Clean out fields n1 .. n2 inclusive
 void Interpreter::cleanfld (int n1, int n2)
 {
-  /* nvals remain intact */
-  int i;
-
-  for (i = n1; i <= n2; i++)
-  {
-    delete fldtab[i].sval;
-    fldtab[i].sval = 0;
-    fldtab[i].flags = STR | NUM;
-    fldtab[i].fval = 0.;
-    fldtab[i].fmt = NULL;
-  }
+  for (auto i = n1; i <= n2; i++)
+    fldtab[i]->clear ();
 }
 
-/// Add field n after end of existing lastfld
-void Interpreter::newfld (int n)
-{
-  if (n > nfields)
-    growfldtab (n);
-  MY_NF = lastfld = n;
-}
-
-/// Set lastfld cleaning fldtab cells if necessary
+/// Set last field cleaning fldtab cells if necessary
 void Interpreter::setlastfld (int n)
 {
-  if (n > nfields)
+  if (n >= fldtab.size ())
     growfldtab (n);
 
+  int lastfld = (int)MY_NF;
   if (lastfld < n)
     cleanfld (lastfld + 1, n);
   else
     cleanfld (n + 1, lastfld);
 
-  lastfld = n;
+  MY_NF = n;
 }
 
 /// Get nth field
@@ -757,19 +691,19 @@ Cell* Interpreter::fieldadr (int n)
     fldbld ();
   else if (!n && !donerec)
     recbld ();
-  if (n > nfields)  /* fields after NF are empty */
+  if (n >= fldtab.size())  /* fields after NF are empty */
     growfldtab (n);
-  return &fldtab[n];
+  return fldtab[n].get();
 }
 
 /// Make new fields up to at least $n
 void Interpreter::growfldtab (size_t n)
 {
-  size_t nf = 2 * nfields;
+  size_t nf = 2 * fldtab.size ();
 
   if (n > nf)
     nf = n;
-  makefields ((int)nf);
+  makefields (nf);
 }
 
 /// Allocate a node with n descendants
@@ -782,7 +716,7 @@ Node* Interpreter::nodealloc (int n)
   return x;
 }
 
-Cell* Interpreter::makedfa (const char* s, int anchor, bool compiling)
+Cell* Interpreter::makedfa (const char* s, bool compiling)
 {
   std::string ss(s);
   requote (ss);
@@ -790,25 +724,22 @@ Cell* Interpreter::makedfa (const char* s, int anchor, bool compiling)
   {
     // TODO reuse regex when compiling
     std::regex* re = new std::regex (ss, std::regex_constants::awk);
-    Cell* x = new Cell (Cell::type::OREGEX, Cell::subtype::CCON, s, re, 0., anchor ? ANCHORED : 0);
+    Cell* x = new Cell (s, Cell::type::CELL, (CONST | REGEX));
+    x->re = re;
     return x;
   }
 
-  unsigned char anchor_flag = anchor ? ANCHORED : 0;
-
   for (int i = 0; i < ratab.size (); i++)  /* is it there already? */
   {
-    if (((ratab[i]->flags & ANCHORED) == anchor_flag)
-      && strcmp (ratab[i]->nval, s) == 0)
+    if (ratab[i]->nval == ss)
     {
       ratab[i]->fval += 1.;
       return ratab[i].get();
     }
   }
 
-  Cell* x = new Cell (Cell::type::OREGEX, Cell::subtype::CTEMP, s, 
-    new std::regex(ss, std::regex_constants::awk), 0., anchor_flag);
-
+  Cell* x = new Cell (s, Cell::type::CELL, REGEX);
+  x->re = new std::regex (ss, std::regex_constants::awk);
   if (ratab.size() < NFA)
   {
     /* room for another */
@@ -862,8 +793,8 @@ void SYNTAX (const char* fmt, ...)
   pb += vsprintf (pb, fmt, varg);
   va_end (varg);
   pb += sprintf (pb, " at source line %d", interp->lineno);
-  if (curfname != NULL)
-    pb += sprintf (pb, " in function %s", curfname);
+  if (!curfname.empty())
+    pb += sprintf (pb, " in function %s", curfname.c_str());
   if (interp->status == AWKS_COMPILING && cursource () != NULL)
     pb += sprintf (pb, " source file %s", cursource ());
   throw awk_exception (*interp, AWK_ERR_SYNTAX, errmsg);

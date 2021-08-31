@@ -6,11 +6,12 @@
 #include <awklib/err.h>
 
 using namespace std;
+extern int cell_count;
 
 bool setup_test (const string& testfile);
 
 // A convenient way to debug individual tests
-#define TESTNAME "77_func"
+#define TESTNAME "29_beginexit"
 TEST (failing)
 {
   ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
@@ -23,9 +24,9 @@ TEST (failing)
   CHECK (awk_setinput (interp, TESTNAME ".in"));
   CHECK (awk_setoutput (interp, TESTNAME ".out"));
   CHECK (awk_exec (interp) >= 0);
-  //CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
-  //CHECK (awk_exec (interp) >= 0);
-  //CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
+  CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
+  CHECK (awk_exec (interp) >= 0);
+  CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
   awk_end (interp);
   remove (TESTNAME ".awk");
   remove (TESTNAME ".in");
@@ -331,11 +332,14 @@ SUITE (one_true_awk)
     bool setup (const string& test_name);
     string name;
     AWKINTERP* interp;
+    int cells;
   };
 
   awk_frame::awk_frame ()
-    : interp (awk_init (NULL))
   {
+    cells = cell_count;
+    interp = awk_init (NULL);
+
   }
 
   bool awk_frame::setup (const string & test_name)
@@ -357,6 +361,8 @@ SUITE (one_true_awk)
     remove ((name + ".out").c_str ());
     remove ((name + ".ref").c_str ());
     awk_end (interp);
+    if (cells != cell_count)
+      printf ("Cell count %d\n", cell_count);
   }
 
 #define AWK_TEST(A) \

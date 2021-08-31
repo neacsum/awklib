@@ -82,35 +82,6 @@ Node* nodedfa (const char *s, int anchor)
   return x;
 }
 
-bool match (Cell *f, const char *p0)  /* shortest match ? */
-{
-  assert (f->isregex ());
-  regex_constants::match_flag_type flags = regex_constants::match_default;
-  if ((f->flags & ANCHORED) != 0)
-    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
-  
-  bool result = regex_search (p0, *f->re, flags);
-  return result;
-}
-
-/// Longest match, for sub
-bool pmatch (Cell *f, const char *p0, size_t& start, size_t& len)
-{
-  assert (f->isregex ());
-  regex_constants::match_flag_type flags = regex_constants::match_default;
-  if ((f->flags & ANCHORED) != 0)
-    flags |= (regex_constants::match_not_bol | regex_constants::match_not_eol);
-
-  cmatch m;
-  if (regex_search (p0, m, *f->re, flags))
-  {
-    start = m.position ();
-    len = m.length ();
-    return true;
-  }
-  return false;
-}
-
 /// split(a[0], a[1], a[2]);
 Cell* split (const Node::Arguments& a, int)
 {
@@ -124,13 +95,9 @@ Cell* split (const Node::Arguments& a, int)
   Cell* ap = execute (a[1]);  /* array name */
   if (ap->isarr ())
     delete ap->arrval;
-  else
-    delete ap->sval;
-  ap->flags &= ~(STR | NUM);
-  ap->csub = Cell::subtype::CARR;
-  ap->arrval = new Array (NSYMTAB);
+  ap->makearray ();
 
-  const char* fs = 0;
+  string fs;
   regex* re = 0;
   if (!a[2])    /* fs string */
   {
@@ -138,19 +105,14 @@ Cell* split (const Node::Arguments& a, int)
   }
   else if (a[2]->ntype == NVALUE && a[2]->to_cell ()->isregex ())
   { // precompiled regexp
-    if (strlen (a[2]->to_cell ()->nval))
+    if (!a[2]->to_cell ()->nval.empty())
       re = a[2]->to_cell ()->re;
-    else
-    {
-      /* split(s, a, //); have to arrange that it looks like empty sep */
-      fs = "";
-    }
   }
   else
   {  /* split(str,arr,"string") */
     x = execute (a[2]);
     fs = x->getsval ();
-    if (strlen (fs) > 1)
+    if (fs.size() > 1)
     {
       re = new regex (fs, regex_constants::awk);
       temp_re = true;
@@ -180,7 +142,7 @@ Cell* split (const Node::Arguments& a, int)
   }
   else
   {
-    char sep = *fs;
+    char sep = fs[0];
     if (sep == ' ')
     {
       for (n = 0; ; )
@@ -250,9 +212,7 @@ Cell* split (const Node::Arguments& a, int)
   if (temp_re)
     delete re;
 
-  x = new Cell (Cell::type::OCELL, Cell::subtype::CTEMP, 0, 0, 0., 0);
-  x->flags = NUM;
-  x->fval = n;
+  x = new Cell (nullptr, Cell::type::CTEMP, NUM, n);
   return x;
 }
 
@@ -358,8 +318,6 @@ Cell* gsub (const Node::Arguments& a, int)
   tempfree (x);
   tempfree (y);
 
-  x = new Cell (Cell::type::OCELL, Cell::subtype::CTEMP, 0, 0, 0., 0);
-  x->flags = NUM;
-  x->fval = num;
+  x = new Cell (nullptr, Cell::type::CTEMP, NUM, num);
   return x;
 }

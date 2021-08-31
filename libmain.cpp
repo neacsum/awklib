@@ -230,6 +230,9 @@ int awk_exec (AWKINTERP *pinter)
     interp->status = AWKS_DONE;
     interp->closeall ();
   }
+  if (dbg > 2)
+    interp->symtab->print ();
+
   return interp->err;
 }
 
@@ -350,8 +353,8 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
     {
       int n = (int)atof (var->name+1);
       interp->fldbld ();
-      if (n >= 0 && n <= interp->lastfld)
-        cp = &interp->fldtab[n];
+      if (n >= 0 && n <= NF)
+        cp = interp->fldtab[n].get();
     }
     else
       cp = interp->symtab->lookup (var->name);
@@ -393,7 +396,7 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
     if (cp->flags & STR)
     {
       var->flags |= AWKSYMB_STR;
-      var->sval = tostring (cp->sval);
+      var->sval = tostring (cp->sval.c_str());
     }
   }
   catch (awk_exception& x) {
@@ -412,18 +415,22 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
   int n;
   bool is_field = false;
 
+  int flags = 0;
+  if (var->flags & AWKSYMB_NUM) flags |= NUM;
+  if (var->flags & AWKSYMB_STR) flags |= STR;
+
   Interpreter *interp = (Interpreter*)pinter;
   try {
     if (var->name[0] == '$' && is_number (var->name+1)
      && interp->status == AWKS_RUN)
     {
       n = (int)atof (var->name+1);
-      if (n < 0 || n >= interp->nfields)
+      if (n < 0 || n >= interp->fldtab.size())
       {
         sprintf (interp->errmsg, "awk_setvar: invalid field %s", var->name);
         return (interp->err = AWK_ERR_INVVAR);
       }
-      cp = &interp->fldtab[n];
+      cp = interp->fldtab[n].get();
       is_field = true;
     }
     else
@@ -437,9 +444,9 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
         return (interp->err = AWK_ERR_ARRAY);
       }
       if ((var->flags & AWKSYMB_ARR) != 0)
-        cp = interp->symtab->setsym (var->name, new Array (20), 0); //arbitrary size
+        cp = interp->symtab->setsym (var->name, new Array (NSYMTAB), ARR);
       else
-        cp = interp->symtab->setsym (var->name, "", 0., (STR | NUM));
+        cp = interp->symtab->setsym (var->name, "", 0., flags);
     }
     if (cp->isarr())
     {
@@ -449,7 +456,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
         sprintf (interp->errmsg, "awk_setvar: variable is an array %s", var->name);
         return (interp->err = AWK_ERR_ARRAY);
       }
-      cp = cp->arrval->setsym (var->index, "", 0., (STR | NUM));
+      cp = cp->arrval->setsym (var->index, "", 0., flags);
     }
     if ((cp->flags & (STR | NUM)) == 0)
     {
@@ -463,9 +470,9 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
     if (is_field)
     {
       if (n == 0)
-        interp->fldbld ();
+        interp->donefld = false;
       else
-        interp->recbld ();
+        interp->donerec = false;
     }
   }
   catch (awk_exception& x) {
@@ -481,11 +488,10 @@ int awk_addfunc (AWKINTERP *pinter, const char *fname, awkfunc fn, int nargs)
   interp = (Interpreter*)pinter;
   try {
     Cell *cp = interp->symtab->setsym (fname, NULL, nargs);
-    cp->csub = Cell::subtype::CFUNC;
-    cp->flags = EXTFUNC;
+    cp->ctype = Cell::type::EXTFUNC;
     cp->fval = nargs;
-    delete cp->sval;
-    cp->sval = (char *)fn;
+    cp->sval.clear ();
+    cp->funptr = fn;
   }
   catch (awk_exception&) {
     return 0;
@@ -542,6 +548,7 @@ char *cursource (void)  /* current source file name */
 #undef CHAR
 #undef DELETE
 #undef IN
+#undef CONST
 #include <Windows.h> //for OutDebugString
 #endif
 
@@ -566,19 +573,28 @@ int errprintf (const char *fmt, ...)
 void print_cell (Cell *c, int indent)
 {
   static const char *ctype_str[] = {
-    "0", "OCELL", "OBOOL", "OJUMP" };
+    "CELL",
+    "CTEMP",
+    "CFUNC",
+    "EXTFUNC",
+    "FLD",    
+    "REC",    
+    "CNF",    
+    "JUMP_FIRST",
+      "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE",
+    "JUMP_LAST",
 
-  static const char *csub_str[] = {
-    "CNONE", "CFLD", "CVAR", "CNAME", "CTEMP", "CCON", "CCOPY", "CFREE", "CARR", "9", "10",
-    "BTRUE", "BFALSE", "13", "14", "15", "16", "17", "18", "19", "20",
-    "JEXIT", "JNEXT", "JBREAK", "JCONT", "JRET", "JNEXTFILE" };
+    "BTRUE", 
+    "BFALSE"
+  };
+
 
   dprintf ("%*cCell 0x%p ", indent, ' ', c);
-  dprintf (" %s %s Flags: %s", ctype_str[(int)c->ctype], csub_str[(int)c->csub], flags2str(c->flags));
+  dprintf (" %s Flags: %s", ctype_str[(int)c->ctype], flags2str(c->flags));
   if (!c->isarr() && !c->isfcn() && !c->isregex())
-    dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval, c->fval);
-  if (c->nval)
-    dprintf (" Name: %s", c->nval);
+    dprintf ("%*cValue: %s(%lf)", indent, ' ', c->sval.c_str(), c->fval);
+  if (!c->nval.empty())
+    dprintf (" Name: %s", c->nval.c_str());
   dprintf (" Next: %p\n", c->cnext);
 }
 
@@ -671,8 +687,8 @@ void error ()
   if (interp->status == AWKS_RUN && NR > 0)
   {
     errprintf (" input record number %d", (int)(FNR));
-    if (strcmp (FILENAME, "-") != 0)
-      errprintf (", file %s", FILENAME);
+    if (FILENAME != "-")
+      errprintf (", file %s", FILENAME.c_str());
     errprintf ("\n");
   }
   if (interp->status == AWKS_COMPILING)

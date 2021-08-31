@@ -45,6 +45,8 @@ extern int  dbg;
 #endif
 
 #define  RECSIZE  (8 * 1024)  /* sets limit on records, fields, etc., etc. */
+#define  NSYMTAB  50  /* initial size of a symbol table */
+
 
 class Array;
 class Node;
@@ -52,80 +54,86 @@ class Node;
 /// Cell:  all information about a variable or constant
 class Cell {
 public:
-  enum class type {OCELL=1, OBOOL=2, OJUMP=3, OREGEX=4};  //cell type
-  enum class subtype {
-    // OCELL subtypes
-    CARR=8,   //array
-    CFUNC=7,  //function definition
-    CARG=6,   //function argument
-    CCON=5,   //constant 
-    CTEMP=4,  //temporary
-    CVAR=3,   //variable 
-    CREC=2,   //input record ($0)
-    CFLD=1,   //input field ($1, $2,...)
-    CNONE=0,  //not specified
+  enum class type {
+    CELL,
+    CTEMP,      // temporary
+    CFUNC,      //function definition
+    EXTFUNC,    // external function
+    FLD,        //input field ($1, $2,...)
+    REC,        //input record ($0)
+    CNF,        //NF
+    //JUMP types
+    JUMP_FIRST,
+      JEXIT, JNEXT, JBREAK, JCONT, JRET, JNEXTFILE,
+    JUMP_LAST,
 
-    //OBOOL subtypes
-    BTRUE=11, //true value
-    BFALSE=12, //false value
+    BTRUE, //true value
+    BFALSE //false value
+  };
 
-    //OJUMP subtypes
-    JEXIT=21,   //
-    JNEXT=22, JBREAK=23, JCONT=24, JRET=25, JNEXTFILE=26};
-  Cell (type t, subtype s, const char *n, void *v, Awkfloat f, unsigned char flags);
+  Cell (const char *n=nullptr, type t=Cell::type::CELL, unsigned char flags=0, Awkfloat f = 0.);
   ~Cell ();
   void setsval (const char* s);
   void setfval (Awkfloat f);
   const char* getsval ();
   Awkfloat getfval ();
   const char* getpssval ();
-  void update_str_val ();
+  void clear ();
+  void makearray (size_t sz = NSYMTAB);
+  bool match (const char* s, bool anchored=false);
+  bool pmatch (const char* s, size_t& start, size_t& len, bool anchored = false);
 
   type ctype;           /* Cell type, see above */
+  unsigned char   flags;/* type flags */
+#define NUM       0x01  /* number value is valid */
+#define STR       0x02  /* string value is valid */
+#define CONVC     0x04  /* string was converted from number via CONVFMT */
+#define PREDEF    0x08  /* predefined variable*/
+#define ARR       0x10
+#define REGEX     0x20
+#define CONST     0x80
 
-  subtype csub;         /* Cell subtype, see above */
-
-  char  *nval;          /* name, for variables only */
+  std::string nval;     /* name */
+  std::string sval;     /* string value */
+  Awkfloat fval;        /* value as number */
   union {
-    char* sval;         /* string value */
+    void* funptr;       /* pointer to external function body */
     Array* arrval;      /* reuse for array pointer */
     Node* nodeptr;      /* reuse for function pointer */
     std::regex* re;     /* reuse for regex pointer*/
   };
-  Awkfloat fval;        /* value as number */
-  unsigned char   flags;/* type flags */
-#define NUM       0x01   /* number value is valid */
-#define STR       0x02   /* string value is valid */
-#define CONVC     0x04   /* string was converted from number via CONVFMT */
-#define PREDEF    0x08   /* predefined variable*/
-#define EXTFUNC   0x10   /* external function*/
-#define ANCHORED  0x20   /* Anchored match for regex*/
 
-  char  *fmt;            /* CONVFMT/OFMT value used to convert from number */
   Cell *cnext;           /* ptr to next in arrays*/
 #ifndef NDEBUG
   int id;
 #endif
 
-  bool isarr () const { return csub == subtype::CARR; }
-  bool isfcn () const { return csub == subtype::CFUNC; }
-  bool isfld () const { return csub == subtype::CFLD; }
-  bool isregex () const { return ctype == type::OREGEX; }
-  bool isrec () const { return csub == subtype::CREC; }
-  bool isnext () const  { return csub == subtype::JNEXT || csub == subtype::JNEXTFILE; }
-  bool isret () const { return csub == subtype::JRET; }
-  bool isbreak () const { return csub == subtype::JBREAK; }
-  bool iscont () const { return csub == subtype::JCONT; }
-  bool isjump () const { return ctype == type::OJUMP; }
-  bool isexit () const { return csub == subtype::JEXIT; }
-  bool istrue () const { return csub == subtype::BTRUE; }
+  bool isarr () const { return (flags & ARR) != 0; }
+  bool isfcn () const { return (ctype == type::CFUNC) || (ctype == type::EXTFUNC); }
+  bool isfld () const { return ctype == type::FLD; }
+  bool isnf () const { return ctype == type::CNF; }
+
+  bool isregex () const { return (flags & REGEX) != 0; }
+  bool isrec () const { return ctype == type::REC; }
+  bool isnext () const  { return ctype == type::JNEXT || ctype == type::JNEXTFILE; }
+  bool isret () const { return ctype == type::JRET; }
+  bool isbreak () const { return ctype == type::JBREAK; }
+  bool iscont () const { return ctype == type::JCONT; }
+  bool isjump () const { return ctype > type::JUMP_FIRST && ctype < type::JUMP_LAST; }
+  bool isexit () const { return ctype== type::JEXIT; }
+  bool istrue () const { return ctype == type::BTRUE; }
+
+private:
+  std::string fmt;       /* CONVFMT/OFMT value used to convert from number */
+  void update_str_val ();
 };
 
 class Array {    /* symbol table array */
 public:
   class Iterator {
   public:
-    Iterator& operator ++(int);
+    Iterator operator ++(int);
+    Iterator& operator ++();
     Cell* operator *();
     Cell* operator ->() { return operator *(); };
     bool operator == (const Iterator& other) const;
@@ -141,9 +149,9 @@ public:
 
   Array (int n);
   ~Array ();
-  Cell* setsym (const char* n, const char* s, double f, unsigned int t, Cell::subtype sub=Cell::subtype::CNONE);
-  Cell* setsym (const char* n, Array* arr, unsigned int t);
-  Cell* removesym (const char* n);
+  Cell* setsym (const char* n, const char* s, double f, unsigned int t);
+  Cell* setsym (const char* n, Array* arr, int addl_flags);
+  Cell* removesym (const std::string& n);
   void deletecell (Iterator& p);
   Cell* lookup (const char* name);
   int   length () const;
@@ -151,6 +159,9 @@ public:
 
   Iterator begin () const;
   Iterator end () const;
+#ifndef NDEBUG
+  void print ();
+#endif
 
 private:
   void rehash ();
@@ -160,8 +171,6 @@ private:
   int  sz;        /* size of tab */
   Cell  **tab;    /* hash table pointers */
 };
-
-#define  NSYMTAB  50  /* initial size of a symbol table */
 
 /* function types */
 #define FLENGTH   1
@@ -234,35 +243,34 @@ struct Frame {
 };
 
 
-struct Interpreter {
+class Interpreter {
+public:
   Interpreter ();
   ~Interpreter ();
   void syminit ();
   void envinit ();
-  void makefields (int nf);
+  void makefields (size_t nf);
 
   void std_redirect (int nf, const char* fname);
   void run ();
   void clean_symtab ();
   void closeall ();
   void initgetrec ();
-  int getrec (Cell* cell);
+  bool getrec (Cell* cell);
   void nextfile ();
   int getchar (FILE* inf);
-  int readrec (Cell* cell, FILE* inf);
+  bool readrec (Cell* cell, FILE* inf);
   const char* getargv (int n);
   int putstr (const char* str, FILE* fp);
   void setclvar (const char* s);
   void fldbld ();
   void recbld ();
-  int refldbld (const char* rec, const char* fs);
   void cleanfld (int n1, int n2);
-  void newfld (int n);
   void setlastfld (int n);
   Cell* fieldadr (int n);
   void growfldtab (size_t n);
   Node* nodealloc (int n);
-  Cell* makedfa (const char* s, int anchor, bool compiling = true);
+  Cell* makedfa (const char* s, bool compiling = true);
 
   int status;           //!< Interpreter status. See below
 #define AWKS_INIT       1   //!< status block initialized
@@ -296,11 +304,9 @@ struct Interpreter {
   inproc inredir;       //!< input redirection function
   outproc outredir;     //!< output redirection function
   struct Frame  fn;     //!< frame data for current function call
-  bool donerec;         //!< true if record broken into fields
-  bool donefld;         //!< true if record is valid (no fld has changed)
-  Cell *fldtab;         //!< $0, $1, ...
-  int nfields;          //!< last allocated field in fldtab
-  int lastfld;          //!< last used field
+  bool donerec;         //!< true if record is valid (no fld has changed)
+  bool donefld;         //!< true if record broken into fields
+  std::vector< std::unique_ptr<Cell> > fldtab;   //!< $0, $1, ...
   std::vector< std::unique_ptr<Cell> > ratab;    //!< cache of last few regex
 
 #define CELL_FS         predefs[0]
@@ -320,6 +326,9 @@ struct Interpreter {
 
 #define NPREDEF 14
   Cell* predefs[NPREDEF];  //!< Predefined variables
+
+private:
+  int refldbld (const char* rec);
 
   //TODO remove next line when finished converting to OO
   void* interp; //only to highlight inconsistent use.

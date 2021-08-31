@@ -42,7 +42,7 @@ Array::~Array ()
   free (tab);
 }
 
-Cell* Array::setsym (const char* n, const char* s, double f, unsigned int t, Cell::subtype sub)
+Cell* Array::setsym (const char* n, const char* s, double f, unsigned int t)
 {
   Cell* p;
   assert (n != NULL);
@@ -51,22 +51,29 @@ Cell* Array::setsym (const char* n, const char* s, double f, unsigned int t, Cel
     p = insert_sym (n);
     p->fval = f;
     p->flags = t;
-    p->sval = s ? tostring (s) : 0;
+    if (s)
+      p->sval = s;
+    else
+      p->sval.clear ();
 #ifndef  NDEBUG
-    dprintf ("setsym added n=%s t=%s",p->nval , flags2str (p->flags));
+    dprintf ("setsym added n=%s t=%s",p->nval.c_str() , flags2str (p->flags));
     if ((p->flags & NUM) != 0)
       dprintf (" f=%g", p->fval);
     if ((p->flags & STR) != 0)
-      dprintf (" s=<%s>", quote (p->sval));
+      dprintf (" s=<%s>", quote (p->sval).c_str ());
     dprintf ("\n");
 #endif
   }
   else
-    dprintf ("setsym found n=%s t=%s\n", p->nval, flags2str (p->flags));
+    dprintf ("setsym found n=%s t=%s\n", p->nval.c_str(), flags2str (p->flags));
   return p;
 }
 
-Cell* Array::setsym (const char* n, Array* arry, unsigned int t)
+/// Add an array as element to this array.
+/// n - array name
+/// arry - element to be added
+/// addl_flags - flags OR'ed to existing ones
+Cell* Array::setsym (const char* n, Array* arry, int addl_flags)
 {
   Cell* p;
   if (n != NULL && (p = lookup (n)) != NULL)
@@ -74,10 +81,10 @@ Cell* Array::setsym (const char* n, Array* arry, unsigned int t)
   else
   {
     p = insert_sym (n);
-    p->csub = Cell::subtype::CARR;
+    p->flags = ARR;
     p->arrval = arry;
-    p->flags = t;
   }
+  p->flags |= addl_flags;
   return p;
 }
 
@@ -86,7 +93,7 @@ Cell* Array::insert_sym (const char* n)
   int h;
 
   dprintf ("Inserting symbol %s\n");
-  Cell *p = new Cell (Cell::type::OCELL, Cell::subtype::CNONE, n, 0, 0, 0);
+  Cell *p = new Cell (n);
 
   nelem++;
   if (nelem > FULLTAB * sz)
@@ -97,14 +104,14 @@ Cell* Array::insert_sym (const char* n)
   return p;
 }
 
-/// Unchain an element from an array
-Cell* Array::removesym (const char* n)
+/// Unchain an element from array
+Cell* Array::removesym (const std::string& n)
 {
-  int h = hash (n, sz);
+  int h = hash (n.c_str(), sz);
   Cell* p, * prev = NULL;
   for (p = tab[h]; p != NULL; prev = p, p = p->cnext)
   {
-    if (strcmp (n, p->nval) == 0)
+    if (n == p->nval)
     {
       if (prev == NULL)  /* 1st one */
         tab[h] = p->cnext;
@@ -175,7 +182,7 @@ void Array::rehash ()
     for (cp = tab[i]; cp; cp = op)
     {
       op = cp->cnext;
-      nh = hash (cp->nval, nsz);
+      nh = hash (cp->nval.c_str(), nsz);
       cp->cnext = np[nh];
       np[nh] = cp;
     }
@@ -192,11 +199,20 @@ Cell* Array::lookup (const char* s)
   int h;
 
   h = hash (s, sz);
+  std::string ss (s);
   for (p = tab[h]; p != NULL; p = p->cnext)
-    if (strcmp (s, p->nval) == 0)
+    if (ss == p->nval)
       return p;   /* found it */
   return NULL;    /* not found */
 }
+
+#ifndef NDEBUG
+void Array::print ()
+{
+  for (auto p : *this)
+    print_cell (p, 0);
+}
+#endif
 
 Array::Iterator Array::begin () const
 {
@@ -223,7 +239,27 @@ Array::Iterator::Iterator (const Array* a)
 {
 }
 
-Array::Iterator& Array::Iterator::operator++ (int)
+
+/// Post-increment operator 
+Array::Iterator Array::Iterator::operator++ (int)
+{
+  Iterator me = *this;
+  if (ptr)
+    ptr = ptr->cnext;
+  if (!ptr)
+  {
+    while (++ipos < owner->sz && owner->tab[ipos] == 0)
+      ;
+    if (ipos < owner->sz)
+      ptr = owner->tab[ipos];
+    else
+      ptr = 0;
+  }
+  return me;
+}
+
+/// Pre-increment operator 
+Array::Iterator& Array::Iterator::operator++ ()
 {
   if (ptr)
     ptr = ptr->cnext;
