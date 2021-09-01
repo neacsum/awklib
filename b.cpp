@@ -73,9 +73,9 @@ void requote (string& str)
 
 
 /// Compile a string into a regex and return the node containing that regex
-Node* nodedfa (const char *s, int anchor)
+Node* nodedfa (const char *s)
 {
-  Cell* a = interp->makedfa (s, anchor);
+  Cell* a = interp->makedfa (s);
   Node *x = new Node (0, nullproc, 0, (Node*)a);
   x->ntype = NVALUE;
 

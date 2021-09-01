@@ -231,10 +231,10 @@ ppattern:
     | ppattern and ppattern %prec AND
         { $$ = op2(AND, boolop, notnull($1), notnull($3), AND); }
     | ppattern MATCHOP reg_expr
-        { $$ = op3($2, matchop, $1, nodedfa($3, 0), NIL, $2); }
+        { $$ = op3($2, matchop, $1, nodedfa($3), NIL, $2); }
     | ppattern MATCHOP ppattern
         { if (constnode($3))
-            $$ = op3($2, matchop, $1, nodedfa(strnode($3), 0), NIL, $2);
+            $$ = op3($2, matchop, $1, nodedfa(strnode($3)), NIL, $2);
           else
             $$ = op3($2, matchop, $1, NIL, $3, $2); }
     | ppattern IN varname
@@ -269,10 +269,10 @@ pattern:
     | pattern NE pattern
         { $$ = op2($2, relop, $1, $3, $2); }
     | pattern MATCHOP reg_expr
-        { $$ = op3($2, matchop, $1, nodedfa($3, 0), NIL, $2); }
+        { $$ = op3($2, matchop, $1, nodedfa($3), NIL, $2); }
     | pattern MATCHOP pattern
         { if (constnode($3))
-            $$ = op3($2, matchop, $1, nodedfa(strnode($3), 0), NIL, $2);
+            $$ = op3($2, matchop, $1, nodedfa(strnode($3)), NIL, $2);
           else
             $$ = op3($2, matchop, $1, NIL, $3, $2); }
     | pattern IN varname
@@ -323,7 +323,7 @@ rbrace:
 
 re:
        reg_expr
-        { $$ = op3(MATCH, matchfun, rectonode(), nodedfa($1, 0), NIL); }
+        { $$ = op3(MATCH, matchfun, rectonode(), nodedfa($1), NIL); }
     | NOT re
         { $$ = op2(NOT, boolop, notnull($2), NIL, NOT); }
     ;
@@ -469,10 +469,10 @@ term:
     | '(' pattern ')'
         { $$ = $2; }
     | MATCHFCN '(' pattern comma reg_expr ')'
-        { $$ = op3(MATCHFCN, matchfun, $3, nodedfa($5, 1), NIL); }
+        { $$ = op3(MATCHFCN, matchfun, $3, nodedfa($5), NIL); }
     | MATCHFCN '(' pattern comma pattern ')'
         { if (constnode($5))
-            $$ = op3(MATCHFCN, matchfun, $3, nodedfa(strnode($5), 1), NIL);
+            $$ = op3(MATCHFCN, matchfun, $3, nodedfa(strnode($5)), NIL);
           else
             $$ = op3(MATCHFCN, matchfun, $3, NIL, $5); }
     | NUMBER
@@ -480,7 +480,7 @@ term:
     | SPLIT '(' pattern comma varname comma pattern ')'     /* string */
         { $$ = op3(SPLIT, split, $3, makearr($5), $7, STRING); }
     | SPLIT '(' pattern comma varname comma reg_expr ')'    /* const /regexp/ */
-        { $$ = op3(SPLIT, split, $3, makearr($5), nodedfa($7, 1), REGEXPR); }
+        { $$ = op3(SPLIT, split, $3, makearr($5), nodedfa($7), REGEXPR); }
     | SPLIT '(' pattern comma varname ')'
         { $$ = op3(SPLIT, split, $3, makearr($5), NIL, STRING); }  /* default */
     | SPRINTF '(' patlist ')'
@@ -488,17 +488,17 @@ term:
     | STRING
         { $$ = celltonode($1); }
     | subop '(' reg_expr comma pattern ')'
-        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa($3, 1), $5, rectonode()); }
+        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa($3), $5, rectonode()); }
     | subop '(' pattern comma pattern ')'
         { if (constnode($3))
-            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa(strnode($3), 1), $5, rectonode());
+            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa(strnode($3)), $5, rectonode());
           else
             $$ = op4($1, ($1==SUB)?sub:gsub, $3, NIL, $5, rectonode()); }
     | subop '(' reg_expr comma pattern comma var ')'
-        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa($3, 1), $5, $7); }
+        { $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa($3), $5, $7); }
     | subop '(' pattern comma pattern comma var ')'
         { if (constnode($3))
-            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa(strnode($3), 1), $5, $7);
+            $$ = op4($1, ($1==SUB)?sub:gsub, NIL, nodedfa(strnode($3)), $5, $7);
           else
             $$ = op4($1, ($1==SUB)?sub:gsub, $3, NIL, $5, $7); }
     | SUBSTR '(' pattern comma pattern comma pattern ')'

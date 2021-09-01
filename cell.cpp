@@ -52,6 +52,34 @@ Cell::~Cell ()
   dprintf ("Remaining cells = %d\n", --cell_count);
 }
 
+// Assignment operator copies the value from another cell
+Cell& Cell::operator= (const Cell& rhs)
+{
+  if ((rhs.flags & (NUM | STR)) == 0)
+    funnyvar (&rhs, "operator=");
+
+  flags &= ~(NUM | STR);
+  sval.clear ();
+  fval = 0;
+  switch (rhs.flags & (STR | NUM))
+  {
+  case (NUM | STR):
+    sval = rhs.sval;
+    fval = rhs.fval;
+    flags |= NUM | STR;
+    break;
+  case STR:
+    sval = rhs.sval;
+    flags |= STR;
+    break;
+  case NUM:
+    fval = rhs.fval;
+    flags |= NUM;
+    break;
+  }
+  return *this;
+}
+
 ///  Set string val of a Cell
 void Cell::setsval (const char* s)
 {

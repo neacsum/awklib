@@ -98,8 +98,10 @@ Node::~Node ()
 #endif
     if (ntype == NVALUE)
     {
-      Cell* x = (Cell*)arg[0].release ();
-      // Do not delete cell. It belongs to symtab
+      Cell* x = (Cell*)arg[0].release();
+      // Do not delete cell. It belongs to symtab...
+      if (x->isregex ()) //...unless it's a regex
+        delete x; //regular expressions are not part of symtab (for now)
     }
     else
     {

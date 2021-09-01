@@ -186,7 +186,6 @@ Cell *call (const Node::Arguments& a, int n)
 {
   int i, ncall, ndef;
   Node *x;
-  Cell *y;
   Frame frm;
   Cell **callpar = NULL;
 
@@ -211,7 +210,7 @@ Cell *call (const Node::Arguments& a, int n)
 
   for (i = 0, x = a[1].get(); x != NULL; i++, x = x->nnext)
   {  /* get call args */
-    y = execute (x);
+    Cell *y = execute (x);
     dprintf ("args[%d]: %s %f <%s>, t=%s\n",
       i, y->nval.c_str(), y->fval, y->isarr () ? "(array)" : y->sval.c_str(), flags2str (y->flags));
     if (y->isfcn ())
@@ -258,7 +257,6 @@ Cell *call (const Node::Arguments& a, int n)
   }
 
   frm.nargs = ndef;
-  frm.ret = gettemp();
 
   //save previous function call frame
   Frame prev = interp->fn;
@@ -267,6 +265,7 @@ Cell *call (const Node::Arguments& a, int n)
   interp->fn = frm;
 
   dprintf ("start exec of %s\n", frm.fcn->nval.c_str());
+  Cell* result;
   if (frm.fcn->ctype == Cell::type::EXTFUNC)
   {
     //set args for external function
@@ -289,15 +288,23 @@ Cell *call (const Node::Arguments& a, int n)
 
     //call external function
     ((awkfunc)frm.fcn->funptr) ((AWKINTERP*)interp, &extret, ndef, extargs);
-    y = gettemp ();
+    result = gettemp ();
     free (extargs);
+    interp->retval.flags &= ~(NUM | STR);
     if (extret.flags & AWKSYMB_STR)
-      frm.ret->setsval (extret.sval);
+    {
+      interp->retval.sval = extret.sval;
+      interp->retval.flags |= STR;
+    }
     if (extret.flags & AWKSYMB_NUM)
-      frm.ret->setfval (extret.fval);
+    {
+      interp->retval.fval = extret.fval;
+      interp->retval.flags |= NUM;
+    }
   }
   else
-    y = execute (frm.fcn->nodeptr);  /* execute body */
+    result = execute (frm.fcn->nodeptr);  /* execute body */
+
   dprintf ("finished exec of %s\n", frm.fcn->nval.c_str());
   interp->fn = prev;    //restore previous function frame
   for (i = 0; i < ndef; i++)
@@ -320,20 +327,18 @@ Cell *call (const Node::Arguments& a, int n)
   }
   xfree (frm.args);
   xfree (callpar);
-  if (y->isexit () || y->isnext ())
-  {
-    delete frm.ret;
-    return y;
-  }
+  if (result->isexit () || result->isnext ())
+    return result;
 
-  if ((frm.ret->flags & (NUM | STR)) == 0)
-  {
-    //no return statement
-    frm.ret->flags = NUM | STR;
-  }
-  dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval.c_str(), frm.ret->getfval (),
-    frm.ret->getsval (), flags2str (frm.ret->flags));
-  return frm.ret;
+  if (!result->istemp())
+    result = gettemp ();
+  *result = interp->retval;
+  if ((result->flags & (NUM | STR)) == 0)
+    result->flags |= STR;
+
+  dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval.c_str(), result->fval,
+    result->sval.c_str(), flags2str (result->flags));
+  return result;
 }
 
 /// nth argument of a function
@@ -365,22 +370,8 @@ Cell *jump (const Node::Arguments& a, int n)
   case RETURN:
     if (a[0] != NULL)
     {
-      Cell *pr = interp->fn.ret;
       y = execute (a[0]);
-      if ((y->flags & (NUM | STR)) == 0)
-        funnyvar (y, "return");
-
-      pr->flags = 0;
-      if (y->flags & NUM)
-      {
-        pr->fval = y->getfval ();
-        pr->flags |= NUM;
-      }
-      if (y->flags & STR)
-      {
-        pr->setsval (y->getsval ());
-        pr->flags |= STR;
-      }
+      interp->retval = *y;
       tempfree (y);
     }
     return jret;
@@ -564,7 +555,7 @@ Cell *matchop (const Node::Arguments& a, int n)
   else
   {
     y = execute (a[2]);  /* a[2] = regular expr */
-    Cell* re = interp->makedfa (y->getsval (), false);
+    Cell* re = interp->makedfa (y->getsval ());
     found = re->match(x->getsval());
     tempfree (y);
   }
@@ -596,7 +587,7 @@ Cell* matchfun (const Node::Arguments& a, int)
   else
   {
     y = execute (a[2]);  /* a[2] = regular expr */
-    Cell* re = interp->makedfa (y->getsval (), false);
+    Cell* re = interp->makedfa (y->getsval ());
     found = re->pmatch(s, patbeg, patlen);
     tempfree (y);
   }
@@ -1144,29 +1135,7 @@ Cell *assign (const Node::Arguments& a, int n)
       interp->donerec = true;
     }
     if (x != y)  // leave alone self-assignment */
-    {
-      x->flags &= ~(NUM | STR);
-      switch (y->flags & (STR | NUM))
-      {
-      case (NUM | STR):
-        x->sval = y->sval;
-        x->fval = y->fval;
-        x->flags |= NUM | STR;
-        break;
-      case STR:
-        x->sval = y->sval;
-        x->flags |= STR;
-        break;
-      case NUM:
-        x->fval = y->fval;
-        x->flags |= NUM;
-        break;
-      case 0:
-        x->sval.clear ();
-        x->fval = 0.;
-        break;
-      }
-    }
+      *x = *y;
   }
   else
   {

@@ -33,7 +33,7 @@ int   yyparse (void*);
 void  yyinit (void);
 void  startreg (void);
 
-Node* nodedfa (const char* str, int anchor);
+Node* nodedfa (const char* str);
 
 int   pgetc (void);
 char* cursource (void);
@@ -55,7 +55,7 @@ Node* pa2stat (Node *, Node *, Node *);
 Node* linkum (Node *, Node *);
 void  defn (Cell *, Node *, Node *);
 int   isarg (const char *);
-void  funnyvar (Cell *, const char *);
+void  funnyvar (const Cell *, const char *);
 char* tostring (const char *);
 char* qstring (const char *str, int delim);
 

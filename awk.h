@@ -73,6 +73,7 @@ public:
 
   Cell (const char *n=nullptr, type t=Cell::type::CELL, unsigned char flags=0, Awkfloat f = 0.);
   ~Cell ();
+  Cell& operator =(const Cell& rhs);
   void setsval (const char* s);
   void setfval (Awkfloat f);
   const char* getsval ();
@@ -122,6 +123,7 @@ public:
   bool isjump () const { return ctype > type::JUMP_FIRST && ctype < type::JUMP_LAST; }
   bool isexit () const { return ctype== type::JEXIT; }
   bool istrue () const { return ctype == type::BTRUE; }
+  bool istemp () const { return ctype == type::CTEMP; }
 
 private:
   std::string fmt;       /* CONVFMT/OFMT value used to convert from number */
@@ -239,7 +241,6 @@ struct Frame {
   Cell *fcn;    //the function
   Cell **args;  //arguments
   int nargs;    //number of arguments
-  Cell *ret;    // return value
 };
 
 
@@ -270,7 +271,7 @@ public:
   Cell* fieldadr (int n);
   void growfldtab (size_t n);
   Node* nodealloc (int n);
-  Cell* makedfa (const char* s, bool compiling = true);
+  Cell* makedfa (const char* s);
 
   int status;           //!< Interpreter status. See below
 #define AWKS_INIT       1   //!< status block initialized
@@ -326,6 +327,7 @@ public:
 
 #define NPREDEF 14
   Cell* predefs[NPREDEF];  //!< Predefined variables
+  Cell retval;     // function return value
 
 private:
   int refldbld (const char* rec);

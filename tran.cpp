@@ -50,7 +50,7 @@ void freeelem (Cell *ap, const char *s)
 }
 
 
-void funnyvar (Cell *vp, const char *rw)
+void funnyvar (const Cell *vp, const char *rw)
 {
   if (vp->isarr ())
     FATAL (AWK_ERR_ARG, "can't %s %s; it's an array name.", rw, vp->nval);

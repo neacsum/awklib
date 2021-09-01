@@ -44,6 +44,7 @@ Interpreter::Interpreter ()
   , outredir{ 0 }
   , donerec{ false }
   , donefld{ false }
+  , retval {"retval"}
 {
   *errmsg = 0;
   syminit ();
@@ -716,11 +717,11 @@ Node* Interpreter::nodealloc (int n)
   return x;
 }
 
-Cell* Interpreter::makedfa (const char* s, bool compiling)
+Cell* Interpreter::makedfa (const char* s)
 {
   std::string ss(s);
   requote (ss);
-  if (compiling)  /* a constant for sure */
+  if (status == AWKS_COMPILING)  /* a constant for sure */
   {
     // TODO reuse regex when compiling
     std::regex* re = new std::regex (ss, std::regex_constants::awk);

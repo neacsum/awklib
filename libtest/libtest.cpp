@@ -11,7 +11,7 @@ extern int cell_count;
 bool setup_test (const string& testfile);
 
 // A convenient way to debug individual tests
-#define TESTNAME "29_beginexit"
+#define TESTNAME "9_patmatch"
 TEST (failing)
 {
   ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
@@ -24,9 +24,9 @@ TEST (failing)
   CHECK (awk_setinput (interp, TESTNAME ".in"));
   CHECK (awk_setoutput (interp, TESTNAME ".out"));
   CHECK (awk_exec (interp) >= 0);
-  CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
-  CHECK (awk_exec (interp) >= 0);
-  CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
+  //CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
+  //CHECK (awk_exec (interp) >= 0);
+  //CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
   awk_end (interp);
   remove (TESTNAME ".awk");
   remove (TESTNAME ".in");
@@ -369,6 +369,7 @@ SUITE (one_true_awk)
   TEST_FIXTURE (awk_frame, _##A)\
   {\
     ABORT (setup (#A));\
+    printf ("Test " #A "\n");\
     CHECK (awk_exec (interp) >= 0);\
     CHECK_FILE_EQUAL (#A ".out", #A ".ref");\
     CHECK (awk_exec (interp) >= 0);\
