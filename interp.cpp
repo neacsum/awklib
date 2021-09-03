@@ -44,7 +44,6 @@ Interpreter::Interpreter ()
   , outredir{ 0 }
   , donerec{ false }
   , donefld{ false }
-  , retval {"retval"}
 {
   *errmsg = 0;
   syminit ();

@@ -227,6 +227,7 @@ Node *celltonode (Cell *a, Cell::type t, int flags)
 
 Node *rectonode ()  /* make $0 into a Node */
 {
+  // MN - Is this really needed? Can't we use fldtab[0]?
   return op1 (INDIRECT, indirect, celltonode (literal0));
 }
 

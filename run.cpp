@@ -61,8 +61,6 @@ static Cell  nextfilecell ("nextfile", Cell::type::JNEXTFILE);
 Cell  *jnextfile  = &nextfilecell;
 static Cell  exitcell ("exit", Cell::type::JEXIT, NUM);
 Cell  *jexit  = &exitcell;
-static Cell  retcell ("return", Cell::type::JRET);
-Cell  *jret  = &retcell;
 
 
 static int    format (char **, size_t *, const char *, Node *);
@@ -224,27 +222,7 @@ Cell *call (const Node::Arguments& a, int n)
       {
         frm.args[i] = new Cell ();
         frm.args[i]->nval = y->nval;
-        switch (y->flags & (NUM | STR))
-        {
-        case STR:
-          dprintf ("STR arg\n");
-          frm.args[i]->sval = y->sval;
-          frm.args[i]->flags = STR;
-          break;
-        case NUM:
-          frm.args[i]->fval = y->fval;
-          frm.args[i]->flags = NUM;
-          break;
-        case (NUM|STR):
-          frm.args[i]->sval = y->sval;
-          frm.args[i]->fval = y->fval;
-          frm.args[i]->flags = NUM | STR;
-          break;
-        case 0:
-          funnyvar (y, "argument");
-          frm.args[i]->flags = STR;
-          break;
-        }
+        *frm.args[i] = *y;
       }
     }
     tempfree (y);
@@ -288,18 +266,18 @@ Cell *call (const Node::Arguments& a, int n)
 
     //call external function
     ((awkfunc)frm.fcn->funptr) ((AWKINTERP*)interp, &extret, ndef, extargs);
-    result = gettemp ();
     free (extargs);
-    interp->retval.flags &= ~(NUM | STR);
+    result = new Cell ("", Cell::type::JRET);
+    result->flags = 0;
     if (extret.flags & AWKSYMB_STR)
     {
-      interp->retval.sval = extret.sval;
-      interp->retval.flags |= STR;
+      result->sval = extret.sval;
+      result->flags |= STR;
     }
     if (extret.flags & AWKSYMB_NUM)
     {
-      interp->retval.fval = extret.fval;
-      interp->retval.flags |= NUM;
+      result->fval = extret.fval;
+      result->flags |= NUM;
     }
   }
   else
@@ -310,31 +288,39 @@ Cell *call (const Node::Arguments& a, int n)
   for (i = 0; i < ndef; i++)
   {
     Cell* t = frm.args[i];
-    if (t->isarr())
+    if (callpar[i])
     {
-      //array coming out of the function
-      if (callpar[i] && !callpar[i]->isarr())
+      if (t->isarr ())
       {
-        //scalar coming in
-        callpar[i]->sval.clear ();
-        callpar[i]->flags |= ARR;
-        callpar[i]->arrval = t->arrval;
-        continue;
+        //array coming out of the function
+        if (!callpar[i]->isarr ())
+        {
+          //scalar coming in
+          callpar[i]->sval.clear ();
+          callpar[i]->flags = t->flags;
+          callpar[i]->arrval = t->arrval;
+          t->arrval = 0; //make it safe for deletion
+        }
+        else
+          continue; // array coming in, array going out
       }
     }
-    else
-      delete t;
+    //passed by value or local variable
+    delete t;
   }
   xfree (frm.args);
   xfree (callpar);
   if (result->isexit () || result->isnext ())
     return result;
 
-  if (!result->istemp())
-    result = gettemp ();
-  *result = interp->retval;
-  if ((result->flags & (NUM | STR)) == 0)
-    result->flags |= STR;
+  if (result->ctype == Cell::type::JRET)
+    result->ctype = Cell::type::CTEMP;
+  else
+  {
+    //function without return
+    tempfree (result);
+    result = literal_null;
+  }
 
   dprintf ("%s returns %g |%s| %s\n", frm.fcn->nval.c_str(), result->fval,
     result->sval.c_str(), flags2str (result->flags));
@@ -368,13 +354,16 @@ Cell *jump (const Node::Arguments& a, int n)
     return jexit;
 
   case RETURN:
-    if (a[0] != NULL)
     {
-      y = execute (a[0]);
-      interp->retval = *y;
+      if (a[0] != NULL)
+        y = execute (a[0]);
+      else
+        y = literal_null;
+      Cell* r = new Cell ("retval", Cell::type::JRET);
+      *r = *y;
       tempfree (y);
+      return r;
     }
-    return jret;
 
   case NEXT:
     return jnext;
@@ -445,9 +434,9 @@ Cell *getnf (const Node::Arguments& a, int)
   return pnf;
 }
 
+/* a[0] ( a[1]...) a[0] array, a[1] is list of subscripts */
 Cell *array (const Node::Arguments& a, int)
 {
-  /* a[0] array, a[1] is list of subscripts */
   Cell *x, *y, *z;
   Node *np;
 
@@ -463,7 +452,7 @@ Cell *array (const Node::Arguments& a, int)
   }
   if (!x->isarr ())
   {
-    dprintf ("making %s into an array\n", x->nval);
+    dprintf ("making %s into an array\n", x->nval.c_str());
     x->makearray ();
   }
   z = x->arrval->setsym (subscript.c_str(), "", 0.0, STR | NUM);
@@ -688,7 +677,7 @@ void tempfree (Cell *a)
 ///  Get a tempcell
 Cell *gettemp ()
 {
-  Cell *p =  new Cell (nullptr, Cell::type::CTEMP);
+  Cell *p =  new Cell (nullptr, Cell::type::CTEMP, STR);
   return p;
 }
 

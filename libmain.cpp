@@ -354,7 +354,10 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
       int n = (int)atof (var->name+1);
       interp->fldbld ();
       if (n >= 0 && n <= NF)
-        cp = interp->fldtab[n].get();
+      {
+        cp = interp->fldtab[n].get ();
+        interp->donefld = interp->donerec = false;
+      }
     }
     else
       cp = interp->symtab->lookup (var->name);

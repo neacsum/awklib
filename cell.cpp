@@ -55,12 +55,12 @@ Cell::~Cell ()
 // Assignment operator copies the value from another cell
 Cell& Cell::operator= (const Cell& rhs)
 {
-  if ((rhs.flags & (NUM | STR)) == 0)
-    funnyvar (&rhs, "operator=");
+  assert (!isarr () && !isfcn ());
 
   flags &= ~(NUM | STR);
   sval.clear ();
   fval = 0;
+
   switch (rhs.flags & (STR | NUM))
   {
   case (NUM | STR):
@@ -68,13 +68,15 @@ Cell& Cell::operator= (const Cell& rhs)
     fval = rhs.fval;
     flags |= NUM | STR;
     break;
-  case STR:
-    sval = rhs.sval;
-    flags |= STR;
-    break;
   case NUM:
     fval = rhs.fval;
     flags |= NUM;
+    break;
+  case STR:
+    sval = rhs.sval;
+    // FALL THROUGH
+  case 0:
+    flags |= STR;
     break;
   }
   return *this;

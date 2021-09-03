@@ -327,7 +327,6 @@ public:
 
 #define NPREDEF 14
   Cell* predefs[NPREDEF];  //!< Predefined variables
-  Cell retval;     // function return value
 
 private:
   int refldbld (const char* rec);
@@ -374,6 +373,11 @@ struct awk_exception {
   int err;
 };
 
+// --------------------------- Global variables ------------------------------
+extern Cell* literal_null;
+
+
+// -------------------------- Inline functions -------------------------------
 inline
 Cell* Node::to_cell () const
 {

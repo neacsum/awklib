@@ -12,12 +12,10 @@ function ack(m,n) {
 2 2
 3 3
 3 4
-3 5
 ## Output
 1 (1 calls)
 3 (4 calls)
 7 (27 calls)
 61 (2432 calls)
 125 (10307 calls)
-253 (42438 calls)
 ## end

@@ -11,7 +11,7 @@ extern int cell_count;
 bool setup_test (const string& testfile);
 
 // A convenient way to debug individual tests
-#define TESTNAME "9_patmatch"
+#define TESTNAME "64_recursive"
 TEST (failing)
 {
   ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
@@ -24,9 +24,9 @@ TEST (failing)
   CHECK (awk_setinput (interp, TESTNAME ".in"));
   CHECK (awk_setoutput (interp, TESTNAME ".out"));
   CHECK (awk_exec (interp) >= 0);
-  //CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
-  //CHECK (awk_exec (interp) >= 0);
-  //CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
+  CHECK_FILE_EQUAL (TESTNAME ".ref",  TESTNAME ".out");
+  CHECK (awk_exec (interp) >= 0);
+  CHECK_FILE_EQUAL (TESTNAME ".ref", TESTNAME ".out");
   awk_end (interp);
   remove (TESTNAME ".awk");
   remove (TESTNAME ".in");
@@ -438,6 +438,7 @@ SUITE (one_true_awk)
   AWK_TEST (59_exit);
   AWK_TEST (63_fun);
   AWK_TEST (64_funarg);
+  AWK_TEST (64_recursive);
 
   //this test is too slow if run at higher debug levels
   TEST_FIXTURE (awk_frame, _65_funackermann)
