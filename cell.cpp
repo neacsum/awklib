@@ -6,8 +6,12 @@
 using namespace std;
 
 extern Interpreter* interp;
+
+#ifndef NDEBUG
 int cell_count = 0;
 std::vector<Cell*> all_cells;
+#endif
+
 
 Cell::Cell (const char* n, type t, unsigned char flags, Awkfloat f)
   : ctype{ t }
@@ -49,7 +53,9 @@ Cell::~Cell ()
     dprintf ("regex\n");
     delete re;
   }
+#ifndef NDEBUG
   dprintf ("Remaining cells = %d\n", --cell_count);
+#endif
 }
 
 // Assignment operator copies the value from another cell

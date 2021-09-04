@@ -10,6 +10,12 @@ extern int cell_count;
 
 bool setup_test (const string& testfile);
 
+
+#ifdef NDEBUG
+// fake one for release mode
+int cell_count;
+#endif
+
 // A convenient way to debug individual tests
 #define TESTNAME "64_recursive"
 TEST (failing)

@@ -93,7 +93,7 @@ int main (int argc, char **argv)
   if (!awk_compile (interp))
   {
     const char *msg;
-    int err = awk_err (&msg);
+    int err = awk_err (interp, &msg);
     fprintf (stderr, "Error %d - %s\n", err, msg);
     exit (1);
   }
@@ -102,7 +102,7 @@ int main (int argc, char **argv)
   if ((ret = awk_exec (interp)) < 0 )
   {
     const char *msg;
-    int err = awk_err (&msg);
+    int err = awk_err (interp, &msg);
     fprintf (stderr, "Error %d - %s\n", err, msg);
     exit (ret);
   }

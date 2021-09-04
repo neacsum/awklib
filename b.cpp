@@ -49,7 +49,7 @@ int hexdigit (char c)
   and std::regex::constants::ECMAScript does not accept octal escaping (\ddd).
 
   Here we convert a string containing \xhh to \ddd. The number of characters
-  the same.
+  remains the same.
 */
 void requote (string& str)
 {
@@ -114,7 +114,12 @@ Cell* split (const Node::Arguments& a, int)
     fs = x->getsval ();
     if (fs.size() > 1)
     {
-      re = new regex (fs, regex_constants::awk);
+      try {
+        re = new regex (fs, regex_constants::awk);
+      }
+      catch (std::exception& x) {
+        FATAL (AWK_ERR_SYNTAX, "Invalid regular expression - %s - %s", fs.c_str(), x.what());
+      }
       temp_re = true;
     }
   }
@@ -239,7 +244,6 @@ void format_repl (string& s)
   s = out;
 }
 
-
 /// substitute command
 /// a[0] = regexp string
 /// a[1] = compiled regexp
@@ -257,7 +261,12 @@ Cell* sub (const Node::Arguments& a, int)
   else
   {
     y = execute (a[0]);
-    re = new regex (y->sval, regex_constants::awk);
+    try {
+      re = new regex (y->sval, regex_constants::awk);
+    }
+    catch (std::exception& x) {
+      FATAL (AWK_ERR_SYNTAX, "Invalid regular expression - %s - %s", y->sval.c_str(), x.what());
+    }
     temp_re = true;
     tempfree (y);
   }
@@ -295,7 +304,12 @@ Cell* gsub (const Node::Arguments& a, int)
   else
   {
     y = execute (a[0]);
-    re = new regex (y->sval, regex_constants::awk);
+    try {
+      re = new regex (y->sval, regex_constants::awk);
+    }
+    catch (std::exception& x) {
+      FATAL (AWK_ERR_SYNTAX, "Invalid regular expression - %s - %s", y->sval.c_str(), x.what());
+    }
     temp_re = true;
     tempfree (y);
   }

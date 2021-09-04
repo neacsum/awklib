@@ -12,15 +12,15 @@ program using only a few function calls. The AWK code can call external function
 provided by your C program and, conversely, the C code can access AWK variables.
 
 Here is an example of a simple word counting application:
-````
+````C++
 #include <awklib.h>
 
 int main (int argc, char **argv)
 {
   AWKINTERP* interp = awk_init (NULL);
-  awk_setprog (interp,
-    "{wc += NF; bc += length($0)}\n"
-    "END {print NR, wc, bc, ARGV[1]}");
+  awk_setprog (interp, R"(
+    {wc += NF; bc += length($0)}\
+    END {print NR, wc, bc, ARGV[1]})";
   awk_compile (interp);
   if (argc > 1)
     awk_addarg (interp, argv[1]);
@@ -83,7 +83,13 @@ error code indication). The simplest solution that preserved most of the
 original code was to wrap the code in try-catch blocks.
 
 ### Version 2 ###
-After spending more time with this project, I discovered a number of inconveniences. A major one was the inability to reuse a compiled AWK script with different input data. Another was the lack of any thread safety. Version 2 plans to address these issues.
+After spending more time with this project, I discovered a number of inconveniences derived from the original purpose of the code base (it was a standalone program) or from its age. In this version I gave up on any pretense that this is anything but C++ code. Here is a list of what has been addressed so far in version 2:
+- Inability to reuse a compiled AWK script with different input data.
+- Lack of thread safety. This is still somewhat of a work in progress. Currently the the whole API is protected by a `awk_in_use` mutex. Future versions should have a more fine grained mechanism.
+- Regular expression machinery (in b.cpp file) was replaced with `std::regex` objects 
+- Most memory management moved to `new/delete` operators from `malloc/free`.
+- True multidimensional arrays similar to [arrays of arrays](https://www.gnu.org/software/gawk/manual/html_node/Arrays-of-Arrays.html) in *gawk*. I didn't really _need_ those but the change in grammar, required to implement them, was so small that I couldn't resist :)
+- Much expanded testing (see `libtest` project) infrastructure. Apart from API tests, most tests (over 100 of them at last count) were taken from the One True AWK project.
 
-Also I gave up on any pretense that this is anything but C++ code. All memory management is moving to `new/delete` operators going away from `malloc/free`.
+The API has remained largely unchanged. Only the `awk_err` function takes an additional pointer to interpreter parameters. 
 

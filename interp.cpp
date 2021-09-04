@@ -13,12 +13,14 @@
 #define  DEFAULT_ARGV 3         // Initial number of entries in ARGV
 #define  NFA  20                // Cache this many dynamic regex's
 
+using namespace std;
+
 static int file_cmp (const char* f1, const char* f2);
 
 Cell* literal_null;
 Cell* literal0;
 
-extern std::string curfname;  ///<current function name
+extern string curfname;  ///<current function name
 extern Interpreter* interp;
 
 Interpreter::Interpreter ()
@@ -31,7 +33,7 @@ Interpreter::Interpreter ()
   , argno{ 1 }
   , envir{ 0 }
   , argvtab{ 0 }
-  , rand_seed{ std::mt19937::default_seed }
+  , rand_seed{ mt19937::default_seed }
   , lexprog{ 0 }
   , lexptr{ 0 }
   , nprog{ 0 }
@@ -51,7 +53,7 @@ Interpreter::Interpreter ()
 
   // Initialize $0 and fields
   //first allocation - deal with $0
-  fldtab.push_back (std::make_unique<Cell> ("0", Cell::type::REC, STR));
+  fldtab.push_back (make_unique<Cell> ("0", Cell::type::REC, STR));
   makefields (DEFAULT_FLD);
 
   files = new FILE_STRUC[nfiles];
@@ -155,7 +157,7 @@ void Interpreter::makefields (size_t nf)
     char temp[50];
     sprintf (temp, "%zu", i);
     fldtab.push_back (
-      std::make_unique<Cell> (temp, Cell::type::FLD, STR));
+      make_unique<Cell> (temp, Cell::type::FLD, STR));
   }
 }
 
@@ -532,7 +534,7 @@ void Interpreter::fldbld ()
         fe++;
       if (*fe)
         *fe++ = 0;
-      if (++i >= fldtab.size())
+      if (++i >= (int)fldtab.size())
         growfldtab (i);
       fldtab[i]->sval = fb;
       fb = fe;
@@ -544,7 +546,7 @@ void Interpreter::fldbld ()
     for (i = 0; *fb != 0; fb++)
     {
       char buf[2];
-      if (++i >= fldtab.size ())
+      if (++i >= (int)fldtab.size ())
         growfldtab (i);
       buf[0] = *fb;
       buf[1] = 0;
@@ -574,7 +576,7 @@ void Interpreter::fldbld ()
       else
         end_seen = 1;
 
-      if (++i >= fldtab.size ())
+      if (++i >= (int)fldtab.size ())
         growfldtab (i);
       fldtab[i]->sval = fb;
     }
@@ -610,7 +612,7 @@ void Interpreter::recbld ()
   if (donerec)
     return;
 
-  std::string& rec = fldtab[0]->sval;
+  string& rec = fldtab[0]->sval;
   rec.clear ();
   for (int i = 1; i <= MY_NF; i++)
   {
@@ -632,18 +634,25 @@ void Interpreter::recbld ()
 /// Build fields from reg expr in FS
 int Interpreter::refldbld (const char* in)
 {
-  std::string rec = in;
+  string rec = in;
   if (rec.empty())
     return 0;
-  if (!CELL_FS->isregex())
-    CELL_FS->re = new std::regex (CELL_FS->sval, std::regex_constants::awk);
+  if (!CELL_FS->isregex ())
+  {
+    try {
+      CELL_FS->re = new regex (CELL_FS->sval, regex_constants::awk);
+    }
+    catch (exception& x) {
+      FATAL (AWK_ERR_SYNTAX, "Invalid regular expression - %s - %s", CELL_FS->sval.c_str(), x.what());
+    }
+  }
 
   dprintf ("into refldbld, rec = <%s>, pat = <%s>\n", rec, CELL_FS->sval.c_str());
   int i = 1;
   size_t pstart, plen;
   while (CELL_FS->pmatch (rec.c_str(), pstart, plen))
   {
-    if (i >= fldtab.size ())
+    if (i >= (int)fldtab.size ())
       growfldtab (i);
     fldtab[i]->flags = STR;
     fldtab[i]->sval = rec.substr (0, pstart);
@@ -670,7 +679,7 @@ void Interpreter::cleanfld (int n1, int n2)
 /// Set last field cleaning fldtab cells if necessary
 void Interpreter::setlastfld (int n)
 {
-  if (n >= fldtab.size ())
+  if (n >= (int)fldtab.size ())
     growfldtab (n);
 
   int lastfld = (int)MY_NF;
@@ -691,7 +700,7 @@ Cell* Interpreter::fieldadr (int n)
     fldbld ();
   else if (!n && !donerec)
     recbld ();
-  if (n >= fldtab.size())  /* fields after NF are empty */
+  if (n >= (int)fldtab.size())  /* fields after NF are empty */
     growfldtab (n);
   return fldtab[n].get();
 }
@@ -718,28 +727,35 @@ Node* Interpreter::nodealloc (int n)
 
 Cell* Interpreter::makedfa (const char* s)
 {
-  std::string ss(s);
+  string ss(s);
   requote (ss);
-  if (status == AWKS_COMPILING)  /* a constant for sure */
-  {
-    // TODO reuse regex when compiling
-    std::regex* re = new std::regex (ss, std::regex_constants::awk);
-    Cell* x = new Cell (s, Cell::type::CELL, (CONST | REGEX));
-    x->re = re;
-    return x;
-  }
-
-  for (int i = 0; i < ratab.size (); i++)  /* is it there already? */
-  {
-    if (ratab[i]->nval == ss)
+  Cell* x;
+  try {
+    if (status == AWKS_COMPILING)  /* a constant for sure */
     {
-      ratab[i]->fval += 1.;
-      return ratab[i].get();
+      // TODO reuse regex when compiling
+      regex* re = new regex (ss, regex_constants::awk);
+      Cell* x = new Cell (s, Cell::type::CELL, (CONST | REGEX));
+      x->re = re;
+      return x;
     }
+
+    for (int i = 0; i < (int)ratab.size (); i++)  /* is it there already? */
+    {
+      if (ratab[i]->nval == ss)
+      {
+        ratab[i]->fval += 1.;
+        return ratab[i].get ();
+      }
+    }
+
+    x = new Cell (s, Cell::type::CELL, REGEX);
+    x->re = new regex (ss, regex_constants::awk);
+  }
+  catch (std::exception& x) {
+    FATAL (AWK_ERR_SYNTAX, "Invalid regular expression - %s - %s", ss.c_str (), x.what());
   }
 
-  Cell* x = new Cell (s, Cell::type::CELL, REGEX);
-  x->re = new std::regex (ss, std::regex_constants::awk);
   if (ratab.size() < NFA)
   {
     /* room for another */
@@ -748,8 +764,8 @@ Cell* Interpreter::makedfa (const char* s)
   }
 
   Awkfloat use = ratab[0]->fval;  /* replace least-recently used */
-  int nuse = 0;
-  for (int i = 1; i < ratab.size(); i++)
+  size_t nuse = 0;
+  for (size_t i = 1; i < ratab.size(); i++)
   {
     if (ratab[i]->fval < use)
     {
@@ -758,7 +774,7 @@ Cell* Interpreter::makedfa (const char* s)
     }
   }
 
-  ratab[nuse] = std::unique_ptr<Cell> (x);
+  ratab[nuse] = unique_ptr<Cell> (x);
   return x;
 }
 

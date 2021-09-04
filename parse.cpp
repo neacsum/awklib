@@ -105,7 +105,7 @@ Node::~Node ()
     }
     else
     {
-      for (int i = 0; i < arg.size (); i++)
+      for (size_t i = 0; i < arg.size (); i++)
         arg[i].reset ();
     }
     delete nnext;

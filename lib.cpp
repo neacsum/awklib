@@ -36,7 +36,7 @@ THIS SOFTWARE.
 static int  refldbld (const char *, const char *);
 
 
-
+#ifndef NDEBUG
 /// Quick and dirty character quoting can quote a few short character strings
 std::string quote (const std::string& in)
 {
@@ -68,7 +68,7 @@ std::string quote (const std::string& in)
   }
   return out;
 }
-
+#endif
 
 double errcheck (double x, const char *s)
 {

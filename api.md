@@ -409,7 +409,7 @@ the appropriate flags. String values must be allocated using `malloc`.
 Return last error code and message.
 
 #### Prototype:
-int awk_err (const char **msg);
+int awk_err (AWKINTERP *pi, const char **msg);
 
 #### Parameters:
 `msg`   - address of a pointer to the last error message.

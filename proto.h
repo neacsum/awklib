@@ -135,4 +135,10 @@ void  FATAL (int err, const char*, ...);
 void print_cell (Cell* c, int indent);
 const char *flags2str (int flags);
 std::string quote (const std::string& in);
+#else
+inline void print_cell (Cell* c, int indent) {};
+inline const char* flags2str (int flags) { return ""; };
+inline std::string quote (const std::string& in) {
+  return in;
+};
 #endif

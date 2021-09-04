@@ -230,9 +230,10 @@ int awk_exec (AWKINTERP *pinter)
     interp->status = AWKS_DONE;
     interp->closeall ();
   }
+#ifndef NDEBUG
   if (dbg > 2)
     interp->symtab->print ();
-
+#endif
   return interp->err;
 }
 
@@ -356,7 +357,7 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
       if (n >= 0 && n <= NF)
       {
         cp = interp->fldtab[n].get ();
-        interp->donefld = interp->donerec = false;
+        interp->donefld = interp->donerec = false; //
       }
     }
     else
@@ -415,9 +416,8 @@ int awk_getvar (AWKINTERP * pinter, awksymb * var)
 int awk_setvar (AWKINTERP * pinter, awksymb * var)
 {
   Cell *cp = NULL;
-  int n;
   bool is_field = false;
-
+  size_t n = 0;
   int flags = 0;
   if (var->flags & AWKSYMB_NUM) flags |= NUM;
   if (var->flags & AWKSYMB_STR) flags |= STR;
@@ -427,7 +427,7 @@ int awk_setvar (AWKINTERP * pinter, awksymb * var)
     if (var->name[0] == '$' && is_number (var->name+1)
      && interp->status == AWKS_RUN)
     {
-      n = (int)atof (var->name+1);
+      n = (size_t)atof (var->name+1);
       if (n < 0 || n >= interp->fldtab.size())
       {
         sprintf (interp->errmsg, "awk_setvar: invalid field %s", var->name);
@@ -603,7 +603,6 @@ void print_cell (Cell *c, int indent)
 
 void print_tree (Node *n, int indent)
 {
-  int i;
   ptrdiff_t nn = (ptrdiff_t)n;
   errprintf ("%*cNode 0x%p %s", indent, ' ', n, (nn < LASTTOKEN)? tokname((int)nn) : tokname (n->tokid));
   if (nn < LASTTOKEN)
@@ -617,7 +616,7 @@ void print_tree (Node *n, int indent)
     errprintf (" type %s", n->ntype == NVALUE ? "value" : n->ntype == NSTAT ? "statement" : "expression");
     errprintf (" %d arguments\n", n->arg.size());
     indent++;
-    for (i = 0; i < n->arg.size(); i++)
+    for (size_t i = 0; i < n->arg.size(); i++)
     {
       errprintf ("%*cArg %d of %s\n", indent, ' ', i, tokname(n->tokid));
       if (n->ntype == NVALUE)

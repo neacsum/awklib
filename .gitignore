@@ -2,10 +2,7 @@
 *.user
 /ytab.cpp
 /ytab.h
-/proctab.cpp
-x86/
-x64/
+exe/
 o/
 lib/
 
-/old_testdir

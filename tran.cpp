@@ -126,6 +126,7 @@ char *qstring (const char *is, int delim)
   return buf;
 }
 
+#ifndef NDEBUG
 const char *flags2str (int flags)
 {
   static const struct ftab {
@@ -158,3 +159,4 @@ const char *flags2str (int flags)
 
   return buf;
 }
+#endif
