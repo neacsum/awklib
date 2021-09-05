@@ -33,10 +33,12 @@ The program produces an output similar to the 'wc' utility.
 See the [API document](api.md) for details.
 
 ## Contents ##
-- __libtest__   Library test suite
-- __interp__    Stand-alone AWK interpreter using the AWK library
-- __testdir__   tests for stand-alone interpreter (and by extension for the AWK library)
-- __samples__   various sample applications (like the word counting application above)
+- __awklib__    - the AWK library
+- __libtest__   - library test suite
+- __testdir__   - tests for stand-alone interpreter (and by extension for the AWK library)
+- __samples__   - various sample applications:
+  - __wc__      - Word counting application shown above
+  - __interp__  - Stand-alone AWK interpreter using the AWK library
 
 ## Building ##
 You need a YACC or bison compiler to compile the AWK grammar. The library itself

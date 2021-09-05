@@ -151,28 +151,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="array.cpp" />
-    <ClCompile Include="b.cpp" />
-    <ClCompile Include="cell.cpp" />
-    <ClCompile Include="interp.cpp" />
-    <ClCompile Include="lex.cpp" />
-    <ClCompile Include="lib.cpp" />
-    <ClCompile Include="libmain.cpp" />
-    <ClCompile Include="parse.cpp" />
-    <ClCompile Include="run.cpp" />
-    <ClCompile Include="tran.cpp" />
-    <ClCompile Include="ytab.cpp" />
+    <ClCompile Include="src\array.cpp" />
+    <ClCompile Include="src\b.cpp" />
+    <ClCompile Include="src\cell.cpp" />
+    <ClCompile Include="src\interp.cpp" />
+    <ClCompile Include="src\lex.cpp" />
+    <ClCompile Include="src\lib.cpp" />
+    <ClCompile Include="src\libmain.cpp" />
+    <ClCompile Include="src\parse.cpp" />
+    <ClCompile Include="src\run.cpp" />
+    <ClCompile Include="src\tran.cpp" />
+    <ClCompile Include="src\ytab.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="awk.h" />
+    <ClInclude Include="include\awk.h" />
     <ClInclude Include="include\awklib\awk.h" />
     <ClInclude Include="include\awklib\err.h" />
-    <ClInclude Include="proto.h" />
-    <ClInclude Include="ytab.h" />
+    <ClInclude Include="include\proto.h" />
+    <ClInclude Include="src\ytab.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="api.md" />
-    <CustomBuild Include="awkgram.y">
+    <CustomBuild Include="src\awkgram.y">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">yacc_compile.bat</Command>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">yacc_compile.bat</Command>
@@ -182,10 +181,10 @@
       <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling grammar</Message>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling grammar</Message>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">ytab.h;ytab.cpp</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ytab.h;ytab.cpp</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">ytab.h;ytab.cpp</Outputs>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ytab.h;ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">src\ytab.h;src\ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">src\ytab.h;src\ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">src\ytab.h;src\ytab.cpp</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">src\ytab.h;src\ytab.cpp</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>

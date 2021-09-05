@@ -20,7 +20,7 @@ int cell_count;
 #define TESTNAME "64_recursive"
 TEST (failing)
 {
-  ABORT (setup_test ("../testdir/tests/" TESTNAME ".tst"));
+  ABORT (setup_test ("tests/" TESTNAME ".tst"));
 
   int dbg = awk_setdebug (3);
 
@@ -351,7 +351,7 @@ SUITE (one_true_awk)
   bool awk_frame::setup (const string & test_name)
   {
     name = test_name;
-    if (!setup_test ("../testdir/tests/" + name + ".tst"))
+    if (!setup_test ("tests/" + name + ".tst"))
       return false;
     CHECK (awk_addprogfile (interp, (name + ".awk").c_str ()));
     CHECK (awk_compile (interp));

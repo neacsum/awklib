@@ -1,7 +1,7 @@
 .vs
 *.user
-/ytab.cpp
-/ytab.h
+src/ytab.cpp
+src/ytab.h
 exe/
 o/
 lib/

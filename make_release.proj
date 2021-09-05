@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <ReleaseVersion>2.0.0-alpha</ReleaseVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <LibFiles Include="lib\**\awklib.lib" />
+    <HeaderFiles Include="include\awklib\*.h" />
+    <SampleFiles Include="samples\**\*.cpp;samples\**\*.vcxproj;samples\**\*.vcxproj.filters" />
+  </ItemGroup>
+  <Target Name="Make_GitHub_release">
+    <MakeDir Directories="release" />
+    <Copy SourceFiles="@(LibFiles)"
+            DestinationFiles="@(LibFiles->'release\lib\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(HeaderFiles)"
+            DestinationFiles="@(HeaderFiles->'release\include\awklib\%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(SampleFiles)"
+            DestinationFiles="@(SampleFiles->'release\sample\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ZipDirectory SourceDirectory="release" DestinationFile="awklib-$(ReleaseVersion).zip" Overwrite="true"/>
+    <RemoveDir Directories="release" />
+  </Target>
+</Project>

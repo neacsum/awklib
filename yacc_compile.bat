@@ -1,4 +1,5 @@
 @echo off
+cd src
 del /q ytab.h
 yacc -d -o ytab.cpp awkgram.y
 REM Different versions of YACC give different naems to .H file
