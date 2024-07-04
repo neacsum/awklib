@@ -11,15 +11,16 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-struct AWKINTERP
+typedef struct
 {
   void* unused;
-};
+} AWKINTERP;
+
 
 typedef int (*inproc)();
 typedef int (*outproc)(const char *buf, size_t len);
 
-struct awksymb {
+typedef struct {
   const char *name;
   const char *index;
 
@@ -29,7 +30,7 @@ struct awksymb {
 #define AWKSYMB_ARR   4   //variable is an array
   double fval;
   char *sval;
-};
+} awksymb;
 
 typedef void (*awkfunc)(AWKINTERP *pinter, awksymb* ret, int nargs, awksymb* args);
 
