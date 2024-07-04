@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.168
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35004.147
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "awklib", "awklib.vcxproj", "{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}"
 EndProject
@@ -19,6 +19,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wc", "samples\wc\wc.vcxproj
 	ProjectSection(ProjectDependencies) = postProject
 		{DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0} = {DCE89B2F-59F8-4912-AA40-CA68A1AD1FE0}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "codingbiubiu", "samples\codingbiubiu\codingbiubiu.vcxproj", "{055F1061-2DD6-40B6-96C5-B39140101A74}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -60,6 +62,14 @@ Global
 		{E615F757-7F86-4A97-AB3C-4D9E23EBC02C}.Release|x64.Build.0 = Release|x64
 		{E615F757-7F86-4A97-AB3C-4D9E23EBC02C}.Release|x86.ActiveCfg = Release|Win32
 		{E615F757-7F86-4A97-AB3C-4D9E23EBC02C}.Release|x86.Build.0 = Release|Win32
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Debug|x64.ActiveCfg = Debug|x64
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Debug|x64.Build.0 = Debug|x64
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Debug|x86.ActiveCfg = Debug|Win32
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Debug|x86.Build.0 = Debug|Win32
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Release|x64.ActiveCfg = Release|x64
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Release|x64.Build.0 = Release|x64
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Release|x86.ActiveCfg = Release|Win32
+		{055F1061-2DD6-40B6-96C5-B39140101A74}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
